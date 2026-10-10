@@ -72,7 +72,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             </span>
           </div>
           <span className="text-xs text-electric-blue font-bold shrink-0">
-            Tasa BCV: {pulse?.tasaBcv.toFixed(2) || '49.85'} Bs/$
+            Tasa BCV: {(pulse?.tasaBcv ?? 49.85).toFixed(2)} Bs/$
           </span>
         </div>
       </section>
@@ -252,7 +252,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          {pulse?.boxes.map((b) => (
+          {(pulse?.boxes || []).map((b) => (
             <div
               key={b.boxNumero}
               className="p-2.5 rounded-xl bg-surface-subtle-ice text-center flex flex-col items-center border border-border-subtle"
@@ -303,7 +303,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
 
         <div className="space-y-2.5">
-          {pulse?.citasHoy.map((cita) => (
+          {(pulse?.citasHoy || []).map((cita) => (
             <div
               key={cita.id}
               className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle relative overflow-hidden"

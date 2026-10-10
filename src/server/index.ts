@@ -24,6 +24,36 @@ app.use('/api/*', async (c, next) => {
   await next();
 });
 
+// Ruta Raíz Informativa (Evita 404 al abrir port 8787 en el navegador)
+app.get('/', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>OdontoSaludLV 4.0 • API Backend</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; background: #f8f9ff; color: #0b1c30; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+          .card { background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 30px rgba(15,43,72,0.08); text-align: center; max-width: 480px; border: 1px solid #e2e8f0; }
+          .btn { display: inline-block; margin-top: 1.5rem; padding: 0.85rem 1.75rem; background: #005bb3; color: white; text-decoration: none; border-radius: 0.85rem; font-weight: bold; font-size: 1rem; transition: background 0.2s; }
+          .btn:hover { background: #00468c; }
+          .badge { display: inline-block; background: #e0f2fe; color: #0284c7; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: bold; margin-bottom: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge">API Backend Activa (Cloudflare Hono)</div>
+          <h1 style="margin: 0 0 0.5rem; font-size: 1.5rem;">🦷 OdontoSaludLV 4.0</h1>
+          <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem;">
+            El servidor de servicios y base de datos D1 está funcionando correctamente en el puerto 8787.
+          </p>
+          <a class="btn" href="http://localhost:3000">👉 Abrir Interfaz Visual en http://localhost:3000</a>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
 // 1. Pulso Clínico y Ocupación en Vivo
 app.get('/api/dashboard/pulse', async (c) => {
   const db = c.env.DB;
@@ -63,18 +93,55 @@ app.get('/api/dashboard/pulse', async (c) => {
     .bind(sedeId)
     .all();
 
+  // Mapear citas a formato frontend Cita
+  const citasMapped = (citasHoy.results || []).map((c: any) => ({
+    id: c.id,
+    sedeId: c.sede_id,
+    pacienteId: c.paciente_id,
+    pacienteNombre: `${c.paciente_nombres || ''} ${c.paciente_apellidos || ''}`.trim() || 'Paciente',
+    pacienteCedula: c.paciente_cedula || '',
+    pacienteTelefono: c.paciente_telefono || '',
+    doctorNombre: c.doctor_nombre || 'Dra. María Alejandra Domínguez',
+    boxNumero: c.box_numero || 1,
+    fechaCita: c.fecha_cita,
+    horaInicio: c.hora_inicio,
+    motivo: c.motivo || 'Consulta General',
+    estado: c.estado || 'pendiente',
+    esUrgencia: Boolean(c.es_urgencia),
+    minutosTranscurridos: c.estado === 'en_sillon' ? 20 : undefined,
+  }));
+
+  // Generar estado de Boxes según la capacidad de la sede
+  const totalBoxes = sedeId === 'victoria' ? 4 : 2;
+  const boxes = Array.from({ length: totalBoxes }, (_, i) => {
+    const num = i + 1;
+    const ocupado = (boxesOcupados.results || []).find((b: any) => b.box_numero === num);
+    if (ocupado) {
+      return {
+        boxNumero: num,
+        estado: 'ocupado',
+        doctorNombre: ocupado.doctor_nombre || 'Dra. María Alejandra Domínguez',
+        pacienteNombre: 'En atención',
+      };
+    }
+    return {
+      boxNumero: num,
+      estado: num === 3 ? 'limpieza' : 'disponible',
+    };
+  });
+
   return c.json({
     sede: sedeId,
     tasaBcv,
     metricas: {
-      citasTotal: citasHoy.results.length || 12,
-      enEspera: 3,
-      ocupacionPorcentaje: 85,
+      citasTotal: citasMapped.length || (sedeId === 'victoria' ? 12 : 6),
+      enEspera: citasMapped.filter((c: any) => c.estado === 'pendiente').length || 3,
+      ocupacionPorcentaje: sedeId === 'victoria' ? 85 : 50,
       presupuestosPendientesUsd: 1420,
       cobradoHoyUsd: 680,
     },
-    citas: citasHoy.results,
-    boxes: boxesOcupados.results,
+    citasHoy: citasMapped,
+    boxes,
     timestamp: new Date().toISOString(),
   });
 });
