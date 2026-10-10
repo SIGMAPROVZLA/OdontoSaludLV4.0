@@ -3,12 +3,16 @@ import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { DashboardPulse } from '../../types/clinical';
 
+import { useDeviceLayout } from '../../hooks/useDeviceLayout';
+import { DesktopDashboardView } from './DesktopDashboardView';
+
 interface DashboardViewProps {
   onNavigateTab: (tab: 'dashboard' | 'reserva' | 'odontograma' | 'agenda' | 'cobros') => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
   const { sedeActiva, sedeId, doctorActivo } = useSede();
+  const { isDesktop } = useDeviceLayout();
   const [pulse, setPulse] = useState<DashboardPulse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +31,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       isMounted = false;
     };
   }, [sedeId]);
+
+  if (isDesktop) {
+    return (
+      <DesktopDashboardView
+        pulse={pulse}
+        loading={loading}
+        onNavigateTab={onNavigateTab}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 pb-28">
