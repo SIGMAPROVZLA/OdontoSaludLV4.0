@@ -150,22 +150,51 @@ app.get('/api/dashboard/pulse', async (c) => {
 app.get('/api/citas', async (c) => {
   const db = c.env.DB;
   const sedeId = c.get('sedeId');
-  const fecha = c.req.query('fecha') || new Date().toISOString().split('T')[0];
+  const fecha = c.req.query('fecha');
+  const estado = c.req.query('estado');
+
+  let query = `
+    SELECT c.*, p.nombres, p.apellidos, p.telefono, p.cedula
+    FROM citas c
+    JOIN pacientes p ON c.paciente_id = p.id
+    WHERE c.sede_id = ?
+  `;
+  const params: any[] = [sedeId];
+
+  if (fecha && fecha !== 'all') {
+    query += ` AND c.fecha_cita = ?`;
+    params.push(fecha);
+  }
+
+  if (estado) {
+    query += ` AND c.estado = ?`;
+    params.push(estado);
+  }
+
+  query += ` ORDER BY c.fecha_cita DESC, c.hora_inicio ASC`;
 
   const results = await db
-    .prepare(
-      `
-      SELECT c.*, p.nombres, p.apellidos, p.telefono, p.cedula
-      FROM citas c
-      JOIN pacientes p ON c.paciente_id = p.id
-      WHERE c.sede_id = ? AND c.fecha_cita = ?
-      ORDER BY c.hora_inicio ASC
-    `
-    )
-    .bind(sedeId, fecha)
+    .prepare(query)
+    .bind(...params)
     .all();
 
-  return c.json(results.results);
+  const mapped = (results.results || []).map((row: any) => ({
+    id: row.id,
+    sedeId: row.sede_id,
+    pacienteId: row.paciente_id,
+    pacienteNombre: `${row.nombres || ''} ${row.apellidos || ''}`.trim() || 'Paciente',
+    pacienteCedula: row.cedula || '',
+    pacienteTelefono: row.telefono || '',
+    doctorNombre: row.doctor_nombre || 'Dra. María Alejandra Domínguez',
+    boxNumero: row.box_numero || 1,
+    fechaCita: row.fecha_cita,
+    horaInicio: row.hora_inicio,
+    motivo: row.motivo || 'Consulta General',
+    estado: row.estado || 'pendiente',
+    esUrgencia: Boolean(row.es_urgencia),
+  }));
+
+  return c.json(mapped);
 });
 
 app.post('/api/citas', async (c) => {
@@ -218,6 +247,43 @@ app.post('/api/citas', async (c) => {
     .run();
 
   return c.json({ success: true, id });
+});
+
+// Actualizar estado de una cita (Aprobar, Pasar a sillón, Cancelar)
+app.patch('/api/citas/:id/estado', async (c) => {
+  const db = c.env.DB;
+  const { id } = c.req.param();
+  const { estado, boxNumero } = await c.req.json();
+
+  if (boxNumero) {
+    await db
+      .prepare(`UPDATE citas SET estado = ?, box_numero = ? WHERE id = ?`)
+      .bind(estado, boxNumero, id)
+      .run();
+  } else {
+    await db
+      .prepare(`UPDATE citas SET estado = ? WHERE id = ?`)
+      .bind(estado, id)
+      .run();
+  }
+
+  return c.json({ success: true, id, estado });
+});
+
+// Aprobación de citas en lote (Bulk action)
+app.post('/api/citas/aprobar-lote', async (c) => {
+  const db = c.env.DB;
+  const { ids } = await c.req.json();
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    await db
+      .prepare(`UPDATE citas SET estado = 'confirmada' WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .run();
+  }
+
+  return c.json({ success: true, count: ids?.length || 0 });
 });
 
 // 3. Odontograma FDI: Consulta y Actualización Atómica de 5 Caras

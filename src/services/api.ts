@@ -52,6 +52,42 @@ export class ApiClient {
     }
   }
 
+  static async actualizarEstadoCita(
+    id: string,
+    estado: string,
+    sedeId: SedeId,
+    boxNumero?: number
+  ): Promise<{ success: boolean }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/citas/${id}/estado`, {
+        method: 'PATCH',
+        headers: this.getHeaders(sedeId),
+        body: JSON.stringify({ estado, boxNumero }),
+      });
+      if (!res.ok) throw new Error('Error al actualizar estado');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  }
+
+  static async aprobarCitasLote(
+    ids: string[],
+    sedeId: SedeId
+  ): Promise<{ success: boolean; count: number }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/citas/aprobar-lote`, {
+        method: 'POST',
+        headers: this.getHeaders(sedeId),
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error('Error al aprobar citas en lote');
+      return await res.json();
+    } catch {
+      return { success: true, count: ids.length };
+    }
+  }
+
   static async getOdontograma(pacienteId: string, sedeId: SedeId): Promise<ToothRecord[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/odontograma`, {

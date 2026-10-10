@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { useSede } from '../../context/SedeContext';
 import { Cita } from '../../types/clinical';
+import { TabId } from '../layout/BottomNavigation';
 
-export const AgendaView: React.FC = () => {
+interface AgendaViewProps {
+  onNavigateTab?: (tab: TabId) => void;
+}
+
+export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
   const { sedeActiva } = useSede();
   const [selectedBox, setSelectedBox] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState('23');
@@ -303,6 +308,16 @@ export const AgendaView: React.FC = () => {
                 <div className="mt-3 pt-2 flex items-center justify-between bg-surface-subtle-ice rounded-xl px-3 py-2 border border-border-subtle text-xs">
                   <span className="text-secondary">{cita.doctorNombre}</span>
                   <div className="flex items-center gap-1.5">
+                    {isEnSillon && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab?.('odontograma')}
+                        className="px-2.5 py-1 rounded-lg bg-electric-blue text-white font-bold flex items-center gap-1 active:scale-95 shadow-sm"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">dentistry</span>
+                        Odontograma
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -334,6 +349,18 @@ export const AgendaView: React.FC = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* Botón Flotante Agendar Cita Rápida (Stitch Mobile Agenda) */}
+      <div className="fixed bottom-20 inset-x-4 z-40 flex justify-center max-w-sm mx-auto pointer-events-none">
+        <button
+          type="button"
+          onClick={() => onNavigateTab?.('reserva')}
+          className="pointer-events-auto py-3 px-6 rounded-full bg-electric-blue hover:bg-primary text-white font-bold text-xs shadow-[0_8px_20px_rgba(0,132,255,0.4)] transition-all flex items-center gap-2 active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[20px]">add</span>
+          <span>Agendar Cita Rápida</span>
+        </button>
       </div>
     </div>
   );

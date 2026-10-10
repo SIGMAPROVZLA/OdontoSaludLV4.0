@@ -124,12 +124,39 @@ Para revisar y probar el proyecto de forma completa, dispones de los siguientes 
 
 ---
 
+### 📌 Hito 8: Consolidación Móvil de Google Stitch (Autoregistro & Triaje / Aprobación de Citas Previas)
+* **Fecha:** 2026-10-10
+* **Archivos clave:**
+  * [`src/components/booking/BookingFlow.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/booking/BookingFlow.tsx) (Autoregistro y Reserva de Citas Móvil)
+  * [`src/components/booking/AppointmentCoordinationView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/booking/AppointmentCoordinationView.tsx) (Recepción & Triaje Digital - Citas Previas Web & Chat)
+  * [`src/components/layout/BottomNavigation.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/BottomNavigation.tsx) (Navegación inferior con badge dinámico de Triaje)
+  * [`src/components/agenda/AgendaView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/agenda/AgendaView.tsx) (Botón de agendamiento rápido y salto al Odontograma)
+  * [`src/server/index.ts`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/server/index.ts) (Rutas de citas sincronizadas con D1)
+* **💡 Comentario Pedagógico:**
+  * **Inspección Visual con Google Stitch:** Se analizaron pixel a pixel las pantallas móviles exportadas de Google Stitch (`MOBILE_011782003fe0416cba6f61d617e9bf6e` y `MOBILE_5ffde8effccb47ebacb6a95559aacf61`).
+  * **Autoregistro de Paciente (`BookingFlow.tsx`):**
+    * **Selector de Odontólogo Activo:** Dra. María Domínguez (Titular • Box 1), Dr. Carlos Mendoza R. (Ortodoncia • Box 2) y Dra. Valentina Páez G. (Endodoncia • Box 3), con modal interactivo para cambiar de especialista.
+    * **Malla de Tratamientos Táctiles:** Evaluación inicial con Rx digital, Limpieza con ultrasonido, Urgencias con badge animado prioritario, Ortodoncia, Endodoncia y Prótesis.
+    * **Turnos en Vivo (Mañana / Tarde):** Carrusel de días interactivo con cupos disponibles y desglose horario asignando box clínico.
+    * **Formulario con Validación Venezolana:** Prefijos de Cédula (`V-`, `E-`, `J-`, `P-`), validación de WhatsApp con badge *"Recibirá SMS"*, motivo de consulta y aviso legal amparado en la *Ley de Ejercicio de la Odontología en Venezuela*.
+    * **Voucher Digital Clínico:** Emisión de código único de turno (`ODL-xxxx`), confirmación directa por WhatsApp y salto instantáneo a la pantalla de Triaje.
+  * **Recepción & Triaje Digital (`AppointmentCoordinationView.tsx`):**
+    * **Métricas 2x2:** *Por Confirmar (con urgencias)*, *Confirmadas Hoy (en sillón)*, *Reasignar casos* y *T. Respuesta promedio (~12 min)*.
+    * **Filtros Temporales y de Categoría:** *Hoy*, *Esta semana*, *Pasadas*, *Todos*, *Por confirmar* y *Urgencias con dolor*.
+    * **Aprobación Reactiva y en Lote:** Botón individual *"Aprobar Cita"* (conmuta estado a `confirmada` en Cloudflare D1) y barra flotante inferior sticky con *"Aprobar (N)"* y botón `+` para ingresar pacientes en recepción.
+    * **WhatsApp Automatizado con Contexto Clínico:** Mensaje preconfigurado al WhatsApp del paciente indicando hora, motivo, sede y solicitud de confirmación de asistencia.
+  * **Jerarquización y Navegación Móvil:**
+    * Se integró la pestaña **"Triaje"** en la barra inferior móvil (`BottomNavigation`) con contador visual numérico de citas pendientes.
+    * El Dashboard principal incorpora un banner de llamada a la acción hacia el Triaje Digital para que la recepción nunca pierda una solicitud entrante.
+
+---
+
 ## 🔭 4. Estado Actual del Proyecto y Próximos Pasos
 
-* **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente).
-* **Estado de Base de Datos:** Migración y Semillas ejecutadas con éxito en D1 local.
-* **Estado de Interfaz:** Sistema Dual Adaptativo (Móvil & Escritorio) operativo en vivo en `http://localhost:3000`.
+* **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente con código 0).
+* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo (Creación de citas -> Listado -> Aprobación de estado -> Confirmación en agenda).
+* **Estado de Interfaz:** Vistas móviles de Autoregistro y Triaje Digital 100% operativas y fieles a Google Stitch.
 * **Próximos pasos recomendados:**
-  1. Adaptar la vista de **Pacientes y Odontograma en pantalla panorámica (Escritorio)** según la pantalla Stitch `Dentibox - Paciente y Odontograma`.
-  2. Incorporar el módulo POS de **Presupuestos y Cobros de Escritorio** con generación de comprobantes y link de pago a WhatsApp.
+  1. Integración de las pantallas panorámicas de escritorio para la recepción y odontograma de sillón.
+  2. Implementación de los webhooks de WhatsApp Cloud API para auto-confirmar citas recibidas por mensajería.
 

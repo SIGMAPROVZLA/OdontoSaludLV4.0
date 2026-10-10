@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { useSede, SEDES_DISPONIBLES } from '../../context/SedeContext';
 import { SedeId } from '../../types/clinical';
+import { TabId } from './BottomNavigation';
 
-export const ClinicalHeader: React.FC = () => {
+interface ClinicalHeaderProps {
+  onNavigateTab?: (tab: TabId) => void;
+}
+
+export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab }) => {
   const { sedeActiva, cambiarSede, doctorActivo } = useSede();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -102,10 +107,11 @@ export const ClinicalHeader: React.FC = () => {
           <button
             type="button"
             aria-label="Notificaciones clínicas"
-            className="relative w-10 h-10 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors"
+            onClick={() => onNavigateTab?.('coordinacion')}
+            className="relative w-10 h-10 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors active:scale-95"
           >
             <span className="material-symbols-outlined text-[22px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-electric-blue" />
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
           </button>
           <button
             type="button"

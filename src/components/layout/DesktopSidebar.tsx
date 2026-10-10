@@ -15,6 +15,8 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
   const navItems: { id: TabId; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'agenda', label: 'Agenda de Citas', icon: 'calendar_today' },
+    { id: 'coordinacion', label: 'Triaje & Citas Previas', icon: 'fact_check' },
+    { id: 'reserva', label: 'Autoregistro Web', icon: 'add_alarm' },
     { id: 'odontograma', label: 'Pacientes y Odontograma', icon: 'dentistry' },
     { id: 'cobros', label: 'Presupuestos y Cobros', icon: 'payments' },
   ];

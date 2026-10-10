@@ -5,9 +5,10 @@ import { DashboardPulse } from '../../types/clinical';
 
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { DesktopDashboardView } from './DesktopDashboardView';
+import { TabId } from '../layout/BottomNavigation';
 
 interface DashboardViewProps {
-  onNavigateTab: (tab: 'dashboard' | 'reserva' | 'odontograma' | 'agenda' | 'cobros') => void;
+  onNavigateTab: (tab: TabId) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
@@ -293,6 +294,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Banner de Acceso Rápido a Triaje & Citas Previas Web */}
+      <section className="bg-gradient-to-r from-dental-deep-navy to-[#184878] rounded-2xl p-3.5 text-surface-clean-white shadow-sm flex items-center justify-between gap-3 relative overflow-hidden">
+        <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-electric-blue/20 pointer-events-none" />
+        <div className="flex items-center gap-3 min-w-0 relative z-10">
+          <div className="w-10 h-10 rounded-xl bg-electric-blue/25 text-vibrant-cyan flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">assignment_turned_in</span>
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-display font-bold text-xs text-white">
+                Recepción & Triaje Digital
+              </span>
+              <span className="px-1.5 py-0.2 rounded-full bg-status-danger text-white text-[10px] font-extrabold animate-pulse">
+                4 por aprobar
+              </span>
+            </div>
+            <p className="text-[11px] text-white/70 truncate mt-0.5">
+              Citas solicitadas desde Web Móvil y WhatsApp
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onNavigateTab('coordinacion')}
+          className="px-3 py-1.5 rounded-xl bg-electric-blue hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-1 relative z-10"
+        >
+          <span>Revisar</span>
+          <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+        </button>
       </section>
 
       {/* Citas Inmediatas de Hoy */}
