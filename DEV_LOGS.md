@@ -107,11 +107,29 @@ Para revisar y probar el proyecto de forma completa, dispones de los siguientes 
 
 ---
 
+### 📌 Hito 7: Integración Oficial con Google Stitch (Diseño Dual Móvil & Escritorio)
+* **Fecha:** 2026-10-10
+* **Proyecto Stitch:** `Control Clinica OdontoSalud La Victoria` (`9982796618972867481`)
+* **Archivos clave:**
+  * [`src/hooks/useDeviceLayout.ts`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/hooks/useDeviceLayout.ts)
+  * [`src/components/layout/DesktopSidebar.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/DesktopSidebar.tsx)
+  * [`src/components/layout/DesktopTopBar.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/DesktopTopBar.tsx)
+  * [`src/components/dashboard/DesktopDashboardView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/dashboard/DesktopDashboardView.tsx)
+* **💡 Comentario Pedagógico:**
+  * **Consolidación sin Duplicación de Lógica:** Mediante la clave de API oficial de Stitch, se descargaron e inspeccionaron las 23 pantallas diseñadas para móvil y escritorio.
+  * **Adaptive Component Switching:** En lugar de crear dos proyectos separados o duplicar el backend, se implementó el hook `useDeviceLayout()`. 
+    * Si la pantalla es **Móvil (<1024px)**: La aplicación monta la barra inferior táctil (*Bottom Navigation*), odontograma vertical y cards compactas diseñadas para el pulgar.
+    * Si la pantalla es **Escritorio o Tablet (≥1024px)**: La aplicación monta la **Barra Lateral Clínica Oscura (`#0F2B48`)**, la **TopBar Superior de Acciones Rápidas** (`+ Nuevo Paciente`, `+ Crear Presupuesto`, `+ Nueva Cita`) y el panel multi-columna de 12 rejillas (Agenda en vivo, Sala de espera con tiempos, Alertas de stock y tratamientos más solicitados).
+  * **Cero Impacto Backend:** Ambas vistas consumen exactamente el mismo cliente `ApiClient` y la misma base de datos Cloudflare D1/KV.
+
+---
+
 ## 🔭 4. Estado Actual del Proyecto y Próximos Pasos
 
-* **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` y `vite build` aprobados exitosamente).
+* **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente).
 * **Estado de Base de Datos:** Migración y Semillas ejecutadas con éxito en D1 local.
+* **Estado de Interfaz:** Sistema Dual Adaptativo (Móvil & Escritorio) operativo en vivo en `http://localhost:3000`.
 * **Próximos pasos recomendados:**
-  1. Lanzar las pruebas visuales del Frontend para verificar navegación, el selector de sedes y el odontograma interactivo.
-  2. Verificar los endpoints en vivo de Hono (`/api/dashboard/pulse`, `/api/citas`, `/api/pacientes/:id/odontograma`).
-  3. Integrar la calculadora de divisas con actualización de tasa BCV en el módulo de facturación y recibos digitales.
+  1. Adaptar la vista de **Pacientes y Odontograma en pantalla panorámica (Escritorio)** según la pantalla Stitch `Dentibox - Paciente y Odontograma`.
+  2. Incorporar el módulo POS de **Presupuestos y Cobros de Escritorio** con generación de comprobantes y link de pago a WhatsApp.
+
