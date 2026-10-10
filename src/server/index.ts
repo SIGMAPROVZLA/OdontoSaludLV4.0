@@ -54,18 +54,159 @@ app.get('/', (c) => {
   `);
 });
 
+// Servicio Resiliente de Tasa de Cambio BCV (Multi-capa: En línea -> D1 Caché -> Contingencia)
+async function getOrFetchBcvRate(
+  db: D1Database,
+  cache?: KVNamespace,
+  forceRefresh = false
+): Promise<{
+  tasa: number;
+  fuente: string;
+  fechaActualizacion: string;
+  esManual: boolean;
+  origen: 'live_network' | 'manual_override' | 'fallback_d1' | 'contingency';
+}> {
+  // Asegurar tabla de persistencia en D1
+  try {
+    await db
+      .prepare(
+        `
+      CREATE TABLE IF NOT EXISTS configuraciones_tasas (
+        id TEXT PRIMARY KEY,
+        tasa REAL NOT NULL,
+        fuente TEXT NOT NULL,
+        fecha_valor TEXT,
+        es_manual INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+      )
+      .run();
+  } catch (e) {
+    console.warn('Error verificando tabla configuraciones_tasas:', e);
+  }
+
+  // 1. Verificar si existe una tasa fijada manualmente por administración (override)
+  if (!forceRefresh) {
+    try {
+      const manualRecord = await db
+        .prepare(`SELECT * FROM configuraciones_tasas WHERE id = 'bcv_usd' AND es_manual = 1`)
+        .first<any>();
+
+      if (manualRecord && manualRecord.tasa) {
+        return {
+          tasa: Number(manualRecord.tasa),
+          fuente: manualRecord.fuente || 'Manual (Administración)',
+          fechaActualizacion: manualRecord.updated_at || new Date().toISOString(),
+          esManual: true,
+          origen: 'manual_override',
+        };
+      }
+    } catch {
+      // Continuar al intento en línea si falla la lectura manual
+    }
+  }
+
+  // 2. Consulta en vivo a API Comunitaria del BCV (DolarApi oficial) con timeout de 3.5 segundos
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = (await res.json()) as any;
+      const tasaNum = Number(data.promedio || data.venta || data.compra);
+
+      if (tasaNum && !isNaN(tasaNum) && tasaNum > 0) {
+        const fechaActualizacion = data.fechaActualizacion || new Date().toISOString();
+        const fuente = 'BCV Oficial (DolarApi)';
+
+        // Persistir en SQLite D1 para respaldo local
+        try {
+          await db
+            .prepare(
+              `
+            INSERT INTO configuraciones_tasas (id, tasa, fuente, fecha_valor, es_manual, updated_at)
+            VALUES ('bcv_usd', ?, ?, ?, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              tasa = excluded.tasa,
+              fuente = excluded.fuente,
+              fecha_valor = excluded.fecha_valor,
+              es_manual = 0,
+              updated_at = CURRENT_TIMESTAMP
+          `
+            )
+            .bind(tasaNum, fuente, fechaActualizacion)
+            .run();
+        } catch (dbErr) {
+          console.warn('No se pudo guardar la tasa en D1:', dbErr);
+        }
+
+        if (cache) {
+          try {
+            await cache.put('bcv_rate_usd', tasaNum.toString());
+          } catch {
+            // Ignorar si KV local no está configurado
+          }
+        }
+
+        return {
+          tasa: tasaNum,
+          fuente,
+          fechaActualizacion,
+          esManual: false,
+          origen: 'live_network',
+        };
+      }
+    }
+  } catch (fetchErr) {
+    console.warn('Fallo al obtener tasa BCV en vivo, activando fallback local:', fetchErr);
+  }
+
+  // 3. Fallback: Buscar último valor registrado en SQLite D1
+  try {
+    const saved = await db
+      .prepare(`SELECT * FROM configuraciones_tasas WHERE id = 'bcv_usd'`)
+      .first<any>();
+
+    if (saved && saved.tasa) {
+      return {
+        tasa: Number(saved.tasa),
+        fuente: saved.fuente ? `${saved.fuente} (Respaldo D1)` : 'BCV Oficial (Caché Local)',
+        fechaActualizacion: saved.updated_at || new Date().toISOString(),
+        esManual: Boolean(saved.es_manual),
+        origen: 'fallback_d1',
+      };
+    }
+  } catch {
+    // Continuar al valor de contingencia
+  }
+
+  // 4. Contingencia de Seguridad
+  const contingencia = 875.65;
+  return {
+    tasa: contingencia,
+    fuente: 'BCV Oficial (Tasa de Contingencia OdontoSalud)',
+    fechaActualizacion: new Date().toISOString(),
+    esManual: false,
+    origen: 'contingency',
+  };
+}
+
 // 1. Pulso Clínico y Ocupación en Vivo
 app.get('/api/dashboard/pulse', async (c) => {
   const db = c.env.DB;
   const cache = c.env.CACHE;
   const sedeId = c.get('sedeId');
 
-  // Intentar obtener tasa BCV de KV o fallback
-  let tasaBcv = 49.85;
-  if (cache) {
-    const cachedRate = await cache.get('bcv_rate_usd');
-    if (cachedRate) tasaBcv = parseFloat(cachedRate);
-  }
+  // Obtener tasa BCV resiliente
+  const tasaData = await getOrFetchBcvRate(db, cache);
+  const tasaBcv = tasaData.tasa;
 
   // Citas del día filtradas por sede
   const citasHoy = await db
@@ -378,6 +519,83 @@ app.post('/api/presupuestos/cobro', async (c) => {
     .run();
 
   return c.json({ success: true, reciboId: pagoId });
+});
+
+// 5. Endpoint de Consulta en Línea de Tasa Oficial BCV
+app.get('/api/tasas/bcv', async (c) => {
+  const db = c.env.DB;
+  const cache = c.env.CACHE;
+  const forceRefresh = c.req.query('refresh') === 'true';
+
+  const tasaInfo = await getOrFetchBcvRate(db, cache, forceRefresh);
+  return c.json({
+    success: true,
+    ...tasaInfo,
+  });
+});
+
+// 6. Endpoint para Modificación / Override Manual de Tasa por Administración
+app.post('/api/tasas/bcv', async (c) => {
+  const db = c.env.DB;
+  const cache = c.env.CACHE;
+  const body = await c.req.json();
+
+  if (body.resetearAutomatico) {
+    // Volver a modo automático consultando en vivo
+    await db
+      .prepare(`UPDATE configuraciones_tasas SET es_manual = 0 WHERE id = 'bcv_usd'`)
+      .run();
+
+    const nuevaTasa = await getOrFetchBcvRate(db, cache, true);
+    return c.json({
+      success: true,
+      mensaje: 'Tasa restaurada al modo automático en línea BCV',
+      ...nuevaTasa,
+    });
+  }
+
+  const tasaNum = Number(body.tasa);
+  if (!tasaNum || isNaN(tasaNum) || tasaNum <= 0) {
+    return c.json({ success: false, error: 'Monto de tasa inválido' }, 400);
+  }
+
+  const motivo = body.motivo || 'Fijación por Administración de Sede';
+  const fijadoPor = body.fijadoPor || 'Administración OdontoSalud';
+  const fuente = `Manual (${fijadoPor}: ${motivo})`;
+  const fechaActualizacion = new Date().toISOString();
+
+  await db
+    .prepare(
+      `
+    INSERT INTO configuraciones_tasas (id, tasa, fuente, fecha_valor, es_manual, updated_at)
+    VALUES ('bcv_usd', ?, ?, ?, 1, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      tasa = excluded.tasa,
+      fuente = excluded.fuente,
+      fecha_valor = excluded.fecha_valor,
+      es_manual = 1,
+      updated_at = CURRENT_TIMESTAMP
+  `
+    )
+    .bind(tasaNum, fuente, fechaActualizacion)
+    .run();
+
+  if (cache) {
+    try {
+      await cache.put('bcv_rate_usd', tasaNum.toString());
+    } catch {
+      // Ignorar si KV no está inicializado
+    }
+  }
+
+  return c.json({
+    success: true,
+    tasa: tasaNum,
+    fuente,
+    fechaActualizacion,
+    esManual: true,
+    origen: 'manual_override',
+  });
 });
 
 export default app;

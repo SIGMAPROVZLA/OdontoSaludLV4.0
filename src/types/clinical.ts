@@ -107,3 +107,23 @@ export interface PagoRegistroRequest {
   referencia?: string;
   tasaBcv?: number;
 }
+
+export interface TasaCambioInfo {
+  moneda: string;
+  tasa: number;
+  fuente: string;
+  fechaActualizacion: string;
+  esManual: boolean;
+  origen?: 'live_network' | 'manual_override' | 'fallback_d1' | 'contingency';
+}
+
+export interface NotificacionItem {
+  id: string;
+  tipo: 'tasa_bcv' | 'cita_triaje' | 'alerta_clinica';
+  titulo: string;
+  mensaje: string;
+  timestamp: string;
+  leido: boolean;
+  accionTab?: 'coordinacion' | 'cobros' | 'agenda' | 'odontograma';
+  meta?: any;
+}

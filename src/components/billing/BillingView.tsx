@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useSede } from '../../context/SedeContext';
+import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
 
 export const BillingView: React.FC = () => {
   const { sedeActiva, sedeId } = useSede();
-  const tasaBcv = 49.85;
+  const { tasaBcv, tasaInfo, isRefreshing, actualizarTasaEnLinea } = useTasaCambio();
 
   const [montoUsd, setMontoUsd] = useState<number>(120);
   const [metodo, setMetodo] = useState<'pago_movil' | 'divisas_efectivo' | 'zelle' | 'punto_venta'>(
@@ -14,7 +15,10 @@ export const BillingView: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [reciboModal, setReciboModal] = useState<string | null>(null);
 
-  const montoBs = (montoUsd * tasaBcv).toFixed(2);
+  const montoBs = (montoUsd * tasaBcv).toLocaleString('es-VE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   const presupuestosMock = [
     {
@@ -74,9 +78,20 @@ export const BillingView: React.FC = () => {
       <div className="bg-gradient-to-br from-dental-deep-navy to-primary rounded-2xl p-4 text-surface-clean-white shadow-md relative overflow-hidden">
         <div className="flex items-center justify-between text-xs text-secondary-fixed-dim">
           <span>Control de Caja • {sedeActiva.nombre}</span>
-          <span className="bg-surface-clean-white/20 px-2 py-0.5 rounded-full font-bold">
-            Tasa BCV: {tasaBcv} Bs/$
-          </span>
+          <button
+            type="button"
+            onClick={() => actualizarTasaEnLinea(true)}
+            className="inline-flex items-center gap-1 bg-surface-clean-white/20 hover:bg-surface-clean-white/30 text-white px-2.5 py-0.5 rounded-full font-bold transition-all text-[11px] active:scale-95"
+            title="Actualizar tasa oficial en vivo con el BCV"
+          >
+            <span className={`material-symbols-outlined text-[13px] ${isRefreshing ? 'animate-spin' : ''}`}>
+              sync
+            </span>
+            <span>Tasa BCV: {Number(tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs/$</span>
+            <span className="text-[9px] text-vibrant-cyan uppercase font-extrabold">
+              {tasaInfo?.esManual ? 'Manual' : 'Oficial'}
+            </span>
+          </button>
         </div>
 
         <div className="mt-3">
@@ -86,7 +101,7 @@ export const BillingView: React.FC = () => {
           <div className="flex items-baseline gap-2 mt-0.5">
             <span className="font-display font-extrabold text-3xl">$680.00</span>
             <span className="text-xs text-tertiary-fixed-dim">
-              ≈ {(680 * tasaBcv).toLocaleString()} Bs.
+              ≈ {(680 * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
             </span>
           </div>
         </div>

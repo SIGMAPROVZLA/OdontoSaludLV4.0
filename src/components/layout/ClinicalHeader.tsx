@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useSede, SEDES_DISPONIBLES } from '../../context/SedeContext';
+import { useTasaCambio } from '../../context/TasaCambioContext';
 import { SedeId } from '../../types/clinical';
 import { TabId } from './BottomNavigation';
+import { NotificationCenterModal } from './NotificationCenterModal';
 
 interface ClinicalHeaderProps {
   onNavigateTab?: (tab: TabId) => void;
@@ -9,7 +11,9 @@ interface ClinicalHeaderProps {
 
 export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab }) => {
   const { sedeActiva, cambiarSede, doctorActivo } = useSede();
+  const { tasaBcv, hayNoLeidas } = useTasaCambio();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
 
   const sedesList = Object.values(SEDES_DISPONIBLES);
 
@@ -101,16 +105,18 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
 
         {/* Derecha: Campanita de Notificación + Icono de VictorIA Pro */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Campanita de Notificación (Triaje / Citas) */}
+          {/* Campanita de Notificación (Tasa BCV + Triaje / Citas) */}
           <button
             type="button"
-            aria-label="Notificaciones y Citas Pendientes"
-            onClick={() => onNavigateTab?.('coordinacion')}
+            aria-label="Avisos, Tasa BCV y Citas Pendientes"
+            onClick={() => setNotificationModalOpen(true)}
             className="relative w-9 h-9 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors active:scale-95"
-            title="Ver Citas Previas y Triaje"
+            title={`Avisos OdontoSalud • Tasa BCV: ${Number(tasaBcv).toFixed(2)} Bs/$`}
           >
             <span className="material-symbols-outlined text-[22px]">notifications</span>
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
+            {hayNoLeidas && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
+            )}
           </button>
 
           {/* Icono de VictorIA Pro */}
@@ -131,6 +137,13 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
           </button>
         </div>
       </div>
+
+      {/* Modal / Panel Flotante del Centro de Notificaciones */}
+      <NotificationCenterModal
+        isOpen={notificationModalOpen}
+        onClose={() => setNotificationModalOpen(false)}
+        onNavigateTab={onNavigateTab}
+      />
     </header>
   );
 };

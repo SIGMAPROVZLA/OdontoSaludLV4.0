@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSede } from '../../context/SedeContext';
+import { useTasaCambio } from '../../context/TasaCambioContext';
 import { TabId } from './BottomNavigation';
+import { NotificationCenterModal } from './NotificationCenterModal';
 
 interface DesktopTopBarProps {
   onNavigateTab: (tab: TabId) => void;
@@ -8,6 +10,8 @@ interface DesktopTopBarProps {
 
 export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) => {
   const { doctorActivo, sedeActiva } = useSede();
+  const { tasaBcv, hayNoLeidas } = useTasaCambio();
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
 
   // Fecha legible
   const hoyTexto = new Date().toLocaleDateString('es-VE', {
@@ -76,11 +80,15 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
         <div className="flex items-center gap-3">
           <button
             type="button"
-            aria-label="Notificaciones"
+            aria-label="Avisos, Tasa BCV y Citas Pendientes"
+            onClick={() => setNotificationModalOpen(true)}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors relative"
+            title={`Avisos OdontoSalud • Tasa BCV: ${Number(tasaBcv).toFixed(2)} Bs/$`}
           >
             <span className="material-symbols-outlined text-[20px]">notifications</span>
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger ring-2 ring-white" />
+            {hayNoLeidas && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger ring-2 ring-white animate-pulse" />
+            )}
           </button>
 
           <div className="flex items-center gap-2 pl-1">
@@ -100,6 +108,12 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
           </div>
         </div>
       </div>
+
+      <NotificationCenterModal
+        isOpen={notificationModalOpen}
+        onClose={() => setNotificationModalOpen(false)}
+        onNavigateTab={onNavigateTab}
+      />
     </header>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SedeProvider } from './context/SedeContext';
+import { TasaCambioProvider } from './context/TasaCambioContext';
 import { ClinicalHeader } from './components/layout/ClinicalHeader';
 import { BottomNavigation, TabId } from './components/layout/BottomNavigation';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -107,7 +108,9 @@ export const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <SedeProvider>
-      <AppContent />
+      <TasaCambioProvider>
+        <AppContent />
+      </TasaCambioProvider>
     </SedeProvider>
   );
 };

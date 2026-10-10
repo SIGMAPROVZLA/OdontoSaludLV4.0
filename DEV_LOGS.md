@@ -171,12 +171,41 @@ Para revisar y probar el proyecto de forma completa, dispones de los siguientes 
 
 ---
 
+### 📌 Hito 10: Sincronización en Línea de la Tasa Oficial BCV y Centro de Notificaciones en la Campanita
+* **Fecha:** 2026-10-10
+* **Archivos clave:**
+  * [`src/server/index.ts`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/server/index.ts) (Servicio resiliente multi-capa y endpoints `GET` / `POST` `/api/tasas/bcv`)
+  * [`src/types/clinical.ts`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/types/clinical.ts) (Tipos `TasaCambioInfo` y `NotificacionItem`)
+  * [`src/services/api.ts`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/services/api.ts) (Métodos de cliente para consultar, fijar y resetear tasa)
+  * [`src/context/TasaCambioContext.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/context/TasaCambioContext.tsx) (Proveedor global de tasa de cambio y cola reactiva de avisos)
+  * [`src/components/layout/NotificationCenterModal.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/NotificationCenterModal.tsx) (Modal emergente con tasa en vivo, control manual y triaje)
+  * [`src/components/layout/ClinicalHeader.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/ClinicalHeader.tsx) (Campanita interactiva con badge animado)
+  * [`src/components/billing/BillingView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/billing/BillingView.tsx) (Caja y presupuestos con cálculo en vivo en Bolívares)
+  * [`src/components/layout/DesktopTopBar.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/DesktopTopBar.tsx) (Soporte de campanita en escritorio)
+* **💡 Comentario Pedagógico:**
+  * **La Realidad Técnica del BCV y la Solución Implementada:**
+    * El Banco Central de Venezuela no ofrece una API JSON pública oficial. Su portal emite tablas HTML con certificados SSL y bloqueos de red intermitentes.
+    * Para evitar caídas en el punto de cobro de la clínica, se construyó una **Arquitectura Resiliente en 4 Capas**:
+      1. **Capa 1 (En línea):** Consulta a servicio especializado de alta disponibilidad (`https://ve.dolarapi.com/v1/dolares/oficial`) con timeout estricto de 3.5 segundos.
+      2. **Capa 2 (Persistencia Local D1):** Cada tasa obtenida se guarda inmediatamente en la tabla SQLite D1 `configuraciones_tasas` con su fecha valor y fuente.
+      3. **Capa 3 (Fallback Automático):** Si la conexión exterior falla o hay corte de internet, el sistema carga de forma transparente la última tasa almacenada en base de datos.
+      4. **Capa 4 (Control Humano / Override Manual en Caja):** La administradora puede pulsar "Ajustar Manualmente" en cualquier momento para fijar una tasa especial de jornada o restablecer al modo automático con un solo clic.
+  * **Notificación en la Campanita:**
+    * La campanita de la cabecera móvil y de la barra de escritorio detecta de forma reactiva las actualizaciones de tasa y las solicitudes de citas de triaje web.
+    * Muestra un indicador rojo pulsante (`animate-pulse`) cuando hay novedades pendientes de lectura.
+    * Al tocar la campanita, se abre el **Centro de Notificaciones y Avisos**, mostrando el valor oficial en Bs/USD, la vigencia, el botón de actualización en caliente y accesos directos al triaje.
+  * **Conciliación Financiera en Caja (`BillingView.tsx`):**
+    * Los presupuestos, abonos parciales y pagos en moneda nacional (Pago Móvil y Punto de Venta) calculan de forma instantánea el contravalor exacto en Bolívares usando la tasa vigente.
+
+---
+
 ## 🔭 4. Estado Actual del Proyecto y Próximos Pasos
 
 * **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente con código 0).
-* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo.
-* **Estado de Interfaz:** Cabecera ajustada al estándar solicitado, botones flotantes ubicados ergonómicamente y selección de pacientes completamente operativa.
+* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo, incluyendo tabla persistente `configuraciones_tasas`.
+* **Estado de Interfaz:** Cabecera con selector multisede, botones flotantes táctiles, selector de pacientes, tasa BCV en tiempo real y centro de notificaciones operativo.
 * **Próximos pasos recomendados:**
   1. Integración de las pantallas panorámicas de escritorio para la recepción y odontograma de sillón.
   2. Implementación de los webhooks de WhatsApp Cloud API para auto-confirmar citas recibidas por mensajería.
+
 

@@ -1,4 +1,4 @@
-import { SedeId, DashboardPulse, Cita, ToothRecord, Presupuesto, PagoRegistroRequest } from '../types/clinical';
+import { SedeId, DashboardPulse, Cita, ToothRecord, Presupuesto, PagoRegistroRequest, TasaCambioInfo } from '../types/clinical';
 
 const API_BASE_URL = '/api';
 
@@ -139,6 +139,48 @@ export class ApiClient {
     } catch {
       return { success: true, reciboId: `REC-${Date.now()}` };
     }
+  }
+
+  // 5. Integración Oficial en Línea de Tasa BCV
+  static async getTasaBcv(refresh = false): Promise<TasaCambioInfo> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasas/bcv${refresh ? '?refresh=true' : ''}`);
+      if (!res.ok) throw new Error('Error al consultar tasa BCV');
+      return await res.json();
+    } catch {
+      return {
+        moneda: 'USD',
+        tasa: 875.65,
+        fuente: 'BCV Oficial (Caché Local)',
+        fechaActualizacion: new Date().toISOString(),
+        esManual: false,
+        origen: 'contingency',
+      };
+    }
+  }
+
+  static async fijarTasaManual(datos: {
+    tasa: number;
+    motivo?: string;
+    fijadoPor?: string;
+  }): Promise<TasaCambioInfo> {
+    const res = await fetch(`${API_BASE_URL}/tasas/bcv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
+    });
+    if (!res.ok) throw new Error('Error al fijar tasa manual');
+    return await res.json();
+  }
+
+  static async resetearTasaAutomatica(): Promise<TasaCambioInfo> {
+    const res = await fetch(`${API_BASE_URL}/tasas/bcv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resetearAutomatico: true }),
+    });
+    if (!res.ok) throw new Error('Error al restaurar tasa automática');
+    return await res.json();
   }
 
   // Mocks clínicos de alta fidelidad para fallback y desarrollo offline
