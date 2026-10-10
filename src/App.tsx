@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SedeProvider } from './context/SedeContext';
 import { ClinicalHeader } from './components/layout/ClinicalHeader';
 import { BottomNavigation, TabId } from './components/layout/BottomNavigation';
@@ -14,9 +14,45 @@ import { useDeviceLayout } from './hooks/useDeviceLayout';
 import { DesktopSidebar } from './components/layout/DesktopSidebar';
 import { DesktopTopBar } from './components/layout/DesktopTopBar';
 
+const parseTabFromLocation = (): TabId => {
+  if (typeof window === 'undefined') return 'dashboard';
+  const hash = window.location.hash.replace('#', '').toLowerCase();
+  if (hash === 'reserva' || hash === 'autoregistro' || hash === 'citas' || hash === 'cita') return 'reserva';
+  if (hash === 'coordinacion' || hash === 'triaje') return 'coordinacion';
+  if (hash === 'agenda') return 'agenda';
+  if (hash === 'odontograma' || hash === 'ficha') return 'odontograma';
+  if (hash === 'cobros') return 'cobros';
+  if (hash === 'dashboard' || hash === 'inicio') return 'dashboard';
+
+  const params = new URLSearchParams(window.location.search);
+  const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase();
+  if (tabParam === 'reserva' || tabParam === 'autoregistro') return 'reserva';
+  if (tabParam === 'coordinacion' || tabParam === 'triaje') return 'coordinacion';
+  if (tabParam === 'agenda') return 'agenda';
+  if (tabParam === 'odontograma') return 'odontograma';
+  if (tabParam === 'cobros') return 'cobros';
+
+  return 'dashboard';
+};
+
 export const AppContent: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeTab, setActiveTabState] = useState<TabId>(parseTabFromLocation);
   const { isDesktop } = useDeviceLayout();
+
+  const setActiveTab = (tab: TabId) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      window.location.hash = tab === 'dashboard' ? '' : tab;
+    }
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveTabState(parseTabFromLocation());
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   if (isDesktop) {
     return (

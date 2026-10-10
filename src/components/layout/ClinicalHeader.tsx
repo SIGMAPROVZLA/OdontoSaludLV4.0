@@ -103,23 +103,33 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
         </div>
 
         {/* Acciones de Cabecera */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => onNavigateTab?.('reserva')}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs font-bold shadow-sm transition-all active:scale-95"
+            title="Reservar Cita Online"
+          >
+            <span className="material-symbols-outlined text-[16px]">add_alarm</span>
+            <span className="inline">Reservar</span>
+          </button>
+
           <button
             type="button"
             aria-label="Notificaciones clínicas"
             onClick={() => onNavigateTab?.('coordinacion')}
-            className="relative w-10 h-10 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors active:scale-95"
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors active:scale-95"
           >
-            <span className="material-symbols-outlined text-[22px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
+            <span className="material-symbols-outlined text-[20px]">notifications</span>
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
           </button>
           <button
             type="button"
             aria-label="WhatsApp Asistencial"
             onClick={() => window.open(`https://wa.me/${sedeActiva.whatsapp}`, '_blank')}
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-status-success bg-status-success/10 hover:bg-status-success/20 transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-status-success bg-status-success/10 hover:bg-status-success/20 transition-colors"
           >
-            <span className="material-symbols-outlined text-[20px]">chat</span>
+            <span className="material-symbols-outlined text-[18px]">chat</span>
           </button>
         </div>
       </div>
