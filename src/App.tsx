@@ -68,7 +68,7 @@ export const AppContent: React.FC = () => {
             {activeTab === 'dashboard' && <DashboardView onNavigateTab={setActiveTab} />}
             {activeTab === 'coordinacion' && <AppointmentCoordinationView onNavigateTab={setActiveTab} />}
             {activeTab === 'reserva' && <BookingFlow onBack={() => setActiveTab('dashboard')} onNavigateTab={setActiveTab} />}
-            {activeTab === 'odontograma' && <OdontogramView />}
+            {activeTab === 'odontograma' && <OdontogramView onNavigateTab={setActiveTab} />}
             {activeTab === 'agenda' && <AgendaView onNavigateTab={setActiveTab} />}
             {activeTab === 'cobros' && <BillingView />}
           </main>
@@ -90,7 +90,7 @@ export const AppContent: React.FC = () => {
         {activeTab === 'dashboard' && <DashboardView onNavigateTab={setActiveTab} />}
         {activeTab === 'coordinacion' && <AppointmentCoordinationView onNavigateTab={setActiveTab} />}
         {activeTab === 'reserva' && <BookingFlow onBack={() => setActiveTab('dashboard')} onNavigateTab={setActiveTab} />}
-        {activeTab === 'odontograma' && <OdontogramView />}
+        {activeTab === 'odontograma' && <OdontogramView onNavigateTab={setActiveTab} />}
         {activeTab === 'agenda' && <AgendaView onNavigateTab={setActiveTab} />}
         {activeTab === 'cobros' && <BillingView />}
       </main>

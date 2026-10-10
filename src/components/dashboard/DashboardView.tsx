@@ -438,6 +438,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           ))}
         </div>
       </section>
+
+      {/* Botón Flotante Agendar Cita (Stitch Mobile Inicio) */}
+      <div className="fixed bottom-20 right-4 z-40">
+        <button
+          type="button"
+          onClick={() => onNavigateTab('reserva')}
+          className="py-3 px-5 rounded-full bg-gradient-to-r from-dental-deep-navy via-primary to-electric-blue hover:brightness-105 text-white font-bold text-xs shadow-[0_8px_24px_rgba(0,132,255,0.4)] transition-all flex items-center gap-2 active:scale-95 ring-2 ring-white"
+        >
+          <span className="material-symbols-outlined text-[20px]">add_alarm</span>
+          <span>Agendar Cita</span>
+        </button>
+      </div>
     </div>
   );
 };

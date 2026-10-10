@@ -151,11 +151,31 @@ Para revisar y probar el proyecto de forma completa, dispones de los siguientes 
 
 ---
 
+### 📌 Hito 9: Rediseño de Cabecera Clínica, Botón Flotante y Selector de Pacientes Registrados en Ficha
+* **Fecha:** 2026-10-10
+* **Archivos clave:**
+  * [`src/components/layout/ClinicalHeader.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/layout/ClinicalHeader.tsx) (Cabecera minimalista: logo + título + selector simple de sedes + campanita + VictorIA Pro)
+  * [`src/components/dashboard/DashboardView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/dashboard/DashboardView.tsx) (Botón flotante inferior para agendar cita)
+  * [`src/components/odontogram/OdontogramView.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/odontogram/OdontogramView.tsx) (Directorio emergente de pacientes registrados + botón flotante de agendamiento)
+  * [`src/components/booking/VictoriaAssistantModal.tsx`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/booking/VictoriaAssistantModal.tsx) (Activación por evento personalizado desde el icono de cabecera)
+* **💡 Comentario Pedagógico:**
+  * **Cabecera Simplificada y Despejada:**
+    * **Izquierda:** Emblema dental de OdontoSalud con indicador de guardia activa, Título principal (`OdontoSalud La Victoria`) y selector simple de sucursal (`La Victoria ⇄ Colonia Tovar`) como subtítulo limpio.
+    * **Derecha:** Campanita de notificaciones (con acceso a Citas Previas / Triaje) e icono de acceso directo a **VictorIA Pro**.
+    * Se eliminó el botón de agendar de la barra superior para concentrar la ergonomía táctil en el pulgar (zona inferior).
+  * **Botón Flotante Ergonómico de Agendamiento:**
+    * Ubicado de forma flotante (`fixed bottom-20 right-4`) exclusivamente en las vistas de **Inicio** ([`DashboardView`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/dashboard/DashboardView.tsx)) y de **Ficha Clínica** ([`OdontogramView`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/src/components/odontogram/OdontogramView.tsx)), facilitando la reserva rápida con una sola mano.
+  * **Directorio de Pacientes Registrados en Ficha:**
+    * Se creó una ventana modal/drawer con búsqueda en vivo por nombre, cédula o teléfono y filtros rápidos (*Todos*, *En Sillón*, *Con Alergias*).
+    * Al seleccionar un paciente (ej. Patricia Velásquez, Carlos Mendoza, Marcos Ramos, Elena Blanco, Roberto Gil, Sofía Rivas), el odontograma anatómico, las alertas médicas, la radiografía periapical RVG y la nota de evolución clínica se recalculan y actualizan en caliente.
+
+---
+
 ## 🔭 4. Estado Actual del Proyecto y Próximos Pasos
 
 * **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente con código 0).
-* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo (Creación de citas -> Listado -> Aprobación de estado -> Confirmación en agenda).
-* **Estado de Interfaz:** Vistas móviles de Autoregistro y Triaje Digital 100% operativas y fieles a Google Stitch.
+* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo.
+* **Estado de Interfaz:** Cabecera ajustada al estándar solicitado, botones flotantes ubicados ergonómicamente y selección de pacientes completamente operativa.
 * **Próximos pasos recomendados:**
   1. Integración de las pantallas panorámicas de escritorio para la recepción y odontograma de sillón.
   2. Implementación de los webhooks de WhatsApp Cloud API para auto-confirmar citas recibidas por mensajería.

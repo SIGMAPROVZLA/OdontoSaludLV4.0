@@ -14,55 +14,52 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
   const sedesList = Object.values(SEDES_DISPONIBLES);
 
   return (
-    <header className="fixed top-0 w-full z-50 pt-[env(safe-area-inset-top,0px)] bg-surface-clean-white/90 backdrop-blur-xl shadow-[0_1px_12px_rgba(15,43,72,0.06)] border-b border-border-subtle">
+    <header className="fixed top-0 w-full z-50 pt-[env(safe-area-inset-top,0px)] bg-surface-clean-white/95 backdrop-blur-xl shadow-[0_1px_12px_rgba(15,43,72,0.06)] border-b border-border-subtle">
       <div className="h-16 px-gutter-mobile flex items-center justify-between gap-2 max-w-5xl mx-auto">
-        {/* Perfil del Doctor y Switch Multisede */}
+        {/* Izquierda: Logo OdontoSalud + Título OdontoSalud La Victoria + Selección Simple de Sedes como Subtítulo */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {/* Logo OdontoSalud */}
           <div className="relative shrink-0">
-            <img
-              alt={doctorActivo}
-              src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80"
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-surface-clean-white shadow-[0_2px_6px_rgba(15,43,72,0.15)]"
-            />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-dental-deep-navy via-primary to-electric-blue flex items-center justify-center text-white shadow-md ring-2 ring-primary/20">
+              <span className="material-symbols-outlined text-[24px]">dentistry</span>
+            </div>
             <span
               className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-status-success ring-2 ring-surface-clean-white"
-              title="Sesión Clínica Activa"
+              title="Clínica Operativa en Vivo"
             />
           </div>
 
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-display font-bold text-sm text-dental-deep-navy truncate leading-tight">
-                OdontoSalud
-              </span>
-              <span className="text-[10px] bg-primary/10 text-primary font-bold px-1.5 py-0.2 rounded-full">
-                VictorIA Pro
-              </span>
-            </div>
+            {/* Título Principal */}
+            <h1 className="font-display font-extrabold text-sm sm:text-base text-dental-deep-navy truncate leading-tight tracking-tight">
+              OdontoSalud {sedeActiva.nombre}
+            </h1>
 
-            {/* Selector Desplegable de Sede */}
+            {/* Selección Simple de Sedes como Subtítulo */}
             <div className="relative inline-flex items-center mt-0.5">
               <button
                 type="button"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-dental-deep-navy transition-all active:scale-95 text-left"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-secondary hover:text-dental-deep-navy transition-colors text-left group"
+                title="Cambiar sede de atención"
               >
-                <span className="material-symbols-outlined text-[13px] text-electric-blue">
+                <span className="material-symbols-outlined text-[13px] text-electric-blue group-hover:scale-110 transition-transform">
                   location_on
                 </span>
-                <span className="text-xs font-semibold truncate max-w-[170px]">
-                  {sedeActiva.id === 'victoria' ? 'La Victoria' : 'La Colonia Tovar'} ⇄
+                <span className="truncate max-w-[160px] text-dental-deep-navy/80">
+                  {sedeActiva.nombre}
                 </span>
-                <span className="material-symbols-outlined text-[14px] text-secondary">
+                <span className="text-[10px] text-electric-blue font-bold">⇄ Cambiar</span>
+                <span className="material-symbols-outlined text-[13px] text-secondary">
                   expand_more
                 </span>
               </button>
 
-              {/* Menú Dropdown */}
+              {/* Menú Dropdown Simple de Selección de Sede */}
               {dropdownOpen && (
-                <div className="absolute top-7 left-0 z-50 bg-surface-clean-white rounded-2xl shadow-[0_8px_24px_rgba(15,43,72,0.18)] border border-border-subtle py-1.5 min-w-[210px] animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute top-6 left-0 z-50 bg-surface-clean-white rounded-2xl shadow-[0_8px_24px_rgba(15,43,72,0.18)] border border-border-subtle py-1.5 min-w-[210px] animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-secondary">
-                    Seleccionar Sede Activa
+                    Seleccionar Sede
                   </div>
                   {sedesList.map((sede) => (
                     <button
@@ -102,34 +99,35 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
           </div>
         </div>
 
-        {/* Acciones de Cabecera */}
+        {/* Derecha: Campanita de Notificación + Icono de VictorIA Pro */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Campanita de Notificación (Triaje / Citas) */}
           <button
             type="button"
-            onClick={() => onNavigateTab?.('reserva')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs font-bold shadow-sm transition-all active:scale-95"
-            title="Reservar Cita Online"
-          >
-            <span className="material-symbols-outlined text-[16px]">add_alarm</span>
-            <span className="inline">Reservar</span>
-          </button>
-
-          <button
-            type="button"
-            aria-label="Notificaciones clínicas"
+            aria-label="Notificaciones y Citas Pendientes"
             onClick={() => onNavigateTab?.('coordinacion')}
             className="relative w-9 h-9 flex items-center justify-center rounded-xl text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice transition-colors active:scale-95"
+            title="Ver Citas Previas y Triaje"
           >
-            <span className="material-symbols-outlined text-[20px]">notifications</span>
+            <span className="material-symbols-outlined text-[22px]">notifications</span>
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-danger animate-pulse" />
           </button>
+
+          {/* Icono de VictorIA Pro */}
           <button
             type="button"
-            aria-label="WhatsApp Asistencial"
-            onClick={() => window.open(`https://wa.me/${sedeActiva.whatsapp}`, '_blank')}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-status-success bg-status-success/10 hover:bg-status-success/20 transition-colors"
+            aria-label="Abrir Asistente VictorIA Pro"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-victoria-assistant'))}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-dental-deep-navy via-primary to-electric-blue text-white shadow-sm hover:brightness-105 active:scale-95 transition-all group"
+            title="VictorIA Pro • Asistente Clínico Inteligente"
           >
-            <span className="material-symbols-outlined text-[18px]">chat</span>
+            <span className="material-symbols-outlined text-[17px] text-vibrant-cyan group-hover:rotate-12 transition-transform">
+              smart_toy
+            </span>
+            <span className="text-[11px] font-bold tracking-tight">VictorIA</span>
+            <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-white/20 uppercase tracking-wider text-vibrant-cyan">
+              Pro
+            </span>
           </button>
         </div>
       </div>

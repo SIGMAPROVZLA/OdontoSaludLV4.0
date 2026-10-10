@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSede } from '../../context/SedeContext';
 
 interface VictoriaMessage {
@@ -13,6 +13,13 @@ export const VictoriaAssistantModal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    const handleOpenEvent = () => setIsOpen(true);
+    window.addEventListener('open-victoria-assistant', handleOpenEvent);
+    return () => window.removeEventListener('open-victoria-assistant', handleOpenEvent);
+  }, []);
+
   const [messages, setMessages] = useState<VictoriaMessage[]>([
     {
       id: '1',
