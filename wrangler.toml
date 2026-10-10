@@ -1,0 +1,20 @@
+name = "odontosalud-api"
+main = "src/server/index.ts"
+compatibility_date = "2024-10-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "odontosalud-db"
+database_id = "odontosalud-d1-prod"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "odontosalud-kv-cache"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "odontosalud-radiografias"
