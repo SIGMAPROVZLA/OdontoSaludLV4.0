@@ -6,9 +6,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "wrangler dev src/server/index.ts --port 8787",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 execute DB --local --file=migrations/0001_initial_schema.sql",
+    "db:seed:local": "wrangler d1 execute DB --local --file=migrations/0002_seed_clinical_data.sql"
   },
   "dependencies": {
     "clsx": "^2.1.1",
