@@ -199,13 +199,35 @@ Para revisar y probar el proyecto de forma completa, dispones de los siguientes 
 
 ---
 
+### 📌 Hito 11: Ecosistema Global de Habilidades y Marco de Orquestación para Diseño Fluido, Planificación y Desarrollo
+* **Fecha:** 2026-10-20
+* **Archivos clave:**
+  * [`AGENTS.md`](file:///c:/Users/maria/OneDrive/Documentos/OdontoSaludLV%204.0/AGENTS.md) (Marco normativo local para agentes de IA)
+  * `~/.gemini/config/rules/orchestration-framework.md` (Marco de orquestación global)
+  * Nuevas habilidades globales de diseño: `awesome-design`, `google-material-design`, `glassmorphism-transparency`, `micro-interactions-animations`
+  * Nuevas habilidades de ingeniería y control de contexto: `gsd-core`, `ralph-loop`, `coderabbit-review`, `roo-modes`, `graphify`
+* **💡 Resumen de la Arquitectura de Orquestación:**
+  * **Diseño Fluido en 4 Capas (Fluid UI Architecture):**
+    1. *Capa Cinética:* `micro-interactions-animations` (físicas de resorte, respuesta háptica visual <16ms, aceleración GPU estricta vía `transform` y `opacity`, respeto a `prefers-reduced-motion`).
+    2. *Capa Estética:* Regla de exclusión mutua. En OdontoSalud rige `glassmorphism-transparency` (vidrio esmerilado, desenfoque gaussiano, reflejo de borde especular, contraste WCAG AA $\ge 4.5:1$) reservando `google-material-design` exclusivamente para formularios clínicos densos.
+    3. *Capa Estructural:* `awesome-design` (grilla rítmica de 8pt, proporciones 60-30-10, tipografía responsiva `clamp()`).
+    4. *Capa de Motor:* `ui-styling` (Tailwind CSS + React + Lucide Icons).
+  * **Planificación y Desarrollo Disciplinado:**
+    * Embudo secuencial por fases: Arquitectura (`roo-modes` Architect / `brainstorming`) $\to$ Planificación atómica (`gsd-plan-phase` / `writing-plans`) $\to$ Ejecución iterativa (`ralph-loop` / `test-driven-development` con commits atómicos) $\to$ Auditoría rigurosa (`coderabbit-review` OWASP) $\to$ Verificación con evidencia antes de cierre (`verification-before-completion`).
+
+---
+
 ## 🔭 4. Estado Actual del Proyecto y Próximos Pasos
 
-* **Estado de Código:** **100% libre de errores de compilación** (`tsc --noEmit` aprobado exitosamente con código 0).
-* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y probada de extremo a extremo, incluyendo tabla persistente `configuraciones_tasas`.
-* **Estado de Interfaz:** Cabecera con selector multisede, botones flotantes táctiles, selector de pacientes, tasa BCV en tiempo real y centro de notificaciones operativo.
-* **Próximos pasos recomendados:**
-  1. Integración de las pantallas panorámicas de escritorio para la recepción y odontograma de sillón.
+* **Estado de Código:** **100% libre de errores de compilación y empaquetado** (`npm run build` / `tsc && vite build` completado exitosamente con 0 fallos).
+* **Estado de Base de Datos:** Base relacional Cloudflare D1 emulada localmente y sincronizada con la tabla `configuraciones_tasas`.
+* **Servidores en Ejecución:**
+  * Servidor Frontend Vite: Activo en `http://localhost:3000/` (Tarea de fondo `task-1020`).
+  * Servidor API Wrangler: Activo en `http://127.0.0.1:8787/` (Tarea de fondo `task-1022`).
+* **Habilidades y Reglas de Agente:** 154 habilidades globales instaladas y operativas; `AGENTS.md` activo y versionado.
+* **Próximos pasos para la siguiente sesión:**
+  1. Integración de vistas de recepción para pantalla panorámica (escritorio).
   2. Implementación de los webhooks de WhatsApp Cloud API para auto-confirmar citas recibidas por mensajería.
+
 
 
