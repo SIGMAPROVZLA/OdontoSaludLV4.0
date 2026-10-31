@@ -99,10 +99,15 @@ export interface Presupuesto {
   codigo: string;
   pacienteId: string;
   pacienteNombre: string;
+  pacienteCedula?: string;
+  pacienteTelefono?: string;
+  pacienteEmail?: string;
   sedeId: SedeId;
   montoTotalUsd: number;
   montoAbonadoUsd: number;
+  saldoPendienteUsd?: number;
   tasaBcvReferencia: number;
+  procedimiento?: string;
   estado: 'borrador' | 'en_espera' | 'aprobado_parcial' | 'pagado' | 'anulado';
   createdAt: string;
 }

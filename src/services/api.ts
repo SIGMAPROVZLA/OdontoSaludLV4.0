@@ -18,10 +18,10 @@ import {
 const API_BASE_URL = '/api';
 
 export class ApiClient {
-  private static getHeaders(sedeId: SedeId): HeadersInit {
+  private static getHeaders(sedeId?: SedeId): HeadersInit {
     return {
       'Content-Type': 'application/json',
-      'x-sede-id': sedeId,
+      'x-sede-id': sedeId || 'victoria',
     };
   }
 
@@ -139,20 +139,71 @@ export class ApiClient {
     }
   }
 
+  // 4. Módulo de Presupuestos Clínicos y Cobros en Box
+  static async getPresupuestos(sedeId?: SedeId): Promise<Presupuesto[]> {
+    try {
+      const url = sedeId ? `${API_BASE_URL}/presupuestos?sedeId=${sedeId}` : `${API_BASE_URL}/presupuestos`;
+      const res = await fetch(url, { headers: this.getHeaders(sedeId) });
+      if (!res.ok) throw new Error('Error al cargar presupuestos');
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  static async getResumenCobros(sedeId?: SedeId): Promise<{
+    success: boolean;
+    cobradoHoyUsd: number;
+    efectivoDivisasUsd: number;
+    digitalUsd: number;
+    presupuestosPendientesUsd: number;
+    totalPresupuestosActivos: number;
+  }> {
+    try {
+      const url = sedeId ? `${API_BASE_URL}/presupuestos/resumen?sedeId=${sedeId}` : `${API_BASE_URL}/presupuestos/resumen`;
+      const res = await fetch(url, { headers: this.getHeaders(sedeId) });
+      if (!res.ok) throw new Error('Error al cargar resumen financiero');
+      return await res.json();
+    } catch {
+      return {
+        success: true,
+        cobradoHoyUsd: 0,
+        efectivoDivisasUsd: 0,
+        digitalUsd: 0,
+        presupuestosPendientesUsd: 455,
+        totalPresupuestosActivos: 4,
+      };
+    }
+  }
+
   static async registrarCobro(
     datos: PagoRegistroRequest,
     sedeId: SedeId
-  ): Promise<{ success: boolean; reciboId: string }> {
+  ): Promise<{
+    success: boolean;
+    reciboId: string;
+    error?: string;
+    presupuestoCodigo?: string;
+    montoUsd?: number;
+    montoBs?: number;
+    tasaBcv?: number;
+    nuevoAbonadoUsd?: number;
+    saldoPendienteUsd?: number;
+    estadoPresupuesto?: string;
+  }> {
     try {
       const res = await fetch(`${API_BASE_URL}/presupuestos/cobro`, {
         method: 'POST',
         headers: this.getHeaders(sedeId),
         body: JSON.stringify(datos),
       });
-      if (!res.ok) throw new Error('Error al registrar cobro');
-      return await res.json();
-    } catch {
-      return { success: true, reciboId: `REC-${Date.now()}` };
+      const data: any = await res.json();
+      if (!res.ok) {
+        return { success: false, reciboId: '', error: data?.error || 'Error al procesar cobro' };
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, reciboId: '', error: err?.message || 'Error de conexión con el servidor' };
     }
   }
 

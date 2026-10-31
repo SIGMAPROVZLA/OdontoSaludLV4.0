@@ -54,6 +54,23 @@ app.get('/', (c) => {
   `);
 });
 
+// Utilidad canónica para normalización de cédulas venezolanas (V, E, J, G)
+export function formatearCedulaVenezolana(raw: string): { canonical: string; cleanDigits: string; tipo: 'V' | 'E' | 'J' | 'G' } {
+  const trimmed = (raw || '').trim().toUpperCase();
+  let tipo: 'V' | 'E' | 'J' | 'G' = 'V';
+  if (trimmed.startsWith('E')) tipo = 'E';
+  else if (trimmed.startsWith('J')) tipo = 'J';
+  else if (trimmed.startsWith('G')) tipo = 'G';
+
+  const cleanDigits = trimmed.replace(/[^0-9]/g, '');
+  const formattedNumber = cleanDigits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return {
+    canonical: `${tipo}-${formattedNumber}`,
+    cleanDigits,
+    tipo,
+  };
+}
+
 // Servicio Resiliente de Tasa de Cambio BCV (Multi-capa: En línea -> D1 Caché -> Contingencia)
 async function getOrFetchBcvRate(
   db: D1Database,
@@ -379,98 +396,168 @@ app.post('/api/citas', async (c) => {
   const sedeId = c.get('sedeId');
   const body = await c.req.json();
 
-  const id = `cita-${Date.now()}`;
-  const pacienteId = body.pacienteId || `pac-${Date.now()}`;
+  // 1. Normalización estricta de cédula y resolución de paciente canónico
+  const rawCedula = body.pacienteCedula || '';
+  const { canonical: cedulaCanonica, cleanDigits } = formatearCedulaVenezolana(rawCedula);
 
-  // Asegurar registro integral y persistente de paciente
-  if (body.pacienteCedula && body.pacienteNombre) {
-    const parts = body.pacienteNombre.split(' ');
+  let pacienteId = body.pacienteId;
+
+  // Buscar si el paciente ya existe en D1 por su número de cédula limpio
+  const pacienteExistente: any = await db
+    .prepare(
+      `SELECT id, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id 
+       FROM pacientes 
+       WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`
+    )
+    .bind(cleanDigits)
+    .first();
+
+  if (pacienteExistente) {
+    pacienteId = pacienteExistente.id;
+    // Actualizar datos del paciente existente sin duplicar registro
+    await db
+      .prepare(
+        `UPDATE pacientes SET 
+          cedula = ?,
+          telefono = COALESCE(NULLIF(?, ''), telefono),
+          email = COALESCE(NULLIF(?, ''), email),
+          sexo = COALESCE(NULLIF(?, ''), sexo),
+          fecha_nacimiento = COALESCE(NULLIF(?, ''), fecha_nacimiento),
+          condicion_medica_id = COALESCE(NULLIF(?, ''), condicion_medica_id)
+        WHERE id = ?`
+      )
+      .bind(
+        cedulaCanonica,
+        body.pacienteTelefono || '',
+        body.pacienteEmail || '',
+        body.pacienteSexo || '',
+        body.pacienteFechaNacimiento || '',
+        body.pacienteCondicionMedicaId || '',
+        pacienteId
+      )
+      .run();
+  } else if (cleanDigits && body.pacienteNombre) {
+    // Si es un paciente completamente nuevo, crearlo con ID único
+    pacienteId = pacienteId || `pac-${Date.now()}`;
+    const parts = body.pacienteNombre.trim().split(' ');
     const nombres = parts[0] || '';
     const apellidos = parts.slice(1).join(' ') || '';
 
     await db
       .prepare(
-        `
-        INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(cedula) DO UPDATE SET
-          telefono = excluded.telefono,
-          email = COALESCE(excluded.email, pacientes.email),
-          sexo = COALESCE(excluded.sexo, pacientes.sexo),
-          fecha_nacimiento = COALESCE(excluded.fecha_nacimiento, pacientes.fecha_nacimiento),
-          condicion_medica_id = COALESCE(excluded.condicion_medica_id, pacientes.condicion_medica_id)
-      `
+        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         pacienteId,
-        body.pacienteCedula,
+        cedulaCanonica,
         nombres,
         apellidos,
         body.pacienteTelefono || '',
-        body.pacienteEmail || null,
+        body.pacienteEmail || '',
         body.pacienteSexo || 'Femenino',
         body.pacienteFechaNacimiento || null,
         body.pacienteCondicionMedicaId || 'ninguna'
       )
       .run();
-
-    try {
-      await db
-        .prepare(
-          `
-          INSERT INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)
-          ON CONFLICT(id) DO UPDATE SET
-            telefono = excluded.telefono,
-            email = COALESCE(excluded.email, registro_pacientes_reserva.email),
-            sexo = COALESCE(excluded.sexo, registro_pacientes_reserva.sexo),
-            fecha_nacimiento = COALESCE(excluded.fecha_nacimiento, registro_pacientes_reserva.fecha_nacimiento),
-            condicion_medica_id = COALESCE(excluded.condicion_medica_id, registro_pacientes_reserva.condicion_medica_id)
-        `
-        )
-        .bind(
-          pacienteId,
-          body.pacienteNombre,
-          body.pacienteCedula,
-          body.pacienteTelefono || '',
-          body.pacienteEmail || '',
-          body.pacienteSexo || 'Femenino',
-          body.pacienteFechaNacimiento || '',
-          body.pacienteCondicionMedicaId || 'ninguna',
-          body.motivo || 'Consulta General',
-          body.fechaCita || new Date().toISOString().split('T')[0],
-          body.horaInicio || '09:00 AM',
-          body.doctorNombre || 'Dra. María Alejandra Domínguez',
-          sedeId,
-          body.esUrgencia ? 1 : 0
-        )
-        .run();
-    } catch (_) {}
+  } else {
+    pacienteId = pacienteId || `pac-${Date.now()}`;
   }
 
-  // Insertar Cita
+  // Sincronizar también con registro_pacientes_reserva de forma controlada
+  try {
+    await db
+      .prepare(
+        `INSERT INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)
+         ON CONFLICT(id) DO UPDATE SET
+           cedula = excluded.cedula,
+           telefono = COALESCE(NULLIF(excluded.telefono, ''), registro_pacientes_reserva.telefono),
+           email = COALESCE(NULLIF(excluded.email, ''), registro_pacientes_reserva.email),
+           sexo = COALESCE(NULLIF(excluded.sexo, ''), registro_pacientes_reserva.sexo),
+           fecha_nacimiento = COALESCE(NULLIF(excluded.fecha_nacimiento, ''), registro_pacientes_reserva.fecha_nacimiento),
+           condicion_medica_id = COALESCE(NULLIF(excluded.condicion_medica_id, ''), registro_pacientes_reserva.condicion_medica_id)`
+      )
+      .bind(
+        pacienteId,
+        body.pacienteNombre || 'Paciente',
+        cedulaCanonica,
+        body.pacienteTelefono || '',
+        body.pacienteEmail || '',
+        body.pacienteSexo || 'Femenino',
+        body.pacienteFechaNacimiento || '',
+        body.pacienteCondicionMedicaId || 'ninguna',
+        body.motivo || 'Consulta General',
+        body.fechaCita || new Date().toISOString().split('T')[0],
+        body.horaInicio || '09:00 AM',
+        body.doctorNombre || 'Dra. María Alejandra Domínguez',
+        sedeId,
+        body.esUrgencia ? 1 : 0
+      )
+      .run();
+  } catch (_) {}
+
+  const fechaCita = body.fechaCita || new Date().toISOString().split('T')[0];
+  const horaInicio = body.horaInicio || '09:00 AM';
+
+  // 2. Control anti-duplicados estricto de citas:
+  // Comprobar si el paciente ya tiene una cita activa para esa misma fecha y hora
+  const citaExistente: any = await db
+    .prepare(
+      `SELECT id, estado, doctor_nombre, box_numero 
+       FROM citas 
+       WHERE paciente_id = ? AND fecha_cita = ? AND hora_inicio = ? AND estado != 'cancelada'`
+    )
+    .bind(pacienteId, fechaCita, horaInicio)
+    .first();
+
+  if (citaExistente) {
+    return c.json({
+      success: true,
+      id: citaExistente.id,
+      isDuplicate: true,
+      message: `El paciente ya cuenta con una cita agendada en este horario con ${citaExistente.doctor_nombre}.`,
+    });
+  }
+
+  // Validar disponibilidad de Box en la sede
+  let boxNumero = Number(body.boxNumero) || 1;
+  const boxOcupado: any = await db
+    .prepare(
+      `SELECT id FROM citas 
+       WHERE sede_id = ? AND fecha_cita = ? AND hora_inicio = ? AND box_numero = ? AND estado != 'cancelada'`
+    )
+    .bind(sedeId, fechaCita, horaInicio, boxNumero)
+    .first();
+
+  if (boxOcupado) {
+    // Si el Box 1 está ocupado, alternar al Box 2 (o viceversa) si la sede tiene disponibilidad
+    boxNumero = boxNumero === 1 ? 2 : 1;
+  }
+
+  const id = `cita-${Date.now()}`;
+
+  // Insertar Cita Única
   await db
     .prepare(
-      `
-      INSERT INTO citas (id, sede_id, paciente_id, doctor_nombre, box_numero, fecha_cita, hora_inicio, motivo, estado, es_urgencia)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
+      `INSERT INTO citas (id, sede_id, paciente_id, doctor_nombre, box_numero, fecha_cita, hora_inicio, motivo, estado, es_urgencia)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
       sedeId,
       pacienteId,
       body.doctorNombre || 'Dra. María Alejandra Domínguez',
-      body.boxNumero || 1,
-      body.fechaCita || new Date().toISOString().split('T')[0],
-      body.horaInicio || '09:00 AM',
+      boxNumero,
+      fechaCita,
+      horaInicio,
       body.motivo || 'Consulta General',
       body.estado || 'pendiente',
       body.esUrgencia ? 1 : 0
     )
     .run();
 
-  return c.json({ success: true, id });
+  return c.json({ success: true, id, boxNumero, isDuplicate: false });
 });
 
 // Actualizar estado de una cita (Aprobar, Pasar a sillón, Cancelar)
@@ -646,37 +733,189 @@ app.post('/api/pacientes/:id/odontograma', async (c) => {
   return c.json({ success: true, message: `Pieza FDI ${numeroFdi} guardada exitosamente` });
 });
 
-// 4. Registro de Pagos y Conciliación Multimoneda
+// 4. Módulo de Presupuestos Clínicos y Cobros en Box (Cloudflare D1)
+app.get('/api/presupuestos', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const sedeId = c.req.query('sedeId') || c.get('sedeId');
+  const estado = c.req.query('estado');
+  const pacienteId = c.req.query('pacienteId');
+
+  let query = `
+    SELECT p.*,
+           TRIM(pac.nombres || ' ' || COALESCE(pac.apellidos, '')) AS paciente_nombre,
+           pac.cedula AS paciente_cedula,
+           pac.telefono AS paciente_telefono,
+           pac.email AS paciente_email
+    FROM presupuestos p
+    JOIN pacientes pac ON p.paciente_id = pac.id
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+  if (sedeId && sedeId !== 'all' && sedeId !== 'ambas') {
+    query += ` AND p.sede_id = ?`;
+    params.push(sedeId);
+  }
+  if (estado && estado !== 'all') {
+    query += ` AND p.estado = ?`;
+    params.push(estado);
+  }
+  if (pacienteId) {
+    query += ` AND (p.paciente_id = ? OR pac.cedula LIKE '%' || ? || '%')`;
+    params.push(pacienteId, pacienteId);
+  }
+  query += ` ORDER BY p.created_at DESC`;
+
+  const res = await db.prepare(query).bind(...params).all();
+  const mapped = (res?.results || []).map((row: any) => ({
+    id: row.id,
+    codigo: row.codigo,
+    pacienteId: row.paciente_id,
+    pacienteNombre: row.paciente_nombre || 'Paciente',
+    pacienteCedula: row.paciente_cedula || '',
+    pacienteTelefono: row.paciente_telefono || '',
+    pacienteEmail: row.paciente_email || '',
+    sedeId: row.sede_id,
+    montoTotalUsd: Number(row.monto_total_usd || 0),
+    montoAbonadoUsd: Number(row.monto_abonado_usd || 0),
+    saldoPendienteUsd: Math.max(0, Number(row.monto_total_usd || 0) - Number(row.monto_abonado_usd || 0)),
+    tasaBcvReferencia: Number(row.tasa_bcv_referencia || 0),
+    procedimiento: row.procedimiento || 'Tratamiento Odontológico General',
+    estado: row.estado || 'en_espera',
+    createdAt: row.created_at,
+  }));
+  return c.json(mapped);
+});
+
+app.get('/api/presupuestos/resumen', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+
+  // Cobrado en la jornada de hoy
+  const cobradoHoyRes: any = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(monto_usd), 0) as total_usd,
+      COALESCE(SUM(CASE WHEN metodo = 'divisas_efectivo' THEN monto_usd ELSE 0 END), 0) as efectivo_usd,
+      COALESCE(SUM(CASE WHEN metodo != 'divisas_efectivo' THEN monto_usd ELSE 0 END), 0) as digital_usd
+    FROM pagos
+    WHERE date(fecha_pago) = date('now')
+  `).first();
+
+  // Saldos de presupuestos pendientes por cobrar
+  const pendientesRes: any = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(monto_total_usd - monto_abonado_usd), 0) as pendientes_usd,
+      COUNT(*) as total_presupuestos
+    FROM presupuestos
+    WHERE estado IN ('en_espera', 'aprobado_parcial')
+  `).first();
+
+  return c.json({
+    success: true,
+    cobradoHoyUsd: Number(cobradoHoyRes?.total_usd || 0),
+    efectivoDivisasUsd: Number(cobradoHoyRes?.efectivo_usd || 0),
+    digitalUsd: Number(cobradoHoyRes?.digital_usd || 0),
+    presupuestosPendientesUsd: Number(pendientesRes?.pendientes_usd || 0),
+    totalPresupuestosActivos: Number(pendientesRes?.total_presupuestos || 0),
+  });
+});
+
+app.post('/api/presupuestos', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const body = await c.req.json();
+  const id = body.id || `pre-${Date.now()}`;
+  const codigo = body.codigo || `PRE-2026-${Date.now().toString().slice(-4)}`;
+  const sedeId = body.sedeId || 'victoria';
+  const montoTotalUsd = Number(body.montoTotalUsd || 0);
+  const procedimiento = body.procedimiento || 'Evaluación Integral Odontológica';
+
+  // Verificar que el paciente exista
+  const paciente = await db.prepare(`SELECT id FROM pacientes WHERE id = ?`).bind(body.pacienteId).first();
+  if (!paciente) {
+    return c.json({ success: false, error: 'Paciente no encontrado en el padrón' }, 404);
+  }
+
+  await db.prepare(`
+    INSERT INTO presupuestos (id, codigo, paciente_id, sede_id, monto_total_usd, monto_abonado_usd, tasa_bcv_referencia, procedimiento, estado)
+    VALUES (?, ?, ?, ?, ?, 0.0, ?, ?, 'en_espera')
+  `).bind(
+    id,
+    codigo,
+    body.pacienteId,
+    sedeId,
+    montoTotalUsd,
+    body.tasaBcvReferencia || 49.85,
+    procedimiento
+  ).run();
+
+  return c.json({ success: true, id, codigo });
+});
+
+// Registro de Pagos y Conciliación Multimoneda con Prevención de Doble Cobro
 app.post('/api/presupuestos/cobro', async (c) => {
   const db = c.env.DB;
+  await ensureControlDataTables(db);
   const { presupuestoId, montoUsd, metodo, referencia, tasaBcv } = await c.req.json();
 
+  const montoNum = Number(montoUsd);
+  if (!montoNum || isNaN(montoNum) || montoNum <= 0) {
+    return c.json({ success: false, error: 'El monto ingresado para el cobro debe ser mayor a 0' }, 400);
+  }
+
+  // 1. Control estricto anti-duplicados por referencia bancaria (Pago Móvil, Zelle, Punto de Venta)
+  if (referencia && referencia.trim() && metodo !== 'divisas_efectivo') {
+    const refClean = referencia.trim();
+    const existingPago: any = await db.prepare(`
+      SELECT id, monto_usd, fecha_pago FROM pagos
+      WHERE presupuesto_id = ? AND LOWER(TRIM(referencia)) = LOWER(?)
+    `).bind(presupuestoId, refClean).first();
+
+    if (existingPago) {
+      return c.json({
+        success: false,
+        error: `Riesgo de cobro duplicado: La referencia bancaria "${refClean}" ya fue procesada para este presupuesto con el recibo ${existingPago.id}.`,
+        reciboExistenteId: existingPago.id,
+      }, 409);
+    }
+  }
+
+  // 2. Obtener presupuesto actual
+  const pre: any = await db.prepare(`SELECT * FROM presupuestos WHERE id = ?`).bind(presupuestoId).first();
+  if (!pre) {
+    return c.json({ success: false, error: 'Presupuesto no encontrado en el sistema' }, 404);
+  }
+
   const pagoId = `PAG-${Date.now()}`;
-  const montoBs = montoUsd * (tasaBcv || 49.85);
+  const tasa = Number(tasaBcv) || 49.85;
+  const montoBs = montoNum * tasa;
 
-  await db
-    .prepare(
-      `
-      INSERT INTO pagos (id, presupuesto_id, monto_usd, monto_bs, metodo, referencia)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `
-    )
-    .bind(pagoId, presupuestoId, montoUsd, montoBs, metodo, referencia || '')
-    .run();
+  await db.prepare(`
+    INSERT INTO pagos (id, presupuesto_id, monto_usd, monto_bs, tasa_bcv, metodo, referencia)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(pagoId, presupuestoId, montoNum, montoBs, tasa, metodo, referencia ? referencia.trim() : '').run();
 
-  // Actualizar monto abonado en el presupuesto
-  await db
-    .prepare(
-      `
-      UPDATE presupuestos
-      SET monto_abonado_usd = monto_abonado_usd + ?
-      WHERE id = ?
-    `
-    )
-    .bind(montoUsd, presupuestoId)
-    .run();
+  const nuevoAbonado = Number(pre.monto_abonado_usd || 0) + montoNum;
+  const totalUsd = Number(pre.monto_total_usd || 0);
+  const nuevoEstado = nuevoAbonado >= totalUsd ? 'pagado' : 'aprobado_parcial';
 
-  return c.json({ success: true, reciboId: pagoId });
+  await db.prepare(`
+    UPDATE presupuestos
+    SET monto_abonado_usd = ?, estado = ?
+    WHERE id = ?
+  `).bind(nuevoAbonado, nuevoEstado, presupuestoId).run();
+
+  return c.json({
+    success: true,
+    reciboId: pagoId,
+    presupuestoCodigo: pre.codigo,
+    montoUsd: montoNum,
+    montoBs,
+    tasaBcv: tasa,
+    nuevoAbonadoUsd: nuevoAbonado,
+    saldoPendienteUsd: Math.max(0, totalUsd - nuevoAbonado),
+    estadoPresupuesto: nuevoEstado,
+  });
 });
 
 // 5. Endpoint de Consulta en Línea de Tasa Oficial BCV
@@ -756,7 +995,181 @@ app.post('/api/tasas/bcv', async (c) => {
   });
 });
 
-// 7. Endpoints de Control de Data (Odontólogos, Higienistas y Catálogo de Tratamientos)
+// 7. Saneamiento Riguroso de Base de Datos y Prevención de Registros Duplicados
+async function sanearBaseDeDatos(db: D1Database) {
+  try {
+    // A. Eliminar referencias y citas de prueba basura
+    await db.prepare(`DELETE FROM citas WHERE paciente_id = 'pac-1793413900848' OR paciente_id LIKE '%16762318%'`).run();
+    await db.prepare(`DELETE FROM registro_tratamientos_realizados WHERE paciente_id = 'pac-1793413900848'`).run();
+    await db.prepare(`DELETE FROM presupuestos WHERE paciente_id = 'pac-1793413900848'`).run();
+    await db.prepare(`DELETE FROM odontograma_piezas WHERE paciente_id = 'pac-1793413900848'`).run();
+    await db.prepare(`DELETE FROM radiografias WHERE paciente_id = 'pac-1793413900848'`).run();
+    await db.prepare(`DELETE FROM pacientes WHERE cedula LIKE '%16762318%' OR id = 'pac-1793413900848'`).run();
+    await db.prepare(`DELETE FROM registro_pacientes_reserva WHERE cedula LIKE '%16762318%' OR id = 'pac-1793413900848'`).run();
+
+    // B. Re-vincular o limpiar citas de personal clínico insertado por error como pacientes
+    const staffAsPacs: any = await db.prepare(`
+      SELECT id FROM pacientes 
+      WHERE id IN (SELECT id FROM staff_odontologos UNION SELECT id FROM staff_higienistas)
+         OR id LIKE 'odo-%' OR id LIKE 'hig-%'
+    `).all();
+    if (staffAsPacs?.results && staffAsPacs.results.length > 0) {
+      for (const sp of staffAsPacs.results) {
+        await db.prepare(`DELETE FROM citas WHERE paciente_id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM registro_tratamientos_realizados WHERE paciente_id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM presupuestos WHERE paciente_id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM odontograma_piezas WHERE paciente_id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM radiografias WHERE paciente_id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM pacientes WHERE id = ?`).bind(sp.id).run();
+        await db.prepare(`DELETE FROM registro_pacientes_reserva WHERE id = ?`).bind(sp.id).run();
+      }
+    }
+
+    // C. Deduplicación canónica de Raymond Gilbonio (Cédula V-16.762.319)
+    await db.prepare(`
+      INSERT OR IGNORE INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+      VALUES ('pac-raymond', 'V-16.762.319', 'Raymond', 'Gilbonio', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1')
+    `).run();
+
+    // Re-vincular cualquier registro que estuviese atado al id temporal duplicado pac-1793418048527
+    await db.prepare(`UPDATE citas SET paciente_id = 'pac-raymond' WHERE paciente_id = 'pac-1793418048527'`).run();
+    await db.prepare(`UPDATE registro_tratamientos_realizados SET paciente_id = 'pac-raymond' WHERE paciente_id = 'pac-1793418048527'`).run();
+    await db.prepare(`UPDATE presupuestos SET paciente_id = 'pac-raymond' WHERE paciente_id = 'pac-1793418048527'`).run();
+    await db.prepare(`UPDATE odontograma_piezas SET paciente_id = 'pac-raymond' WHERE paciente_id = 'pac-1793418048527'`).run();
+    await db.prepare(`UPDATE radiografias SET paciente_id = 'pac-raymond' WHERE paciente_id = 'pac-1793418048527'`).run();
+    await db.prepare(`DELETE FROM pacientes WHERE id = 'pac-1793418048527'`).run();
+    await db.prepare(`DELETE FROM registro_pacientes_reserva WHERE id = 'pac-1793418048527'`).run();
+
+    // D. Normalización y actualización de veracidad en pacientes clave
+    // 1. Raymond Gilbonio
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-16.762.319',
+        nombres = 'Raymond',
+        apellidos = 'Gilbonio',
+        sexo = 'Masculino',
+        fecha_nacimiento = '1982-10-15',
+        telefono = '04126841381',
+        email = 'raymond.gilbonio@odontosaludlv.com',
+        condicion_medica_id = 'med-1'
+      WHERE id = 'pac-raymond' OR REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%16762319%'
+    `).run();
+
+    // 2. Carlos Mendoza (Corrección de sexo a Masculino)
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-17.654.321',
+        nombres = 'Carlos',
+        apellidos = 'Mendoza',
+        sexo = 'Masculino',
+        fecha_nacimiento = '1988-04-12',
+        telefono = '+58 412-1234567',
+        email = 'carlos.mendoza@email.com',
+        condicion_medica_id = 'ninguna'
+      WHERE id = 'pac-carlos' OR REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%17654321%'
+    `).run();
+
+    // 3. Marcos Ramos (Corrección de sexo a Masculino)
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-22.113.890',
+        nombres = 'Marcos',
+        apellidos = 'Ramos',
+        sexo = 'Masculino',
+        fecha_nacimiento = '1998-11-05',
+        telefono = '+58 424-7890123',
+        email = 'marcos.ramos@email.com',
+        condicion_medica_id = 'ninguna'
+      WHERE id = 'pac-marcos' OR REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%22113890%'
+    `).run();
+
+    // 4. Patricia Velásquez
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-19.845.221',
+        nombres = 'Patricia',
+        apellidos = 'Velásquez',
+        sexo = 'Femenino',
+        fecha_nacimiento = '1992-09-24',
+        telefono = '+58 414-5550921',
+        email = 'patricia.v@email.com',
+        condicion_medica_id = 'ninguna'
+      WHERE id = 'pac-patricia' OR REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%19845221%'
+    `).run();
+
+    // 5. Dra. María Alejandra Domínguez
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-20.266.565',
+        sexo = 'Femenino',
+        fecha_nacimiento = '1987-12-19',
+        telefono = '04128365687',
+        email = 'Marialedh2021@gmail.com',
+        condicion_medica_id = 'ninguna'
+      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%20266565%'
+    `).run();
+
+    // 6. Elena Blanco
+    await db.prepare(`
+      UPDATE pacientes SET 
+        cedula = 'V-25.115.894',
+        sexo = 'Femenino',
+        fecha_nacimiento = '1995-05-18',
+        email = 'elena.blanco@gmail.com',
+        condicion_medica_id = 'ninguna'
+      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%25115894%'
+    `).run();
+
+    // Sincronizar también registro_pacientes_reserva
+    await db.prepare(`
+      INSERT OR IGNORE INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado)
+      VALUES 
+      ('pac-raymond', 'Raymond Gilbonio', 'V-16.762.319', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1', 'Evaluación Integral Odontológica', '2024-10-25', '09:00 AM', 'Dra. Maria Alejandra Dominguez Hernández', 'victoria', 'confirmada'),
+      ('pac-carlos', 'Carlos Mendoza', 'V-17.654.321', '+58 412-1234567', 'carlos.mendoza@email.com', 'Masculino', '1988-04-12', 'ninguna', 'Endodoncia Molar #16', '2024-10-24', '10:30 AM', 'Dr. Carlos Mendoza Rivas', 'victoria', 'confirmada'),
+      ('pac-patricia', 'Patricia Velásquez', 'V-19.845.221', '+58 414-5550921', 'patricia.v@email.com', 'Femenino', '1992-09-24', 'ninguna', 'Profilaxis & Limpieza', '2024-10-24', '09:00 AM', 'Dra. María Alejandra Domínguez', 'victoria', 'pendiente')
+    `).run();
+
+    // E. Deduplicación inteligente de citas
+    const citasRepetidasRes: any = await db.prepare(`
+      SELECT paciente_id, fecha_cita, hora_inicio, COUNT(*) as cnt
+      FROM citas
+      GROUP BY paciente_id, fecha_cita, hora_inicio
+      HAVING cnt > 1
+    `).all();
+
+    if (citasRepetidasRes?.results && citasRepetidasRes.results.length > 0) {
+      for (const rep of citasRepetidasRes.results) {
+        const todas: any = await db.prepare(`
+          SELECT id, estado, created_at FROM citas
+          WHERE paciente_id = ? AND fecha_cita = ? AND hora_inicio = ?
+          ORDER BY CASE WHEN estado = 'confirmada' THEN 1 ELSE 2 END, created_at DESC
+        `).bind(rep.paciente_id, rep.fecha_cita, rep.hora_inicio).all();
+
+        if (todas?.results && todas.results.length > 1) {
+          const [mantener, ...aBorrar] = todas.results;
+          for (const b of aBorrar) {
+            await db.prepare(`DELETE FROM citas WHERE id = ?`).bind(b.id).run();
+          }
+        }
+      }
+    }
+
+    // F. Sembrado y Aseguramiento de Presupuestos Reales
+    await db.prepare(`
+      INSERT OR IGNORE INTO presupuestos (id, codigo, paciente_id, sede_id, monto_total_usd, monto_abonado_usd, tasa_bcv_referencia, procedimiento, estado)
+      VALUES 
+      ('pre-carlos-01', 'PRE-2026-001', 'pac-carlos', 'victoria', 280.0, 140.0, 49.85, 'Endodoncia Molar #16 + Perno y Corona', 'aprobado_parcial'),
+      ('pre-patricia-01', 'PRE-2026-002', 'pac-patricia', 'victoria', 120.0, 0.0, 49.85, 'Profilaxis Profunda + Resina Fotocurado #24', 'en_espera'),
+      ('pre-raymond-01', 'PRE-2026-003', 'pac-raymond', 'victoria', 250.0, 100.0, 49.85, 'Evaluación Integral RVG + Corona Estética Zirconio', 'aprobado_parcial'),
+      ('pre-marcos-01', 'PRE-2026-004', 'pac-marcos', 'victoria', 60.0, 60.0, 49.85, 'Tratamiento Ortodoncia Brackets MBT Mensualidad #4', 'pagado'),
+      ('pre-mariale-01', 'PRE-2026-005', 'pac-1793421420156', 'victoria', 45.0, 0.0, 49.85, 'Profilaxis Ultrasónica & Pulido Coronario', 'en_espera')
+    `).run();
+  } catch (err) {
+    console.error('Error durante saneamiento de base de datos:', err);
+  }
+}
+
+// 8. Endpoints de Control de Data (Odontólogos, Higienistas y Catálogo de Tratamientos)
 async function ensureControlDataTables(db: D1Database) {
   await db
     .prepare(
@@ -848,35 +1261,12 @@ async function ensureControlDataTables(db: D1Database) {
   try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN fecha_nacimiento TEXT").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN condicion_medica_id TEXT DEFAULT 'ninguna'").run(); } catch (_) {}
 
-  // Semilla y Actualización persistente de paciente verificado Raymond Gilbonio (Cédula 16.762.319)
-  try {
-    await db.prepare(`
-      INSERT OR IGNORE INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
-      VALUES ('pac-raymond', 'V-16.762.319', 'Raymond', 'Gilbonio', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1')
-    `).run();
-    await db.prepare(`
-      UPDATE pacientes SET 
-        sexo = 'Masculino',
-        fecha_nacimiento = '1982-10-15',
-        email = 'raymond.gilbonio@odontosaludlv.com',
-        condicion_medica_id = 'med-1'
-      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%16762319%'
-    `).run();
-    await db.prepare(`
-      INSERT OR IGNORE INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado)
-      VALUES ('pac-raymond', 'Raymond Gilbonio', 'V-16.762.319', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1', 'Evaluación Integral Odontológica', '2024-10-25', '09:00 AM', 'Dra. Maria Alejandra Dominguez Hernández', 'victoria', 'confirmada')
-    `).run();
-    await db.prepare(`
-      UPDATE registro_pacientes_reserva SET 
-        sexo = 'Masculino',
-        fecha_nacimiento = '1982-10-15',
-        email = 'raymond.gilbonio@odontosaludlv.com',
-        condicion_medica_id = 'med-1'
-      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%16762319%'
-    `).run();
-  } catch (err) {
-    console.error('Error sembrando paciente Raymond Gilbonio en D1:', err);
-  }
+  // Migraciones defensivas de presupuestos y pagos
+  try { await db.prepare("ALTER TABLE presupuestos ADD COLUMN procedimiento TEXT DEFAULT 'Tratamiento Odontológico General'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pagos ADD COLUMN tasa_bcv REAL").run(); } catch (_) {}
+
+  // Ejecutar saneamiento integral de pacientes, citas y presupuestos
+  await sanearBaseDeDatos(db);
 
   await db
     .prepare(
@@ -1116,6 +1506,15 @@ app.post('/api/control-data/odontologos', async (c) => {
   const b = await c.req.json();
   const id = b.id || `odo-${Date.now()}`;
 
+  // Comprobar si ya existe por cédula para evitar duplicados
+  const { canonical: cedulaDoc, cleanDigits: cleanDoc } = formatearCedulaVenezolana(b.cedula);
+  const docExistente: any = await db
+    .prepare(`SELECT id FROM staff_odontologos WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`)
+    .bind(cleanDoc)
+    .first();
+
+  const finalId = docExistente ? docExistente.id : id;
+
   await db
     .prepare(
       `INSERT INTO staff_odontologos (
@@ -1136,9 +1535,9 @@ app.post('/api/control-data/odontologos', async (c) => {
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
-      id,
+      finalId,
       b.nombres,
-      b.cedula,
+      cedulaDoc,
       b.cov || '',
       b.especialidad || 'Odontología General',
       b.telefono || '',
@@ -1151,29 +1550,7 @@ app.post('/api/control-data/odontologos', async (c) => {
     )
     .run();
 
-  // Sincronizar también con la tabla maestra clínica 'pacientes'
-  try {
-    const parts = (b.nombres || '').trim().split(' ');
-    const nom = parts[0] || '';
-    const ape = parts.slice(1).join(' ') || '';
-    await db
-      .prepare(
-        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(cedula) DO UPDATE SET
-           nombres = excluded.nombres,
-           apellidos = excluded.apellidos,
-           telefono = excluded.telefono,
-           email = excluded.email,
-           fecha_nacimiento = excluded.fecha_nacimiento`
-      )
-      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
-      .run();
-  } catch (err) {
-    // ignore
-  }
-
-  return c.json({ success: true, id });
+  return c.json({ success: true, id: finalId });
 });
 
 app.delete('/api/control-data/odontologos/:id', async (c) => {
@@ -1189,6 +1566,15 @@ app.post('/api/control-data/higienistas', async (c) => {
   await ensureControlDataTables(db);
   const b = await c.req.json();
   const id = b.id || `hig-${Date.now()}`;
+
+  // Comprobar si ya existe por cédula o MPPS para evitar duplicados en el staff
+  const { canonical: cedulaHig, cleanDigits: cleanHig } = formatearCedulaVenezolana(b.cedula);
+  const higExistente: any = await db
+    .prepare(`SELECT id FROM staff_higienistas WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`)
+    .bind(cleanHig)
+    .first();
+
+  const finalId = higExistente ? higExistente.id : id;
 
   await db
     .prepare(
@@ -1209,9 +1595,9 @@ app.post('/api/control-data/higienistas', async (c) => {
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
-      id,
+      finalId,
       b.nombres,
-      b.cedula,
+      cedulaHig,
       b.registroMpps || '',
       b.areaEspecialidad || 'Asistencia Clínica & Bioseguridad',
       b.telefono || '',
@@ -1223,29 +1609,7 @@ app.post('/api/control-data/higienistas', async (c) => {
     )
     .run();
 
-  // Sincronizar también con la tabla maestra clínica 'pacientes'
-  try {
-    const parts = (b.nombres || '').trim().split(' ');
-    const nom = parts[0] || '';
-    const ape = parts.slice(1).join(' ') || '';
-    await db
-      .prepare(
-        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(cedula) DO UPDATE SET
-           nombres = excluded.nombres,
-           apellidos = excluded.apellidos,
-           telefono = excluded.telefono,
-           email = excluded.email,
-           fecha_nacimiento = excluded.fecha_nacimiento`
-      )
-      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
-      .run();
-  } catch (err) {
-    // ignore
-  }
-
-  return c.json({ success: true, id });
+  return c.json({ success: true, id: finalId });
 });
 
 app.delete('/api/control-data/higienistas/:id', async (c) => {
@@ -1261,6 +1625,15 @@ app.post('/api/control-data/tratamientos', async (c) => {
   await ensureControlDataTables(db);
   const b = await c.req.json();
   const id = b.id || `trat-${Date.now()}`;
+  const codigoUpper = (b.codigo || '').trim().toUpperCase();
+
+  // Control estricto anti-duplicados por código de tratamiento
+  const tratExistente: any = await db
+    .prepare(`SELECT id FROM catalogo_tratamientos WHERE UPPER(codigo) = ?`)
+    .bind(codigoUpper)
+    .first();
+
+  const finalId = tratExistente ? tratExistente.id : id;
 
   await db
     .prepare(
@@ -1280,8 +1653,8 @@ app.post('/api/control-data/tratamientos', async (c) => {
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
-      id,
-      b.codigo,
+      finalId,
+      codigoUpper,
       b.nombre,
       b.categoria || 'Operatoria & Estética',
       b.descripcion || '',
@@ -1293,7 +1666,7 @@ app.post('/api/control-data/tratamientos', async (c) => {
     )
     .run();
 
-  return c.json({ success: true, id });
+  return c.json({ success: true, id: finalId });
 });
 
 app.delete('/api/control-data/tratamientos/:id', async (c) => {
@@ -1308,84 +1681,91 @@ app.post('/api/control-data/pacientes', async (c) => {
   const db = c.env.DB;
   await ensureControlDataTables(db);
   const b = await c.req.json();
-  const id = b.id || `pac-${Date.now()}`;
 
+  // 1. Normalización estricta de la cédula venezolana
+  const { canonical: cedulaCanonica, cleanDigits } = formatearCedulaVenezolana(b.cedula);
+
+  // 2. Control anti-duplicados: verificar si ya existe un paciente con esa cédula
+  const pacienteExistente: any = await db
+    .prepare(
+      `SELECT id FROM pacientes 
+       WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`
+    )
+    .bind(cleanDigits)
+    .first();
+
+  const id = pacienteExistente ? pacienteExistente.id : (b.id || `pac-${Date.now()}`);
+
+  const parts = (b.nombres || '').trim().split(' ');
+  const nom = parts[0] || '';
+  const ape = parts.slice(1).join(' ') || '';
+
+  // 3. Upsert atómico en la tabla maestra pacientes
   await db
     .prepare(
-      `INSERT INTO registro_pacientes_reserva (
-        id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET
-        nombres = excluded.nombres,
-        cedula = excluded.cedula,
-        telefono = excluded.telefono,
-        email = excluded.email,
-        sexo = excluded.sexo,
-        fecha_nacimiento = excluded.fecha_nacimiento,
-        condicion_medica_id = excluded.condicion_medica_id,
-        motivo = excluded.motivo,
-        fecha_cita = excluded.fecha_cita,
-        hora_inicio = excluded.hora_inicio,
-        doctor_nombre = excluded.doctor_nombre,
-        sede_id = excluded.sede_id,
-        estado = excluded.estado,
-        es_urgencia = excluded.es_urgencia,
-        updated_at = CURRENT_TIMESTAMP`
+      `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         cedula = excluded.cedula,
+         nombres = excluded.nombres,
+         apellidos = excluded.apellidos,
+         telefono = excluded.telefono,
+         email = excluded.email,
+         sexo = excluded.sexo,
+         fecha_nacimiento = excluded.fecha_nacimiento,
+         condicion_medica_id = excluded.condicion_medica_id`
     )
     .bind(
       id,
-      b.nombres,
-      b.cedula,
+      cedulaCanonica,
+      nom,
+      ape,
       b.telefono || '',
       b.email || '',
       b.sexo || 'Femenino',
-      b.fechaNacimiento || '',
-      b.condicionMedicaId || 'ninguna',
-      b.motivo || 'Consulta General',
-      b.fechaCita || new Date().toISOString().split('T')[0],
-      b.horaInicio || '09:00 AM',
-      b.doctorNombre || 'Dra. María Alejandra Domínguez',
-      b.sedeId || 'victoria',
-      b.estado || 'pendiente',
-      b.esUrgencia ? 1 : 0
+      b.fechaNacimiento || null,
+      b.condicionMedicaId || 'ninguna'
     )
     .run();
 
-  // Sincronizar también con la tabla maestra clínica 'pacientes'
+  // 4. Sincronizar en registro_pacientes_reserva
   try {
-    const parts = (b.nombres || '').trim().split(' ');
-    const nom = parts[0] || '';
-    const ape = parts.slice(1).join(' ') || '';
     await db
       .prepare(
-        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(cedula) DO UPDATE SET
-           nombres = excluded.nombres,
-           apellidos = excluded.apellidos,
-           telefono = excluded.telefono,
-           email = excluded.email,
-           sexo = excluded.sexo,
-           fecha_nacimiento = excluded.fecha_nacimiento,
-           condicion_medica_id = excluded.condicion_medica_id`
+        `INSERT INTO registro_pacientes_reserva (
+          id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          nombres = excluded.nombres,
+          cedula = excluded.cedula,
+          telefono = excluded.telefono,
+          email = excluded.email,
+          sexo = excluded.sexo,
+          fecha_nacimiento = excluded.fecha_nacimiento,
+          condicion_medica_id = excluded.condicion_medica_id,
+          updated_at = CURRENT_TIMESTAMP`
       )
       .bind(
         id,
-        b.cedula,
-        nom,
-        ape,
+        b.nombres,
+        cedulaCanonica,
         b.telefono || '',
         b.email || '',
         b.sexo || 'Femenino',
-        b.fechaNacimiento || null,
-        b.condicionMedicaId || 'ninguna'
+        b.fechaNacimiento || '',
+        b.condicionMedicaId || 'ninguna',
+        b.motivo || 'Consulta General',
+        b.fechaCita || new Date().toISOString().split('T')[0],
+        b.horaInicio || '09:00 AM',
+        b.doctorNombre || 'Dra. María Alejandra Domínguez',
+        b.sedeId || 'victoria',
+        b.estado || 'pendiente',
+        b.esUrgencia ? 1 : 0
       )
       .run();
-  } catch (err) {
-    console.error('Error sincronizando tabla pacientes:', err);
-  }
+  } catch (_) {}
 
-  return c.json({ success: true, id });
+  return c.json({ success: true, id, cedula: cedulaCanonica });
 });
 
 app.delete('/api/control-data/pacientes/:id', async (c) => {
