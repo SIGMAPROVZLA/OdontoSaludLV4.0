@@ -252,6 +252,17 @@ export class ApiClient {
     }
   }
 
+  static async buscarPacientePorCedula(cedula: string): Promise<PacienteItem | null> {
+    try {
+      const clean = cedula.replace(/[^0-9]/g, '');
+      const res = await fetch(`${API_BASE_URL}/pacientes/cedula/${clean}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
   static async eliminarPaciente(id: string): Promise<{ success: boolean }> {
     try {
       await fetch(`${API_BASE_URL}/control-data/pacientes/${id}`, { method: 'DELETE' });

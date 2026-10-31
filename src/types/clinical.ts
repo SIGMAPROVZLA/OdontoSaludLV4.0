@@ -40,6 +40,8 @@ export interface Paciente {
   apellidos: string;
   telefono: string;
   email?: string;
+  sexo?: 'Femenino' | 'Masculino' | 'Otro' | string;
+  condicionMedicaId?: string;
   alergias?: string;
   seguroNombre?: string;
   fechaNacimiento?: string;
@@ -54,6 +56,10 @@ export interface Cita {
   pacienteCedula: string;
   pacienteTelefono: string;
   pacienteAvatar?: string;
+  pacienteEmail?: string;
+  pacienteSexo?: string;
+  pacienteFechaNacimiento?: string;
+  condicionMedicaId?: string;
   doctorNombre: string;
   boxNumero: number;
   fechaCita: string;
@@ -187,6 +193,7 @@ export interface PacienteItem {
   email?: string;
   sexo?: 'Femenino' | 'Masculino' | 'Otro';
   fechaNacimiento?: string;
+  condicionMedicaId?: string;
   motivo?: string;
   fechaCita?: string;
   horaInicio?: string;

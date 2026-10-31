@@ -70,13 +70,31 @@ const INITIAL_ODONTOLOGOS_FALLBACK: OdontologoItem[] = [
 
 const INITIAL_PACIENTES_FALLBACK: PacienteItem[] = [
   {
+    id: 'pac-raymond',
+    nombres: 'Raymond Gilbonio',
+    cedula: 'V-16.762.319',
+    telefono: '04126841381',
+    email: 'raymond.gilbonio@odontosaludlv.com',
+    sexo: 'Masculino',
+    fechaNacimiento: '1982-10-15',
+    condicionMedicaId: 'med-1',
+    motivo: 'Evaluación Integral Odontológica',
+    fechaCita: '2024-10-25',
+    horaInicio: '09:00 AM',
+    doctorNombre: 'Dra. Maria Alejandra Dominguez Hernández',
+    sedeId: 'victoria',
+    estado: 'confirmada',
+    esUrgencia: false,
+  },
+  {
     id: 'pac-1',
     nombres: 'Patricia Velásquez',
     cedula: 'V-19.845.221',
-    telefono: '+58 412-9876543',
+    telefono: '04128365687',
     email: 'patricia.velasquez@gmail.com',
     sexo: 'Femenino',
     fechaNacimiento: '1989-06-14',
+    condicionMedicaId: 'ninguna',
     motivo: 'Evaluación Inicial & Dolor molar superior',
     fechaCita: '2024-10-24',
     horaInicio: '09:00 AM',
@@ -89,10 +107,11 @@ const INITIAL_PACIENTES_FALLBACK: PacienteItem[] = [
     id: 'pac-2',
     nombres: 'Carlos Mendoza',
     cedula: 'V-17.902.311',
-    telefono: '+58 414-5550921',
+    telefono: '04128365687',
     email: 'carlos.mendoza@hotmail.com',
     sexo: 'Masculino',
     fechaNacimiento: '1986-11-20',
+    condicionMedicaId: 'ninguna',
     motivo: 'Control Mensual de Ortodoncia Brackets',
     fechaCita: '2024-10-24',
     horaInicio: '10:30 AM',
@@ -105,10 +124,11 @@ const INITIAL_PACIENTES_FALLBACK: PacienteItem[] = [
     id: 'pac-3',
     nombres: 'Marcos Ramos',
     cedula: 'V-22.109.833',
-    telefono: '+58 424-3341122',
+    telefono: '04128365687',
     email: 'marcos.ramos@gmail.com',
     sexo: 'Masculino',
     fechaNacimiento: '1994-03-05',
+    condicionMedicaId: 'ninguna',
     motivo: 'Profilaxis Ultrasónica & Pulido Coronario',
     fechaCita: '2024-10-25',
     horaInicio: '02:00 PM',
@@ -366,13 +386,26 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       setAuthStatus('validating');
 
       debounceTimerRef.current = setTimeout(async () => {
-        // 1. Buscar en lista local de pacientes
-        let match: PacienteItem | undefined = dataPacientes.find((p) => {
-          const cleanP = (p.cedula || '').replace(/[^0-9]/g, '');
-          return cleanP === cleanInput;
-        });
+        // 1. Intentar consultar directamente la base de datos D1 en la nube
+        let match: PacienteItem | null | undefined = null;
+        try {
+          const directD1 = await ApiClient.buscarPacientePorCedula(cleanInput);
+          if (directD1) {
+            match = directD1;
+          }
+        } catch {
+          // continuar a local
+        }
 
-        // 2. Si no está en pacientes, buscar en doctores/odontólogos empadronados
+        // 2. Si no respondió D1 o no encontró, buscar en dataPacientes local
+        if (!match) {
+          match = dataPacientes.find((p) => {
+            const cleanP = (p.cedula || '').replace(/[^0-9]/g, '');
+            return cleanP === cleanInput;
+          });
+        }
+
+        // 3. Si no está en pacientes, buscar en doctores/odontólogos empadronados
         if (!match) {
           const docMatch = dataOdontologos.find((o) => {
             const cleanO = (o.cedula || '').replace(/[^0-9]/g, '');
@@ -396,7 +429,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           }
         }
 
-        // 3. Si aún no está, consultar la base de datos D1 del servidor
+        // 4. Si aún no está, consultar la base de datos D1 completa
         if (!match) {
           try {
             const remote = await ApiClient.getControlData();
@@ -418,7 +451,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           setPacienteEncontrado(null);
           setAuthStatus('not_found');
         }
-      }, 1000); // 1 segundo para validación rápida
+      }, 700); // 700ms para validación rápida y sensible
     } else {
       setAuthStatus('idle');
       setPacienteEncontrado(null);
@@ -481,8 +514,10 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       nombres: nuevoNombres.trim(),
       cedula: fullCedula,
       telefono: nuevoTelefono.trim() || '+58 412-0000000',
+      email: '',
       sexo: nuevoSexo,
       fechaNacimiento: nuevoFechaNacimiento,
+      condicionMedicaId: 'ninguna',
       sedeId: 'victoria',
       estado: 'pendiente',
       motivo: 'Evaluación Inicial Odontológica',
@@ -510,6 +545,67 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
     setShowAuthModal(false);
     setOpenStep('sede');
+  };
+
+  // Helper para persistir todos los datos personales y médicos (sexo, nacimiento, email, patología) tanto en D1 como local
+  const persistirDatosPaciente = async (override?: Partial<PacienteItem>) => {
+    const fullCedula = `${cedulaTipo}-${cedulaNumero.trim()}`;
+    const cleanNum = cedulaNumero.trim();
+    if (!cleanNum || !nombres.trim()) return;
+
+    const pacientePayload: PacienteItem = {
+      id: pacienteEncontrado?.id || `pac-${Date.now()}`,
+      nombres: nombres.trim(),
+      cedula: fullCedula,
+      telefono: telefono.trim() || '+58 412-0000000',
+      email: email.trim(),
+      sexo: (sexo as any) || 'Femenino',
+      fechaNacimiento: fechaNacimiento || '',
+      condicionMedicaId: selectedCondicionId || 'ninguna',
+      motivo: motivo.trim() || treatment || 'Evaluación Odontológica',
+      fechaCita: selectedDate || 'Primera Consulta',
+      horaInicio: selectedSlot || '09:00 AM',
+      doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por Asignar',
+      sedeId: selectedSedeId || sedeId || 'victoria',
+      estado: 'confirmada',
+      esUrgencia: treatment.toLowerCase().includes('urgencia') || treatment.toLowerCase().includes('dolor'),
+      ...override,
+    };
+
+    setPacienteEncontrado(pacientePayload);
+    setDataPacientes((prev) => {
+      const idx = prev.findIndex(
+        (p) => (p.cedula || '').replace(/[^0-9]/g, '') === cleanNum.replace(/[^0-9]/g, '')
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...pacientePayload };
+        return copy;
+      }
+      return [pacientePayload, ...prev];
+    });
+
+    try {
+      const saved = localStorage.getItem('odontosalud_data_pacientes');
+      const list: PacienteItem[] = saved ? JSON.parse(saved) : [];
+      const idx = list.findIndex(
+        (p) => (p.cedula || '').replace(/[^0-9]/g, '') === cleanNum.replace(/[^0-9]/g, '')
+      );
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...pacientePayload };
+      } else {
+        list.unshift(pacientePayload);
+      }
+      localStorage.setItem('odontosalud_data_pacientes', JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+
+    try {
+      await ApiClient.guardarPaciente(pacientePayload);
+    } catch (err) {
+      console.warn('Error sincronizando paciente con D1:', err);
+    }
   };
 
   // Función para abrir un paso y desplazarse suavemente a su posición inicial
@@ -624,6 +720,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     const generatedCode = `ODL-${Math.floor(1000 + Math.random() * 9000)}`;
     setCodigoConfirmacion(generatedCode);
 
+    // Persistir integralmente en D1 y estado local (sexo, fecha nacimiento, email, condición médica)
+    await persistirDatosPaciente();
+
     const motivoCompleto = condicionSeleccionada
       ? `${treatment} • Anamnesis: [${condicionSeleccionada.codigoCie}] ${condicionSeleccionada.nombre} • Motivo: ${motivo || 'Evaluación'}`
       : `${treatment} • Motivo: ${motivo || 'Evaluación inicial'}`;
@@ -633,10 +732,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
     try {
       await ApiClient.crearCita(targetSede, {
-        pacienteId: `pac-${Date.now()}`,
+        pacienteId: pacienteEncontrado?.id || `pac-${Date.now()}`,
         pacienteNombre: nombres,
         pacienteCedula: `${cedulaTipo}-${cedulaNumero}`,
         pacienteTelefono: telefono,
+        pacienteEmail: email,
+        pacienteSexo: sexo,
+        pacienteFechaNacimiento: fechaNacimiento,
+        condicionMedicaId: selectedCondicionId,
         doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por asignar',
         boxNumero: selectedDoctor ? selectedDoctor.box : 1,
         fechaCita: selectedDate || '2024-10-24',
@@ -1687,8 +1790,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       {openStep === 'patient' && (
         <form
           ref={patientCardRef}
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            await persistirDatosPaciente();
             setOpenStep(null);
             setTimeout(() => {
               summaryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2069,13 +2173,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   {nombres.trim().length > 0 ? nombres.slice(0, 2).toUpperCase() : 'ID'}
                 </div>
                 <div className="min-w-0">
-                  <span className="text-[9px] uppercase font-bold text-secondary block">Paciente</span>
+                  <span className="text-[9px] uppercase font-bold text-secondary block">Paciente & Anamnesis</span>
                   <p className="font-bold text-xs text-dental-deep-navy truncate">
                     {nombres || 'Datos pendientes'}
                   </p>
                   <span className="text-[10px] text-secondary truncate block">
                     {cedulaNumero ? `${cedulaTipo}-${cedulaNumero}` : 'Sin validar'}
+                    {sexo ? ` • ${sexo}` : ''}
+                    {fechaNacimiento ? ` • ${fechaNacimiento}` : ''}
                   </span>
+                  {selectedCondicionId !== 'ninguna' && condicionSeleccionada && (
+                    <span className="text-[9px] text-status-danger font-bold truncate block">
+                      ⚠️ [{condicionSeleccionada.codigoCie}] {condicionSeleccionada.nombre}
+                    </span>
+                  )}
                 </div>
               </div>
               <button

@@ -346,7 +346,7 @@ app.post('/api/citas', async (c) => {
   const id = `cita-${Date.now()}`;
   const pacienteId = body.pacienteId || `pac-${Date.now()}`;
 
-  // Asegurar registro de paciente
+  // Asegurar registro integral y persistente de paciente
   if (body.pacienteCedula && body.pacienteNombre) {
     const parts = body.pacienteNombre.split(' ');
     const nombres = parts[0] || '';
@@ -355,14 +355,61 @@ app.post('/api/citas', async (c) => {
     await db
       .prepare(
         `
-        INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(cedula) DO UPDATE SET
-          telefono = excluded.telefono
+          telefono = excluded.telefono,
+          email = COALESCE(excluded.email, pacientes.email),
+          sexo = COALESCE(excluded.sexo, pacientes.sexo),
+          fecha_nacimiento = COALESCE(excluded.fecha_nacimiento, pacientes.fecha_nacimiento),
+          condicion_medica_id = COALESCE(excluded.condicion_medica_id, pacientes.condicion_medica_id)
       `
       )
-      .bind(pacienteId, body.pacienteCedula, nombres, apellidos, body.pacienteTelefono || '')
+      .bind(
+        pacienteId,
+        body.pacienteCedula,
+        nombres,
+        apellidos,
+        body.pacienteTelefono || '',
+        body.pacienteEmail || null,
+        body.pacienteSexo || 'Femenino',
+        body.pacienteFechaNacimiento || null,
+        body.pacienteCondicionMedicaId || 'ninguna'
+      )
       .run();
+
+    try {
+      await db
+        .prepare(
+          `
+          INSERT INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)
+          ON CONFLICT(id) DO UPDATE SET
+            telefono = excluded.telefono,
+            email = COALESCE(excluded.email, registro_pacientes_reserva.email),
+            sexo = COALESCE(excluded.sexo, registro_pacientes_reserva.sexo),
+            fecha_nacimiento = COALESCE(excluded.fecha_nacimiento, registro_pacientes_reserva.fecha_nacimiento),
+            condicion_medica_id = COALESCE(excluded.condicion_medica_id, registro_pacientes_reserva.condicion_medica_id)
+        `
+        )
+        .bind(
+          pacienteId,
+          body.pacienteNombre,
+          body.pacienteCedula,
+          body.pacienteTelefono || '',
+          body.pacienteEmail || '',
+          body.pacienteSexo || 'Femenino',
+          body.pacienteFechaNacimiento || '',
+          body.pacienteCondicionMedicaId || 'ninguna',
+          body.motivo || 'Consulta General',
+          body.fechaCita || new Date().toISOString().split('T')[0],
+          body.horaInicio || '09:00 AM',
+          body.doctorNombre || 'Dra. María Alejandra Domínguez',
+          sedeId,
+          body.esUrgencia ? 1 : 0
+        )
+        .run();
+    } catch (_) {}
   }
 
   // Insertar Cita
@@ -425,6 +472,76 @@ app.post('/api/citas/aprobar-lote', async (c) => {
   }
 
   return c.json({ success: true, count: ids?.length || 0 });
+});
+
+// Endpoint directo de consulta de paciente por Cédula con perfil integral (sexo, nacimiento, patología)
+app.get('/api/pacientes/cedula/:cedula', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const rawCedula = c.req.param('cedula');
+  const cleanCedula = rawCedula.replace(/[^0-9]/g, '');
+
+  const row: any = await db.prepare(`
+    SELECT 
+      p.id,
+      TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS nombres,
+      p.cedula,
+      p.telefono,
+      COALESCE(p.email, r.email, '') AS email,
+      COALESCE(p.sexo, r.sexo, 'Femenino') AS sexo,
+      COALESCE(p.fecha_nacimiento, r.fecha_nacimiento, '') AS fecha_nacimiento,
+      COALESCE(p.condicion_medica_id, r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
+      COALESCE(r.motivo, 'Evaluación Integral Odontológica') AS motivo,
+      COALESCE(r.fecha_cita, '2024-10-25') AS fecha_cita,
+      COALESCE(r.hora_inicio, '09:00 AM') AS hora_inicio,
+      COALESCE(r.doctor_nombre, 'Dra. María Alejandra Domínguez') AS doctor_nombre,
+      COALESCE(r.sede_id, 'victoria') AS sede_id,
+      COALESCE(r.estado, 'confirmada') AS estado
+    FROM pacientes p
+    LEFT JOIN registro_pacientes_reserva r 
+      ON REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '')
+    WHERE REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = ?
+    UNION
+    SELECT 
+      r.id,
+      r.nombres,
+      r.cedula,
+      r.telefono,
+      COALESCE(r.email, '') AS email,
+      COALESCE(r.sexo, 'Femenino') AS sexo,
+      COALESCE(r.fecha_nacimiento, '') AS fecha_nacimiento,
+      COALESCE(r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
+      r.motivo,
+      r.fecha_cita,
+      r.hora_inicio,
+      r.doctor_nombre,
+      r.sede_id,
+      r.estado
+    FROM registro_pacientes_reserva r
+    WHERE REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '') = ?
+    LIMIT 1
+  `).bind(cleanCedula, cleanCedula).first();
+
+  if (!row) {
+    return c.json({ error: 'Paciente no encontrado' }, 404);
+  }
+
+  return c.json({
+    id: row.id,
+    nombres: row.nombres,
+    cedula: row.cedula,
+    telefono: row.telefono,
+    email: row.email,
+    sexo: row.sexo,
+    fechaNacimiento: row.fecha_nacimiento,
+    condicionMedicaId: row.condicion_medica_id,
+    motivo: row.motivo,
+    fechaCita: row.fecha_cita,
+    horaInicio: row.hora_inicio,
+    doctorNombre: row.doctor_nombre,
+    sedeId: row.sede_id,
+    estado: row.estado,
+  });
 });
 
 // 3. Odontograma FDI: Consulta y Actualización Atómica de 5 Caras
@@ -665,6 +782,9 @@ async function ensureControlDataTables(db: D1Database) {
         cedula TEXT NOT NULL,
         telefono TEXT NOT NULL,
         email TEXT,
+        sexo TEXT DEFAULT 'Femenino',
+        fecha_nacimiento TEXT,
+        condicion_medica_id TEXT DEFAULT 'ninguna',
         motivo TEXT,
         fecha_cita TEXT,
         hora_inicio TEXT,
@@ -676,6 +796,46 @@ async function ensureControlDataTables(db: D1Database) {
       )`
     )
     .run();
+
+  // Migración defensiva en D1 para asegurar sexo, fecha_nacimiento, condicion_medica_id y email
+  try { await db.prepare("ALTER TABLE pacientes ADD COLUMN sexo TEXT DEFAULT 'Femenino'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pacientes ADD COLUMN condicion_medica_id TEXT DEFAULT 'ninguna'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pacientes ADD COLUMN fecha_nacimiento TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pacientes ADD COLUMN email TEXT").run(); } catch (_) {}
+
+  try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN sexo TEXT DEFAULT 'Femenino'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN fecha_nacimiento TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN condicion_medica_id TEXT DEFAULT 'ninguna'").run(); } catch (_) {}
+
+  // Semilla y Actualización persistente de paciente verificado Raymond Gilbonio (Cédula 16.762.319)
+  try {
+    await db.prepare(`
+      INSERT OR IGNORE INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+      VALUES ('pac-raymond', 'V-16.762.319', 'Raymond', 'Gilbonio', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1')
+    `).run();
+    await db.prepare(`
+      UPDATE pacientes SET 
+        sexo = 'Masculino',
+        fecha_nacimiento = '1982-10-15',
+        email = 'raymond.gilbonio@odontosaludlv.com',
+        condicion_medica_id = 'med-1'
+      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%16762319%'
+    `).run();
+    await db.prepare(`
+      INSERT OR IGNORE INTO registro_pacientes_reserva (id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado)
+      VALUES ('pac-raymond', 'Raymond Gilbonio', 'V-16.762.319', '04126841381', 'raymond.gilbonio@odontosaludlv.com', 'Masculino', '1982-10-15', 'med-1', 'Evaluación Integral Odontológica', '2024-10-25', '09:00 AM', 'Dra. Maria Alejandra Dominguez Hernández', 'victoria', 'confirmada')
+    `).run();
+    await db.prepare(`
+      UPDATE registro_pacientes_reserva SET 
+        sexo = 'Masculino',
+        fecha_nacimiento = '1982-10-15',
+        email = 'raymond.gilbonio@odontosaludlv.com',
+        condicion_medica_id = 'med-1'
+      WHERE REPLACE(REPLACE(cedula, '.', ''), '-', '') LIKE '%16762319%'
+    `).run();
+  } catch (err) {
+    console.error('Error sembrando paciente Raymond Gilbonio en D1:', err);
+  }
 
   await db
     .prepare(
@@ -799,14 +959,16 @@ app.get('/api/control-data', async (c) => {
         p.cedula,
         p.telefono,
         p.email,
+        COALESCE(p.sexo, r.sexo, 'Femenino') AS sexo,
+        COALESCE(p.fecha_nacimiento, r.fecha_nacimiento, '') AS fecha_nacimiento,
+        COALESCE(p.condicion_medica_id, r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
         COALESCE(r.motivo, 'Evaluación Integral Odontológica') AS motivo,
         COALESCE(r.fecha_cita, '2024-10-25') AS fecha_cita,
         COALESCE(r.hora_inicio, '09:00 AM') AS hora_inicio,
         COALESCE(r.doctor_nombre, 'Dra. María Alejandra Domínguez') AS doctor_nombre,
         COALESCE(r.sede_id, 'victoria') AS sede_id,
         COALESCE(r.estado, 'pendiente') AS estado,
-        COALESCE(r.es_urgencia, 0) AS es_urgencia,
-        p.fecha_nacimiento
+        COALESCE(r.es_urgencia, 0) AS es_urgencia
       FROM pacientes p
       LEFT JOIN registro_pacientes_reserva r 
         ON REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '')
@@ -817,14 +979,16 @@ app.get('/api/control-data', async (c) => {
         r.cedula,
         r.telefono,
         r.email,
+        COALESCE(r.sexo, 'Femenino') AS sexo,
+        COALESCE(r.fecha_nacimiento, '') AS fecha_nacimiento,
+        COALESCE(r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
         r.motivo,
         r.fecha_cita,
         r.hora_inicio,
         r.doctor_nombre,
         r.sede_id,
         r.estado,
-        r.es_urgencia,
-        NULL AS fecha_nacimiento
+        r.es_urgencia
       FROM registro_pacientes_reserva r
       WHERE REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '') NOT IN (
         SELECT REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', '') FROM pacientes
@@ -879,7 +1043,10 @@ app.get('/api/control-data', async (c) => {
       nombres: r.nombres,
       cedula: r.cedula,
       telefono: r.telefono,
-      email: r.email,
+      email: r.email || '',
+      sexo: r.sexo || 'Femenino',
+      fechaNacimiento: r.fecha_nacimiento || '',
+      condicionMedicaId: r.condicion_medica_id || 'ninguna',
       motivo: r.motivo,
       fechaCita: r.fecha_cita,
       horaInicio: r.hora_inicio,
@@ -887,7 +1054,6 @@ app.get('/api/control-data', async (c) => {
       sedeId: r.sede_id,
       estado: r.estado,
       esUrgencia: Boolean(r.es_urgencia),
-      fechaNacimiento: r.fecha_nacimiento || '',
     })),
     condicionesMedicas: (condicionesRes?.results || []).map((r: any) => ({
       id: r.id,
@@ -1107,13 +1273,16 @@ app.post('/api/control-data/pacientes', async (c) => {
   await db
     .prepare(
       `INSERT INTO registro_pacientes_reserva (
-        id, nombres, cedula, telefono, email, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        id, nombres, cedula, telefono, email, sexo, fecha_nacimiento, condicion_medica_id, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         nombres = excluded.nombres,
         cedula = excluded.cedula,
         telefono = excluded.telefono,
         email = excluded.email,
+        sexo = excluded.sexo,
+        fecha_nacimiento = excluded.fecha_nacimiento,
+        condicion_medica_id = excluded.condicion_medica_id,
         motivo = excluded.motivo,
         fecha_cita = excluded.fecha_cita,
         hora_inicio = excluded.hora_inicio,
@@ -1129,6 +1298,9 @@ app.post('/api/control-data/pacientes', async (c) => {
       b.cedula,
       b.telefono || '',
       b.email || '',
+      b.sexo || 'Femenino',
+      b.fechaNacimiento || '',
+      b.condicionMedicaId || 'ninguna',
       b.motivo || 'Consulta General',
       b.fechaCita || new Date().toISOString().split('T')[0],
       b.horaInicio || '09:00 AM',
@@ -1146,19 +1318,31 @@ app.post('/api/control-data/pacientes', async (c) => {
     const ape = parts.slice(1).join(' ') || '';
     await db
       .prepare(
-        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(cedula) DO UPDATE SET
            nombres = excluded.nombres,
            apellidos = excluded.apellidos,
            telefono = excluded.telefono,
            email = excluded.email,
-           fecha_nacimiento = excluded.fecha_nacimiento`
+           sexo = excluded.sexo,
+           fecha_nacimiento = excluded.fecha_nacimiento,
+           condicion_medica_id = excluded.condicion_medica_id`
       )
-      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
+      .bind(
+        id,
+        b.cedula,
+        nom,
+        ape,
+        b.telefono || '',
+        b.email || '',
+        b.sexo || 'Femenino',
+        b.fechaNacimiento || null,
+        b.condicionMedicaId || 'ninguna'
+      )
       .run();
   } catch (err) {
-    // ignore
+    console.error('Error sincronizando tabla pacientes:', err);
   }
 
   return c.json({ success: true, id });
