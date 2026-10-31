@@ -506,18 +506,18 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
             )}
 
             {/* Acciones de Operatividad Rápida (1-toque) */}
-            <div className="mt-3 pt-2.5 border-t border-border-subtle/60 flex items-center gap-2 pl-1">
+            <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-2 pl-1">
               {sol.estado === 'por_confirmar' ? (
                 <button
                   type="button"
                   onClick={() => handleAprobarCita(sol.id, sol.pacienteNombre)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs font-bold transition-all shadow-[0_2px_8px_rgba(0,132,255,0.3)] active:scale-95 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-[16px]">verified</span>
                   <span>Aprobar Cita</span>
                 </button>
               ) : (
-                <div className="flex-1 py-2 px-3 rounded-xl bg-status-success/10 text-status-success text-xs font-bold text-center border border-status-success/20 flex items-center justify-center gap-1">
+                <div className="flex-1 py-2 px-3 rounded-xl bg-status-success/15 text-status-success text-xs font-bold text-center border border-status-success/25 flex items-center justify-center gap-1">
                   <span className="material-symbols-outlined text-[16px]">check_circle</span>
                   <span>Cita Confirmada</span>
                 </div>
@@ -527,7 +527,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
               <button
                 type="button"
                 onClick={() => abrirWhatsApp(sol)}
-                className="py-2 px-3 rounded-xl bg-status-success/10 hover:bg-status-success/20 text-status-success text-xs font-bold transition-all border border-status-success/20 flex items-center justify-center gap-1 active:scale-95"
+                className="py-2 px-3 rounded-xl bg-status-success text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 active:scale-95"
                 title="Contactar por WhatsApp"
               >
                 <span className="material-symbols-outlined text-[16px]">chat</span>
@@ -537,7 +537,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
               {/* Botón Llamada */}
               <a
                 href={`tel:${sol.pacienteTelefono}`}
-                className="w-9 h-9 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-secondary hover:text-dental-deep-navy flex items-center justify-center transition-all active:scale-95 shrink-0"
+                className="w-9 h-9 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-dental-deep-navy flex items-center justify-center transition-all active:scale-95 shrink-0"
                 title="Llamar al paciente"
               >
                 <span className="material-symbols-outlined text-[18px]">call</span>
@@ -549,16 +549,16 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
 
       {/* 7. Barra Flotante de Aprobación en Bloque (Bottom Floating Bar de Stitch) */}
       {porConfirmarCount > 0 && (
-        <div className="fixed bottom-20 left-4 right-4 z-40 bg-dental-deep-navy text-white rounded-2xl p-3 shadow-[0_8px_24px_rgba(15,43,72,0.35)] border border-white/10 flex items-center justify-between gap-3 animate-in slide-in-from-bottom max-w-lg mx-auto">
+        <div className="fixed bottom-20 left-4 right-4 z-40 bg-dental-deep-navy text-white rounded-2xl p-3 shadow-xl border border-primary flex items-center justify-between gap-3 animate-in slide-in-from-bottom max-w-lg mx-auto">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-8 h-8 rounded-xl bg-electric-blue/20 text-vibrant-cyan flex items-center justify-center shrink-0">
+            <span className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
               <span className="material-symbols-outlined text-[18px]">checklist</span>
             </span>
             <div className="min-w-0">
               <p className="text-xs font-bold truncate">
                 {porConfirmarCount} citas pre-validadas
               </p>
-              <p className="text-[10px] text-white/60 truncate">
+              <p className="text-[10px] text-surface-container truncate">
                 Listas para incorporar a agenda
               </p>
             </div>
@@ -568,7 +568,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
             <button
               type="button"
               onClick={handleAprobarLote}
-              className="px-3.5 py-2 rounded-xl bg-electric-blue hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all active:scale-95 shadow-md flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-primary hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all active:scale-95 shadow-md flex items-center gap-1.5"
             >
               <span className="material-symbols-outlined text-[16px]">done_all</span>
               <span>Aprobar ({porConfirmarCount})</span>
@@ -578,7 +578,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
               type="button"
               onClick={() => onNavigateTab?.('reserva')}
               title="Registrar Cita Nueva Manualmente"
-              className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95 border border-white/10"
+              className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center transition-all active:scale-95 border border-border-subtle/30"
             >
               <span className="material-symbols-outlined text-[20px]">add</span>
             </button>

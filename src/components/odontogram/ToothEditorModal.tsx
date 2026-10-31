@@ -119,7 +119,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
                     <polygon
                       points="5,5 95,5 70,30 30,30"
                       fill={getColor('V')}
-                      stroke={activeFace === 'V' ? '#FFFFFF' : '#0F2B48'}
+                      stroke={activeFace === 'V' ? '#FFFFFF' : '#17121D'}
                       strokeWidth={activeFace === 'V' ? 2.5 : 1.5}
                       className="cursor-pointer hover:opacity-80 transition-all"
                       onClick={() => setActiveFace('V')}
@@ -140,7 +140,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
                     <polygon
                       points="95,5 95,95 70,70 70,30"
                       fill={getColor('D')}
-                      stroke={activeFace === 'D' ? '#FFFFFF' : '#0F2B48'}
+                      stroke={activeFace === 'D' ? '#FFFFFF' : '#17121D'}
                       strokeWidth={activeFace === 'D' ? 2.5 : 1.5}
                       className="cursor-pointer hover:opacity-80 transition-all"
                       onClick={() => setActiveFace('D')}
@@ -161,7 +161,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
                     <polygon
                       points="95,95 5,95 30,70 70,70"
                       fill={getColor('L')}
-                      stroke={activeFace === 'L' ? '#FFFFFF' : '#0F2B48'}
+                      stroke={activeFace === 'L' ? '#FFFFFF' : '#17121D'}
                       strokeWidth={activeFace === 'L' ? 2.5 : 1.5}
                       className="cursor-pointer hover:opacity-80 transition-all"
                       onClick={() => setActiveFace('L')}
@@ -182,7 +182,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
                     <polygon
                       points="5,95 5,5 30,30 30,70"
                       fill={getColor('M')}
-                      stroke={activeFace === 'M' ? '#FFFFFF' : '#0F2B48'}
+                      stroke={activeFace === 'M' ? '#FFFFFF' : '#17121D'}
                       strokeWidth={activeFace === 'M' ? 2.5 : 1.5}
                       className="cursor-pointer hover:opacity-80 transition-all"
                       onClick={() => setActiveFace('M')}
@@ -206,7 +206,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
                       width="40"
                       height="40"
                       fill={getColor('O')}
-                      stroke={activeFace === 'O' ? '#FFFFFF' : '#0F2B48'}
+                      stroke={activeFace === 'O' ? '#FFFFFF' : '#17121D'}
                       strokeWidth={activeFace === 'O' ? 2.5 : 1.5}
                       className="cursor-pointer hover:opacity-80 transition-all"
                       onClick={() => setActiveFace('O')}

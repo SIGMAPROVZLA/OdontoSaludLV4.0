@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
-import { ToothRecord } from '../../types/clinical';
+import {
+  ToothRecord,
+  TratamientoRealizadoItem,
+  TratamientoItem,
+  OdontologoItem,
+} from '../../types/clinical';
 import { QuadrantArchView } from './QuadrantArchView';
 import { TabId } from '../layout/BottomNavigation';
 
@@ -164,6 +169,103 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
 
   const [teeth, setTeeth] = useState<ToothRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Historial de Tratamientos Realizados en Cloudflare D1
+  const [historialTratamientos, setHistorialTratamientos] = useState<TratamientoRealizadoItem[]>([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [showModalNuevoProcedimiento, setShowModalNuevoProcedimiento] = useState(false);
+  const [catalogoTratamientos, setCatalogoTratamientos] = useState<TratamientoItem[]>([]);
+  const [staffOdontologos, setStaffOdontologos] = useState<OdontologoItem[]>([]);
+
+  // Formulario de Registro de Tratamiento Realizado
+  const [nuevoTratId, setNuevoTratId] = useState<string>('');
+  const [nuevoDoctorId, setNuevoDoctorId] = useState<string>('');
+  const [nuevoDienteNumero, setNuevoDienteNumero] = useState<string>('');
+  const [nuevoSuperficie, setNuevoSuperficie] = useState<string>('');
+  const [nuevoDiagnosticoCie, setNuevoDiagnosticoCie] = useState<string>('');
+  const [nuevoObservaciones, setNuevoObservaciones] = useState<string>('');
+  const [nuevoCostoUsd, setNuevoCostoUsd] = useState<number>(35);
+  const [isSavingProcedimiento, setIsSavingProcedimiento] = useState(false);
+
+  // Cargar Historial de Tratamientos de D1 para el paciente activo
+  const cargarHistorial = async () => {
+    setLoadingHistorial(true);
+    try {
+      const res = await ApiClient.getTratamientosRealizadosPaciente(selectedPaciente.id);
+      if (res.success) {
+        setHistorialTratamientos(res.tratamientos);
+      }
+    } catch (err) {
+      console.error('Error cargando historial de tratamientos:', err);
+    } finally {
+      setLoadingHistorial(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarHistorial();
+  }, [selectedPaciente.id]);
+
+  // Cargar Catálogos para el modal de nuevo procedimiento
+  useEffect(() => {
+    ApiClient.getControlData().then((data) => {
+      if (data?.tratamientos) {
+        setCatalogoTratamientos(data.tratamientos);
+        if (data.tratamientos.length > 0 && !nuevoTratId) {
+          setNuevoTratId(data.tratamientos[0].id);
+          setNuevoCostoUsd(data.tratamientos[0].costoUsd);
+        }
+      }
+      if (data?.odontologos) {
+        setStaffOdontologos(data.odontologos);
+        if (data.odontologos.length > 0 && !nuevoDoctorId) {
+          setNuevoDoctorId(data.odontologos[0].id);
+        }
+      }
+    });
+  }, []);
+
+  const handleSeleccionarTratamiento = (tId: string) => {
+    setNuevoTratId(tId);
+    const trat = catalogoTratamientos.find((t) => t.id === tId);
+    if (trat) {
+      setNuevoCostoUsd(trat.costoUsd);
+    }
+  };
+
+  const handleGuardarProcedimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoTratId || !nuevoDoctorId) return;
+
+    setIsSavingProcedimiento(true);
+    try {
+      const trat = catalogoTratamientos.find((t) => t.id === nuevoTratId);
+      const res = await ApiClient.registrarTratamientoRealizado({
+        pacienteId: selectedPaciente.id,
+        odontologoId: nuevoDoctorId,
+        tratamientoId: nuevoTratId,
+        dienteNumero: nuevoDienteNumero ? parseInt(nuevoDienteNumero, 10) : undefined,
+        superficie: nuevoSuperficie || undefined,
+        diagnosticoCie: nuevoDiagnosticoCie || undefined,
+        observaciones: nuevoObservaciones,
+        costoTotalUsd: nuevoCostoUsd,
+        boxNumero: selectedPaciente.boxNumero || 1,
+        sedeId,
+      });
+
+      if (res.success) {
+        setShowModalNuevoProcedimiento(false);
+        setNuevoObservaciones('');
+        setNuevoDienteNumero('');
+        setNuevoSuperficie('');
+        await cargarHistorial();
+      }
+    } catch (err) {
+      console.error('Error al registrar procedimiento en D1:', err);
+    } finally {
+      setIsSavingProcedimiento(false);
+    }
+  };
 
   // Cargar Odontograma cuando cambia el paciente o la sede
   useEffect(() => {
@@ -564,12 +666,238 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         </section>
       )}
 
-      {/* 5. Botón Flotante Agendar Cita (Stitch Mobile Ficha) */}
+      {/* 5. Historial Clínico de Tratamientos Realizados (Cloudflare D1) */}
+      <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px]">history_edu</span>
+            </div>
+            <div>
+              <h4 className="font-display font-bold text-sm text-dental-deep-navy">
+                Historial de Procedimientos Realizados
+              </h4>
+              <p className="text-[11px] text-secondary">
+                Expediente clínico sincronizado con Cloudflare D1
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowModalNuevoProcedimiento(true)}
+            className="px-2.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold flex items-center gap-1 transition-all active:scale-95 shadow-xs cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[15px]">add_circle</span>
+            <span>Registrar</span>
+          </button>
+        </div>
+
+        {loadingHistorial ? (
+          <div className="p-4 text-center text-xs text-secondary">
+            Consultando historial de {selectedPaciente.nombres}...
+          </div>
+        ) : historialTratamientos.length === 0 ? (
+          <div className="p-5 text-center text-xs text-secondary bg-surface-subtle-ice rounded-xl border border-border-subtle">
+            No se registran tratamientos previos para este paciente. Presiona "+ Registrar" para asentar un procedimiento.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {historialTratamientos.map((t) => (
+              <div
+                key={t.id}
+                className="p-3 rounded-xl bg-surface-subtle-ice border border-border-subtle flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-dental-deep-navy shrink-0">
+                      {t.tratamientoCodigo || 'TRAT'}
+                    </span>
+                    <span className="font-bold text-xs text-dental-deep-navy truncate">
+                      {t.tratamientoNombre}
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-xs text-dental-deep-navy shrink-0">
+                    ${t.costoTotalUsd} USD
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-secondary">
+                  <span>👨‍⚕️ {t.odontologoNombre}</span>
+                  {t.dienteNumero && (
+                    <>
+                      <span>•</span>
+                      <span className="bg-white px-1.5 py-0.2 rounded font-mono font-bold text-primary border border-border-subtle/50">
+                        Pieza #{t.dienteNumero} {t.superficie ? `(${t.superficie})` : ''}
+                      </span>
+                    </>
+                  )}
+                  <span>•</span>
+                  <span>📅 {t.fechaRealizacion ? t.fechaRealizacion.split('T')[0] : 'Reciente'}</span>
+                </div>
+
+                {t.observaciones && (
+                  <p className="text-[11px] text-secondary leading-snug bg-white/70 p-2 rounded-lg border border-border-subtle/30">
+                    {t.observaciones}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Modal para Registrar Nuevo Procedimiento Clínico */}
+      {showModalNuevoProcedimiento && (
+        <div className="fixed inset-0 z-50 bg-dental-deep-navy/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form
+            onSubmit={handleGuardarProcedimiento}
+            className="bg-surface-clean-white w-full max-w-md rounded-3xl p-5 flex flex-col gap-3 shadow-2xl animate-in zoom-in-95 border border-border-subtle max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[20px]">dentistry</span>
+                </div>
+                <div>
+                  <h4 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                    Registrar Procedimiento Realizado
+                  </h4>
+                  <p className="text-[11px] text-secondary">
+                    Paciente: {selectedPaciente.nombres}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalNuevoProcedimiento(false)}
+                className="w-8 h-8 rounded-full bg-surface-subtle-ice flex items-center justify-center text-secondary hover:text-dental-deep-navy"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Selector de Tratamiento */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">
+                Tratamiento Odontológico *
+              </label>
+              <select
+                value={nuevoTratId}
+                onChange={(e) => handleSeleccionarTratamiento(e.target.value)}
+                className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {catalogoTratamientos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    [{t.codigo}] {t.nombre} (${t.costoUsd} USD)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Selector de Odontólogo */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">
+                Odontólogo Tratante *
+              </label>
+              <select
+                value={nuevoDoctorId}
+                onChange={(e) => setNuevoDoctorId(e.target.value)}
+                className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {staffOdontologos.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.nombres} ({doc.especialidad})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Diente y Superficie */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-dental-deep-navy">
+                  Pieza FDI (Opcional)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Ej. 16, 26, 46..."
+                  value={nuevoDienteNumero}
+                  onChange={(e) => setNuevoDienteNumero(e.target.value)}
+                  className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-dental-deep-navy">
+                  Superficie (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. O, MO, MOD, V..."
+                  value={nuevoSuperficie}
+                  onChange={(e) => setNuevoSuperficie(e.target.value)}
+                  className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* Costo en USD */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">
+                Costo Total del Procedimiento ($ USD) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                required
+                value={nuevoCostoUsd}
+                onChange={(e) => setNuevoCostoUsd(parseFloat(e.target.value) || 0)}
+                className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Observaciones Clínicas */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">
+                Observaciones y Evolución Clínica
+              </label>
+              <textarea
+                rows={2}
+                value={nuevoObservaciones}
+                onChange={(e) => setNuevoObservaciones(e.target.value)}
+                placeholder="Indica biomaterial utilizado, anestésico, evolución o hallazgos..."
+                className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowModalNuevoProcedimiento(false)}
+                className="flex-1 py-2.5 rounded-xl bg-surface-subtle-ice text-secondary font-bold text-xs hover:bg-border-subtle transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingProcedimiento}
+                className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <span>{isSavingProcedimiento ? 'Guardando en D1...' : 'Guardar Procedimiento'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 6. Botón Flotante Agendar Cita (Stitch Mobile Ficha) */}
       <div className="fixed bottom-20 right-4 z-40">
         <button
           type="button"
           onClick={() => onNavigateTab?.('reserva')}
-          className="py-3 px-5 rounded-full bg-gradient-to-r from-dental-deep-navy via-primary to-electric-blue hover:brightness-105 text-white font-bold text-xs shadow-[0_8px_24px_rgba(0,132,255,0.4)] transition-all flex items-center gap-2 active:scale-95 ring-2 ring-white"
+          className="py-3 px-5 rounded-full bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95 ring-2 ring-surface-container cursor-pointer"
         >
           <span className="material-symbols-outlined text-[20px]">add_alarm</span>
           <span>Agendar Cita</span>

@@ -86,35 +86,14 @@ export const VictoriaAssistantModal: React.FC = () => {
 
   return (
     <>
-      {/* Botón Flotante VictorIA */}
-      <div className="fixed bottom-24 right-4 z-40 flex items-center gap-2">
-        <div className="bg-dental-deep-navy text-surface-clean-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-bounce hidden sm:flex">
-          <span className="w-2 h-2 rounded-full bg-vibrant-cyan" />
-          <span className="text-xs font-semibold">¿Dudas? Pregunta a VictorIA</span>
-        </div>
-
-        <button
-          type="button"
-          aria-label="Abrir asistente virtual VictorIA"
-          onClick={() => setIsOpen(true)}
-          className="w-14 h-14 rounded-full bg-gradient-to-tr from-dental-deep-navy via-primary to-vibrant-cyan text-surface-clean-white shadow-[0_12px_24px_rgba(0,194,203,0.4)] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform relative"
-        >
-          <span className="material-symbols-outlined text-[28px]">smart_toy</span>
-          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-vibrant-cyan opacity-75" />
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-vibrant-cyan" />
-          </span>
-        </button>
-      </div>
-
-      {/* Modal Conversacional */}
+      {/* Modal Conversacional (sin botón flotante inferior derecho) */}
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-dental-deep-navy/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4">
           <div className="bg-surface-clean-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-4 shadow-2xl flex flex-col gap-3 max-h-[85vh] h-[550px] animate-in slide-in-from-bottom duration-250">
             {/* Header del Chat */}
             <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-vibrant-cyan/20 text-tertiary-container flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center">
                   <span className="material-symbols-outlined text-[22px]">smart_toy</span>
                 </div>
                 <div>

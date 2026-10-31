@@ -4,9 +4,9 @@ import { ToothFace, ToothFaceStatus, ToothSurfaces } from '../../types/clinical'
 export const COLOR_POR_ESTADO: Record<ToothFaceStatus, string> = {
   sano: '#10B981',     // Verde
   caries: '#EF4444',   // Rojo
-  resina: '#0084FF',   // Azul
+  resina: '#796487',   // Malva Amatista (Restauración Estética)
   corona: '#F59E0B',   // Amarillo/Naranja
-  ausente: '#717786',  // Gris
+  ausente: '#B09BB8',  // Lavanda Grisáceo
 };
 
 export const NOMBRE_POR_ESTADO: Record<ToothFaceStatus, string> = {
@@ -81,8 +81,8 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
         size === 'lg' ? 'p-3' : 'h-16'
       } ${
         isSelected
-          ? 'bg-surface-clean-white/25 ring-2 ring-electric-blue shadow-[0_0_12px_rgba(0,132,255,0.6)] scale-105'
-          : 'bg-surface-clean-white/10 hover:bg-surface-clean-white/20 active:scale-95'
+          ? 'bg-primary ring-2 ring-surface-container shadow-md scale-105'
+          : 'bg-dental-ambient-bg hover:bg-primary/60 active:scale-95'
       } ${isAbsent ? 'opacity-50' : ''}`}
       title={`Pieza FDI ${fdi} - ${getSubLabel()}`}
     >
@@ -98,7 +98,7 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
           <polygon
             points="2,2 30,2 22,10 10,10"
             fill={getColor('V')}
-            stroke="#0F2B48"
+            stroke="#17121D"
             strokeWidth="0.8"
             className="hover:opacity-80 transition-opacity"
             onClick={(e) => {
@@ -112,7 +112,7 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
           <polygon
             points="30,2 30,30 22,22 22,10"
             fill={getColor('D')}
-            stroke="#0F2B48"
+            stroke="#17121D"
             strokeWidth="0.8"
             className="hover:opacity-80 transition-opacity"
             onClick={(e) => {
@@ -126,7 +126,7 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
           <polygon
             points="30,30 2,30 10,22 22,22"
             fill={getColor('L')}
-            stroke="#0F2B48"
+            stroke="#17121D"
             strokeWidth="0.8"
             className="hover:opacity-80 transition-opacity"
             onClick={(e) => {
@@ -140,7 +140,7 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
           <polygon
             points="2,30 2,2 10,10 10,22"
             fill={getColor('M')}
-            stroke="#0F2B48"
+            stroke="#17121D"
             strokeWidth="0.8"
             className="hover:opacity-80 transition-opacity"
             onClick={(e) => {
@@ -157,7 +157,7 @@ export const AnatomicalToothSvg: React.FC<AnatomicalToothSvgProps> = ({
             width="12"
             height="12"
             fill={getColor('O')}
-            stroke="#0F2B48"
+            stroke="#17121D"
             strokeWidth="0.8"
             className="hover:opacity-80 transition-opacity"
             onClick={(e) => {

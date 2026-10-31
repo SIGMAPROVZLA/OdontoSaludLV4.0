@@ -95,11 +95,11 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
         </div>
 
         {/* Diagrama de Arcadas FDI con Fondo Clínico */}
-        <div className="bg-dental-ambient-bg rounded-2xl p-3 text-on-primary flex flex-col gap-3 shadow-inner relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#6bf6ff_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none" />
+        <div className="bg-dental-deep-navy rounded-2xl p-3 text-white flex flex-col gap-3 shadow-inner relative overflow-hidden border border-primary">
+          <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#E8DDEB_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none" />
 
           {/* Guía de Caras Dentales */}
-          <div className="relative z-10 flex items-center justify-between px-2.5 py-1 bg-surface-clean-white/10 rounded-lg text-[10px] text-tertiary-fixed font-semibold">
+          <div className="relative z-10 flex items-center justify-between px-2.5 py-1.5 bg-dental-ambient-bg rounded-lg text-[10px] text-surface-container font-semibold">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-sm bg-status-danger inline-block" /> Centro: Oclusal (O)
             </span>

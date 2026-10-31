@@ -598,4 +598,926 @@ app.post('/api/tasas/bcv', async (c) => {
   });
 });
 
+// 7. Endpoints de Control de Data (Odontólogos, Higienistas y Catálogo de Tratamientos)
+async function ensureControlDataTables(db: D1Database) {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS staff_odontologos (
+        id TEXT PRIMARY KEY,
+        nombres TEXT NOT NULL,
+        cedula TEXT NOT NULL,
+        cov TEXT,
+        especialidad TEXT,
+        telefono TEXT,
+        email TEXT,
+        sede_id TEXT DEFAULT 'victoria',
+        box_asignado INTEGER DEFAULT 1,
+        turno TEXT DEFAULT 'Completo',
+        porcentaje_honorarios REAL DEFAULT 40,
+        estado TEXT DEFAULT 'activo',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS staff_higienistas (
+        id TEXT PRIMARY KEY,
+        nombres TEXT NOT NULL,
+        cedula TEXT NOT NULL,
+        registro_mpps TEXT,
+        area_especialidad TEXT,
+        telefono TEXT,
+        sede_id TEXT DEFAULT 'victoria',
+        box_apoyo INTEGER DEFAULT 1,
+        doctor_asignado TEXT,
+        turno TEXT DEFAULT 'Completo',
+        estado TEXT DEFAULT 'activo',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS catalogo_tratamientos (
+        id TEXT PRIMARY KEY,
+        codigo TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        descripcion TEXT,
+        duracion_minutos INTEGER DEFAULT 45,
+        costo_usd REAL NOT NULL,
+        costo_insumos_usd REAL DEFAULT 0,
+        requiere_rx INTEGER DEFAULT 0,
+        activo INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS registro_pacientes_reserva (
+        id TEXT PRIMARY KEY,
+        nombres TEXT NOT NULL,
+        cedula TEXT NOT NULL,
+        telefono TEXT NOT NULL,
+        email TEXT,
+        motivo TEXT,
+        fecha_cita TEXT,
+        hora_inicio TEXT,
+        doctor_nombre TEXT,
+        sede_id TEXT DEFAULT 'victoria',
+        estado TEXT DEFAULT 'pendiente',
+        es_urgencia INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS catalogo_condiciones_medicas (
+        id TEXT PRIMARY KEY,
+        codigo_cie TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        nivel_riesgo TEXT DEFAULT 'Moderado',
+        manifestacion_bucal TEXT,
+        protocolo_dental TEXT,
+        anestesico_contraindicado TEXT,
+        requiere_profilaxis_antibiotica INTEGER DEFAULT 0,
+        activo INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  // Tabla D1 de Registro y Cruce de Tratamientos Realizados (Historial Clínico + Liquidación de Honorarios)
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS registro_tratamientos_realizados (
+        id TEXT PRIMARY KEY,
+        paciente_id TEXT NOT NULL,
+        odontologo_id TEXT NOT NULL,
+        tratamiento_id TEXT NOT NULL,
+        presupuesto_id TEXT,
+        cita_id TEXT,
+        diente_numero INTEGER,
+        superficie TEXT,
+        diagnostico_cie TEXT,
+        observaciones TEXT,
+        costo_total_usd REAL NOT NULL,
+        porcentaje_honorario REAL NOT NULL DEFAULT 40.0,
+        monto_honorario_usd REAL NOT NULL,
+        tasa_bcv_aplicada REAL,
+        monto_honorario_bs REAL,
+        estado_pago_honorario TEXT NOT NULL DEFAULT 'pendiente',
+        fecha_liquidacion TEXT,
+        referencia_liquidacion TEXT,
+        box_numero INTEGER DEFAULT 1,
+        sede_id TEXT NOT NULL DEFAULT 'victoria',
+        fecha_realizacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  await db
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_tr_paciente ON registro_tratamientos_realizados(paciente_id, fecha_realizacion DESC)`)
+    .run();
+  await db
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_tr_odontologo ON registro_tratamientos_realizados(odontologo_id, estado_pago_honorario)`)
+    .run();
+  await db
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_tr_fecha ON registro_tratamientos_realizados(fecha_realizacion DESC)`)
+    .run();
+
+  // Semilla de Catálogo de Tratamientos si está vacío
+  try {
+    const tCount = (await db.prepare(`SELECT COUNT(*) as count FROM catalogo_tratamientos`).first()) as any;
+    if (!tCount || tCount.count === 0) {
+      const initialTrat = [
+        ['trat-1', 'OD-101', 'Evaluación Integral & Diagnóstico Digital RVG', 'Diagnóstico & RX', 'Inspección FDI de 5 caras, odontograma digital y radiografía periapical.', 45, 25, 4, 1],
+        ['trat-2', 'PR-102', 'Profilaxis Ultrasónica & Pulido Coronario', 'Prevención & Profilaxis', 'Destartraje ultrasónico completo, eliminación de cálculo y aplicación de flúor.', 40, 35, 6, 0],
+        ['trat-3', 'OP-201', 'Restauración Estética en Resina Nanohíbrida (Simple)', 'Operatoria & Estética', 'Obturación adhesiva fotocurada 3M Z350 XT en 1 superficie.', 45, 40, 9, 0],
+        ['trat-4', 'OP-202', 'Restauración Compuesta Compleja (2 o más caras)', 'Operatoria & Estética', 'Reconstrucción anatómica mesio-ocluso-distal con aislamiento absoluto.', 60, 55, 13, 1],
+        ['trat-5', 'EN-301', 'Endodoncia Birradicular / Multirradicular (Molar)', 'Endodoncia', 'Instrumentación rotatoria, irrigación ultrasónica y obturación termoplástica.', 75, 160, 38, 1],
+        ['trat-6', 'OR-401', 'Control Mensual de Ortodoncia (Brackets MBT / Autoligado)', 'Ortodoncia', 'Cambio de arcos NiTi, ligaduras, cadenas elásticas y ajuste oclusal.', 30, 40, 7, 0],
+        ['trat-7', 'CI-501', 'Exodoncia Quirúrgica / Tercer Molar Impactado', 'Cirugía & Exodoncia', 'Cirugía menor con osteotomía, odontosección y sutura reabsorbible.', 60, 120, 25, 1],
+      ];
+      for (const t of initialTrat) {
+        await db.prepare(
+          `INSERT OR IGNORE INTO catalogo_tratamientos (id, codigo, nombre, categoria, descripcion, duracion_minutos, costo_usd, costo_insumos_usd, requiere_rx, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+        ).bind(...t).run();
+      }
+    }
+  } catch (err) {
+    console.error('Error inicializando catalogo_tratamientos:', err);
+  }
+
+  // Semilla de Tratamientos Realizados si está vacío
+  try {
+    const trCount = (await db.prepare(`SELECT COUNT(*) as count FROM registro_tratamientos_realizados`).first()) as any;
+    if (!trCount || trCount.count === 0) {
+      const initialRealizados = [
+        ['tr-1', 'pac-patricia', 'odo-1793412770808', 'trat-2', null, null, null, 'Completa', 'K05.0', 'Profilaxis ultrasónica supragingival y subgingival. Sin complicaciones.', 35, 50, 17.5, 42.5, 743.75, 'pendiente', null, null, 1, 'victoria', '2026-10-25 10:30:00'],
+        ['tr-2', 'pac-carlos', 'odo-2', 'trat-3', null, null, 26, 'Oclusal (O)', 'K02.1', 'Restauración resina nanohíbrida 3M Z350 XT en diente 26. Aislamiento absoluto.', 40, 50, 20.0, 42.5, 850.0, 'liquidado', '2026-10-29', 'LIQ-HON-2026-001', 2, 'victoria', '2026-10-27 15:00:00'],
+        ['tr-3', 'pac-1793421420156', 'odo-2', 'trat-1', null, null, null, 'General', 'Z01.2', 'Evaluación integral diagnóstica y serie de radiovisiografía periapical.', 25, 50, 12.5, 42.5, 531.25, 'pendiente', null, null, 2, 'victoria', '2026-10-30 11:15:00'],
+      ];
+      for (const r of initialRealizados) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO registro_tratamientos_realizados (
+            id, paciente_id, odontologo_id, tratamiento_id, presupuesto_id, cita_id,
+            diente_numero, superficie, diagnostico_cie, observaciones, costo_total_usd,
+            porcentaje_honorario, monto_honorario_usd, tasa_bcv_aplicada, monto_honorario_bs,
+            estado_pago_honorario, fecha_liquidacion, referencia_liquidacion,
+            box_numero, sede_id, fecha_realizacion
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(...r).run();
+      }
+    }
+  } catch (err) {
+    console.error('Error inicializando registro_tratamientos_realizados:', err);
+  }
+}
+
+app.get('/api/control-data', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+
+  const [odontologosRes, higienistasRes, tratamientosRes, pacientesRes, condicionesRes] = await Promise.all([
+    db.prepare(`SELECT * FROM staff_odontologos ORDER BY updated_at DESC`).all(),
+    db.prepare(`SELECT * FROM staff_higienistas ORDER BY updated_at DESC`).all(),
+    db.prepare(`SELECT * FROM catalogo_tratamientos ORDER BY codigo ASC`).all(),
+    db.prepare(`
+      SELECT 
+        p.id,
+        TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS nombres,
+        p.cedula,
+        p.telefono,
+        p.email,
+        COALESCE(r.motivo, 'Evaluación Integral Odontológica') AS motivo,
+        COALESCE(r.fecha_cita, '2024-10-25') AS fecha_cita,
+        COALESCE(r.hora_inicio, '09:00 AM') AS hora_inicio,
+        COALESCE(r.doctor_nombre, 'Dra. María Alejandra Domínguez') AS doctor_nombre,
+        COALESCE(r.sede_id, 'victoria') AS sede_id,
+        COALESCE(r.estado, 'pendiente') AS estado,
+        COALESCE(r.es_urgencia, 0) AS es_urgencia,
+        p.fecha_nacimiento
+      FROM pacientes p
+      LEFT JOIN registro_pacientes_reserva r 
+        ON REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '')
+      UNION
+      SELECT 
+        r.id,
+        r.nombres,
+        r.cedula,
+        r.telefono,
+        r.email,
+        r.motivo,
+        r.fecha_cita,
+        r.hora_inicio,
+        r.doctor_nombre,
+        r.sede_id,
+        r.estado,
+        r.es_urgencia,
+        NULL AS fecha_nacimiento
+      FROM registro_pacientes_reserva r
+      WHERE REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '') NOT IN (
+        SELECT REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', '') FROM pacientes
+      )
+      ORDER BY nombres ASC
+    `).all(),
+    db.prepare(`SELECT * FROM catalogo_condiciones_medicas ORDER BY codigo_cie ASC`).all(),
+  ]);
+
+  return c.json({
+    odontologos: (odontologosRes.results || []).map((r: any) => ({
+      id: r.id,
+      nombres: r.nombres,
+      cedula: r.cedula,
+      cov: r.cov,
+      especialidad: r.especialidad,
+      telefono: r.telefono,
+      email: r.email,
+      sedeId: r.sede_id,
+      boxAsignado: Number(r.box_asignado),
+      turno: r.turno,
+      porcentajeHonorarios: Number(r.porcentaje_honorarios),
+      estado: r.estado,
+    })),
+    higienistas: (higienistasRes.results || []).map((r: any) => ({
+      id: r.id,
+      nombres: r.nombres,
+      cedula: r.cedula,
+      registroMpps: r.registro_mpps,
+      areaEspecialidad: r.area_especialidad,
+      telefono: r.telefono,
+      sedeId: r.sede_id,
+      boxApoyo: Number(r.box_apoyo),
+      doctorAsignado: r.doctor_asignado,
+      turno: r.turno,
+      estado: r.estado,
+    })),
+    tratamientos: (tratamientosRes.results || []).map((r: any) => ({
+      id: r.id,
+      codigo: r.codigo,
+      nombre: r.nombre,
+      categoria: r.categoria,
+      descripcion: r.descripcion,
+      duracionMinutos: Number(r.duracion_minutos),
+      costoUsd: Number(r.costo_usd),
+      costoInsumosUsd: Number(r.costo_insumos_usd),
+      requiereRx: Boolean(r.requiere_rx),
+      activo: Boolean(r.activo),
+    })),
+    pacientes: (pacientesRes?.results || []).map((r: any) => ({
+      id: r.id,
+      nombres: r.nombres,
+      cedula: r.cedula,
+      telefono: r.telefono,
+      email: r.email,
+      motivo: r.motivo,
+      fechaCita: r.fecha_cita,
+      horaInicio: r.hora_inicio,
+      doctorNombre: r.doctor_nombre,
+      sedeId: r.sede_id,
+      estado: r.estado,
+      esUrgencia: Boolean(r.es_urgencia),
+      fechaNacimiento: r.fecha_nacimiento || '',
+    })),
+    condicionesMedicas: (condicionesRes?.results || []).map((r: any) => ({
+      id: r.id,
+      codigoCie: r.codigo_cie,
+      nombre: r.nombre,
+      categoria: r.categoria,
+      nivelRiesgo: r.nivel_riesgo,
+      manifestacionBucal: r.manifestacion_bucal,
+      protocoloDental: r.protocolo_dental,
+      anestesicoContraindicado: r.anestesico_contraindicado,
+      requiereProfilaxisAntibiotica: Boolean(r.requiere_profilaxis_antibiotica),
+      activo: Boolean(r.activo),
+    })),
+  });
+});
+
+app.post('/api/control-data/odontologos', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const id = b.id || `odo-${Date.now()}`;
+
+  await db
+    .prepare(
+      `INSERT INTO staff_odontologos (
+        id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        nombres = excluded.nombres,
+        cedula = excluded.cedula,
+        cov = excluded.cov,
+        especialidad = excluded.especialidad,
+        telefono = excluded.telefono,
+        email = excluded.email,
+        sede_id = excluded.sede_id,
+        box_asignado = excluded.box_asignado,
+        turno = excluded.turno,
+        porcentaje_honorarios = excluded.porcentaje_honorarios,
+        estado = excluded.estado,
+        updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(
+      id,
+      b.nombres,
+      b.cedula,
+      b.cov || '',
+      b.especialidad || 'Odontología General',
+      b.telefono || '',
+      b.email || '',
+      b.sedeId || 'victoria',
+      b.boxAsignado || 1,
+      b.turno || 'Completo',
+      b.porcentajeHonorarios ?? 40,
+      b.estado || 'activo'
+    )
+    .run();
+
+  // Sincronizar también con la tabla maestra clínica 'pacientes'
+  try {
+    const parts = (b.nombres || '').trim().split(' ');
+    const nom = parts[0] || '';
+    const ape = parts.slice(1).join(' ') || '';
+    await db
+      .prepare(
+        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(cedula) DO UPDATE SET
+           nombres = excluded.nombres,
+           apellidos = excluded.apellidos,
+           telefono = excluded.telefono,
+           email = excluded.email,
+           fecha_nacimiento = excluded.fecha_nacimiento`
+      )
+      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
+      .run();
+  } catch (err) {
+    // ignore
+  }
+
+  return c.json({ success: true, id });
+});
+
+app.delete('/api/control-data/odontologos/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM staff_odontologos WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+app.post('/api/control-data/higienistas', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const id = b.id || `hig-${Date.now()}`;
+
+  await db
+    .prepare(
+      `INSERT INTO staff_higienistas (
+        id, nombres, cedula, registro_mpps, area_especialidad, telefono, sede_id, box_apoyo, doctor_asignado, turno, estado, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        nombres = excluded.nombres,
+        cedula = excluded.cedula,
+        registro_mpps = excluded.registro_mpps,
+        area_especialidad = excluded.area_especialidad,
+        telefono = excluded.telefono,
+        sede_id = excluded.sede_id,
+        box_apoyo = excluded.box_apoyo,
+        doctor_asignado = excluded.doctor_asignado,
+        turno = excluded.turno,
+        estado = excluded.estado,
+        updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(
+      id,
+      b.nombres,
+      b.cedula,
+      b.registroMpps || '',
+      b.areaEspecialidad || 'Asistencia Clínica & Bioseguridad',
+      b.telefono || '',
+      b.sedeId || 'victoria',
+      b.boxApoyo || 1,
+      b.doctorAsignado || 'Dra. María Alejandra Domínguez',
+      b.turno || 'Completo',
+      b.estado || 'activo'
+    )
+    .run();
+
+  // Sincronizar también con la tabla maestra clínica 'pacientes'
+  try {
+    const parts = (b.nombres || '').trim().split(' ');
+    const nom = parts[0] || '';
+    const ape = parts.slice(1).join(' ') || '';
+    await db
+      .prepare(
+        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(cedula) DO UPDATE SET
+           nombres = excluded.nombres,
+           apellidos = excluded.apellidos,
+           telefono = excluded.telefono,
+           email = excluded.email,
+           fecha_nacimiento = excluded.fecha_nacimiento`
+      )
+      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
+      .run();
+  } catch (err) {
+    // ignore
+  }
+
+  return c.json({ success: true, id });
+});
+
+app.delete('/api/control-data/higienistas/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM staff_higienistas WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+app.post('/api/control-data/tratamientos', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const id = b.id || `trat-${Date.now()}`;
+
+  await db
+    .prepare(
+      `INSERT INTO catalogo_tratamientos (
+        id, codigo, nombre, categoria, descripcion, duracion_minutos, costo_usd, costo_insumos_usd, requiere_rx, activo, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        codigo = excluded.codigo,
+        nombre = excluded.nombre,
+        categoria = excluded.categoria,
+        descripcion = excluded.descripcion,
+        duracion_minutos = excluded.duracion_minutos,
+        costo_usd = excluded.costo_usd,
+        costo_insumos_usd = excluded.costo_insumos_usd,
+        requiere_rx = excluded.requiere_rx,
+        activo = excluded.activo,
+        updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(
+      id,
+      b.codigo,
+      b.nombre,
+      b.categoria || 'Operatoria & Estética',
+      b.descripcion || '',
+      b.duracionMinutos || 45,
+      b.costoUsd || 0,
+      b.costoInsumosUsd || 0,
+      b.requiereRx ? 1 : 0,
+      b.activo !== false ? 1 : 0
+    )
+    .run();
+
+  return c.json({ success: true, id });
+});
+
+app.delete('/api/control-data/tratamientos/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM catalogo_tratamientos WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+app.post('/api/control-data/pacientes', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const id = b.id || `pac-${Date.now()}`;
+
+  await db
+    .prepare(
+      `INSERT INTO registro_pacientes_reserva (
+        id, nombres, cedula, telefono, email, motivo, fecha_cita, hora_inicio, doctor_nombre, sede_id, estado, es_urgencia, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        nombres = excluded.nombres,
+        cedula = excluded.cedula,
+        telefono = excluded.telefono,
+        email = excluded.email,
+        motivo = excluded.motivo,
+        fecha_cita = excluded.fecha_cita,
+        hora_inicio = excluded.hora_inicio,
+        doctor_nombre = excluded.doctor_nombre,
+        sede_id = excluded.sede_id,
+        estado = excluded.estado,
+        es_urgencia = excluded.es_urgencia,
+        updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(
+      id,
+      b.nombres,
+      b.cedula,
+      b.telefono || '',
+      b.email || '',
+      b.motivo || 'Consulta General',
+      b.fechaCita || new Date().toISOString().split('T')[0],
+      b.horaInicio || '09:00 AM',
+      b.doctorNombre || 'Dra. María Alejandra Domínguez',
+      b.sedeId || 'victoria',
+      b.estado || 'pendiente',
+      b.esUrgencia ? 1 : 0
+    )
+    .run();
+
+  // Sincronizar también con la tabla maestra clínica 'pacientes'
+  try {
+    const parts = (b.nombres || '').trim().split(' ');
+    const nom = parts[0] || '';
+    const ape = parts.slice(1).join(' ') || '';
+    await db
+      .prepare(
+        `INSERT INTO pacientes (id, cedula, nombres, apellidos, telefono, email, fecha_nacimiento)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(cedula) DO UPDATE SET
+           nombres = excluded.nombres,
+           apellidos = excluded.apellidos,
+           telefono = excluded.telefono,
+           email = excluded.email,
+           fecha_nacimiento = excluded.fecha_nacimiento`
+      )
+      .bind(id, b.cedula, nom, ape, b.telefono || '', b.email || '', b.fechaNacimiento || null)
+      .run();
+  } catch (err) {
+    // ignore
+  }
+
+  return c.json({ success: true, id });
+});
+
+app.delete('/api/control-data/pacientes/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM registro_pacientes_reserva WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+app.post('/api/control-data/condiciones-medicas', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const id = b.id || `cond-${Date.now()}`;
+
+  await db
+    .prepare(
+      `INSERT INTO catalogo_condiciones_medicas (
+        id, codigo_cie, nombre, categoria, nivel_riesgo, manifestacion_bucal, protocolo_dental, anestesico_contraindicado, requiere_profilaxis_antibiotica, activo, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        codigo_cie = excluded.codigo_cie,
+        nombre = excluded.nombre,
+        categoria = excluded.categoria,
+        nivel_riesgo = excluded.nivel_riesgo,
+        manifestacion_bucal = excluded.manifestacion_bucal,
+        protocolo_dental = excluded.protocolo_dental,
+        anestesico_contraindicado = excluded.anestesico_contraindicado,
+        requiere_profilaxis_antibiotica = excluded.requiere_profilaxis_antibiotica,
+        activo = excluded.activo,
+        updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(
+      id,
+      b.codigoCie,
+      b.nombre,
+      b.categoria || 'Cardiovascular',
+      b.nivelRiesgo || 'Moderado',
+      b.manifestacionBucal || '',
+      b.protocoloDental || '',
+      b.anestesicoContraindicado || '',
+      b.requiereProfilaxisAntibiotica ? 1 : 0,
+      b.activo !== false ? 1 : 0
+    )
+    .run();
+
+  return c.json({ success: true, id });
+});
+
+app.delete('/api/control-data/condiciones-medicas/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM catalogo_condiciones_medicas WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+// =========================================================================
+// 8. ENDPOINTS DE TRATAMIENTOS REALIZADOS (HISTORIAL CLÍNICO Y HONORARIOS)
+// =========================================================================
+
+// GET /api/tratamientos-realizados/paciente/:id
+app.get('/api/tratamientos-realizados/paciente/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+
+  const query = `
+    SELECT 
+      tr.id,
+      tr.paciente_id AS pacienteId,
+      TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS pacienteNombre,
+      p.cedula AS pacienteCedula,
+      tr.odontologo_id AS odontologoId,
+      COALESCE(o.nombres, 'Odontólogo Asignado') AS odontologoNombre,
+      tr.tratamiento_id AS tratamientoId,
+      t.codigo AS tratamientoCodigo,
+      COALESCE(t.nombre, 'Procedimiento Odontológico') AS tratamientoNombre,
+      tr.presupuesto_id AS presupuestoId,
+      tr.cita_id AS citaId,
+      tr.diente_numero AS dienteNumero,
+      tr.superficie,
+      tr.diagnostico_cie AS diagnosticoCie,
+      tr.observaciones,
+      tr.costo_total_usd AS costoTotalUsd,
+      tr.porcentaje_honorario AS porcentajeHonorario,
+      tr.monto_honorario_usd AS montoHonorarioUsd,
+      tr.tasa_bcv_aplicada AS tasaBcvAplicada,
+      tr.monto_honorario_bs AS montoHonorarioBs,
+      tr.estado_pago_honorario AS estadoPagoHonorario,
+      tr.fecha_liquidacion AS fechaLiquidacion,
+      tr.referencia_liquidacion AS referenciaLiquidacion,
+      tr.box_numero AS boxNumero,
+      tr.sede_id AS sedeId,
+      tr.fecha_realizacion AS fechaRealizacion,
+      tr.created_at AS createdAt
+    FROM registro_tratamientos_realizados tr
+    LEFT JOIN pacientes p ON p.id = tr.paciente_id
+    LEFT JOIN staff_odontologos o ON o.id = tr.odontologo_id
+    LEFT JOIN catalogo_tratamientos t ON t.id = tr.tratamiento_id
+    WHERE tr.paciente_id = ? 
+       OR p.cedula = ?
+       OR REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = REPLACE(REPLACE(LOWER(?), '.', ''), '-', '')
+    ORDER BY tr.fecha_realizacion DESC
+  `;
+
+  const results = await db.prepare(query).bind(id, id, id).all();
+  return c.json({
+    success: true,
+    pacienteId: id,
+    total: results.results?.length || 0,
+    tratamientos: results.results || [],
+  });
+});
+
+// GET /api/tratamientos-realizados/odontologo/:id
+app.get('/api/tratamientos-realizados/odontologo/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  const estado = c.req.query('estado');
+
+  let query = `
+    SELECT 
+      tr.id,
+      tr.paciente_id AS pacienteId,
+      TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS pacienteNombre,
+      p.cedula AS pacienteCedula,
+      tr.odontologo_id AS odontologoId,
+      COALESCE(o.nombres, 'Odontólogo Asignado') AS odontologoNombre,
+      tr.tratamiento_id AS tratamientoId,
+      t.codigo AS tratamientoCodigo,
+      COALESCE(t.nombre, 'Procedimiento Odontológico') AS tratamientoNombre,
+      tr.presupuesto_id AS presupuestoId,
+      tr.cita_id AS citaId,
+      tr.diente_numero AS dienteNumero,
+      tr.superficie,
+      tr.diagnostico_cie AS diagnosticoCie,
+      tr.observaciones,
+      tr.costo_total_usd AS costoTotalUsd,
+      tr.porcentaje_honorario AS porcentajeHonorario,
+      tr.monto_honorario_usd AS montoHonorarioUsd,
+      tr.tasa_bcv_aplicada AS tasaBcvAplicada,
+      tr.monto_honorario_bs AS montoHonorarioBs,
+      tr.estado_pago_honorario AS estadoPagoHonorario,
+      tr.fecha_liquidacion AS fechaLiquidacion,
+      tr.referencia_liquidacion AS referenciaLiquidacion,
+      tr.box_numero AS boxNumero,
+      tr.sede_id AS sedeId,
+      tr.fecha_realizacion AS fechaRealizacion,
+      tr.created_at AS createdAt
+    FROM registro_tratamientos_realizados tr
+    LEFT JOIN pacientes p ON p.id = tr.paciente_id
+    LEFT JOIN staff_odontologos o ON o.id = tr.odontologo_id
+    LEFT JOIN catalogo_tratamientos t ON t.id = tr.tratamiento_id
+    WHERE tr.odontologo_id = ?
+  `;
+
+  if (estado && (estado === 'pendiente' || estado === 'liquidado')) {
+    query += ` AND tr.estado_pago_honorario = '${estado}'`;
+  }
+  query += ` ORDER BY tr.fecha_realizacion DESC`;
+
+  const results = await db.prepare(query).bind(id).all();
+  const rows = (results.results || []) as any[];
+
+  const totalProduccionUsd = rows.reduce((acc: number, r: any) => acc + (r.costoTotalUsd || 0), 0);
+  const totalHonorariosPendientesUsd = rows
+    .filter((r: any) => r.estadoPagoHonorario === 'pendiente')
+    .reduce((acc: number, r: any) => acc + (r.montoHonorarioUsd || 0), 0);
+  const totalHonorariosLiquidadosUsd = rows
+    .filter((r: any) => r.estadoPagoHonorario === 'liquidado')
+    .reduce((acc: number, r: any) => acc + (r.montoHonorarioUsd || 0), 0);
+
+  return c.json({
+    success: true,
+    odontologoId: id,
+    resumen: {
+      totalProcedimientos: rows.length,
+      totalProduccionUsd,
+      totalHonorariosPendientesUsd,
+      totalHonorariosLiquidadosUsd,
+    },
+    tratamientos: rows,
+  });
+});
+
+// GET /api/tratamientos-realizados (lista general con filtros)
+app.get('/api/tratamientos-realizados', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const sedeId = c.req.query('sedeId');
+  const estado = c.req.query('estado');
+
+  let query = `
+    SELECT 
+      tr.id,
+      tr.paciente_id AS pacienteId,
+      TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS pacienteNombre,
+      p.cedula AS pacienteCedula,
+      tr.odontologo_id AS odontologoId,
+      COALESCE(o.nombres, 'Odontólogo Asignado') AS odontologoNombre,
+      tr.tratamiento_id AS tratamientoId,
+      t.codigo AS tratamientoCodigo,
+      COALESCE(t.nombre, 'Procedimiento Odontológico') AS tratamientoNombre,
+      tr.presupuesto_id AS presupuestoId,
+      tr.cita_id AS citaId,
+      tr.diente_numero AS dienteNumero,
+      tr.superficie,
+      tr.diagnostico_cie AS diagnosticoCie,
+      tr.observaciones,
+      tr.costo_total_usd AS costoTotalUsd,
+      tr.porcentaje_honorario AS porcentajeHonorario,
+      tr.monto_honorario_usd AS montoHonorarioUsd,
+      tr.tasa_bcv_aplicada AS tasaBcvAplicada,
+      tr.monto_honorario_bs AS montoHonorarioBs,
+      tr.estado_pago_honorario AS estadoPagoHonorario,
+      tr.fecha_liquidacion AS fechaLiquidacion,
+      tr.referencia_liquidacion AS referenciaLiquidacion,
+      tr.box_numero AS boxNumero,
+      tr.sede_id AS sedeId,
+      tr.fecha_realizacion AS fechaRealizacion,
+      tr.created_at AS createdAt
+    FROM registro_tratamientos_realizados tr
+    LEFT JOIN pacientes p ON p.id = tr.paciente_id
+    LEFT JOIN staff_odontologos o ON o.id = tr.odontologo_id
+    LEFT JOIN catalogo_tratamientos t ON t.id = tr.tratamiento_id
+    WHERE 1=1
+  `;
+
+  if (sedeId && sedeId !== 'ambas') {
+    query += ` AND tr.sede_id = '${sedeId}'`;
+  }
+  if (estado && (estado === 'pendiente' || estado === 'liquidado')) {
+    query += ` AND tr.estado_pago_honorario = '${estado}'`;
+  }
+  query += ` ORDER BY tr.fecha_realizacion DESC LIMIT 100`;
+
+  const results = await db.prepare(query).all();
+  return c.json({
+    success: true,
+    total: results.results?.length || 0,
+    tratamientos: results.results || [],
+  });
+});
+
+// POST /api/tratamientos-realizados
+app.post('/api/tratamientos-realizados', async (c) => {
+  const db = c.env.DB;
+  const cache = c.env.CACHE;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+
+  if (!b.pacienteId || !b.odontologoId || !b.tratamientoId) {
+    return c.json({ success: false, error: 'pacienteId, odontologoId y tratamientoId son obligatorios' }, 400);
+  }
+
+  const id = b.id || `tr-${Date.now()}`;
+  const costoTotalUsd = Number(b.costoTotalUsd) || 0;
+
+  // Porcentaje de honorarios del facultativo
+  let porcentajeHonorario = Number(b.porcentajeHonorario);
+  if (isNaN(porcentajeHonorario) || porcentajeHonorario <= 0) {
+    const docRow = (await db.prepare(`SELECT porcentaje_honorarios FROM staff_odontologos WHERE id = ?`).bind(b.odontologoId).first()) as any;
+    porcentajeHonorario = docRow?.porcentaje_honorarios || 40;
+  }
+
+  const montoHonorarioUsd = Number((costoTotalUsd * (porcentajeHonorario / 100)).toFixed(2));
+
+  // Tasa BCV para estimación en Bs
+  const tasaInfo = await getOrFetchBcvRate(db, cache);
+  const tasaBcv = Number(b.tasaBcvAplicada) || tasaInfo.tasa || 42.50;
+  const montoHonorarioBs = Number((montoHonorarioUsd * tasaBcv).toFixed(2));
+
+  await db.prepare(`
+    INSERT INTO registro_tratamientos_realizados (
+      id, paciente_id, odontologo_id, tratamiento_id, presupuesto_id, cita_id,
+      diente_numero, superficie, diagnostico_cie, observaciones, costo_total_usd,
+      porcentaje_honorario, monto_honorario_usd, tasa_bcv_aplicada, monto_honorario_bs,
+      estado_pago_honorario, box_numero, sede_id, fecha_realizacion, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)
+  `).bind(
+    id,
+    b.pacienteId,
+    b.odontologoId,
+    b.tratamientoId,
+    b.presupuestoId || null,
+    b.citaId || null,
+    b.dienteNumero || null,
+    b.superficie || null,
+    b.diagnosticoCie || null,
+    b.observaciones || '',
+    costoTotalUsd,
+    porcentajeHonorario,
+    montoHonorarioUsd,
+    tasaBcv,
+    montoHonorarioBs,
+    b.boxNumero || 1,
+    b.sedeId || 'victoria',
+    b.fechaRealizacion || null
+  ).run();
+
+  return c.json({
+    success: true,
+    id,
+    montoHonorarioUsd,
+    montoHonorarioBs,
+    tasaBcv,
+    mensaje: 'Procedimiento clínico y honorarios registrados con éxito en Cloudflare D1',
+  });
+});
+
+// PATCH /api/tratamientos-realizados/liquidar-lote
+app.patch('/api/tratamientos-realizados/liquidar-lote', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+
+  const ids: string[] = b.ids;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return c.json({ success: false, error: 'Se requiere una lista de IDs de procedimientos a liquidar' }, 400);
+  }
+
+  const referencia = b.referencia || `LIQ-${Date.now().toString().slice(-6)}`;
+  const fechaLiquidacion = b.fechaLiquidacion || new Date().toISOString().split('T')[0];
+
+  const stmts = ids.map((id) =>
+    db.prepare(`
+      UPDATE registro_tratamientos_realizados
+      SET estado_pago_honorario = 'liquidado',
+          fecha_liquidacion = ?,
+          referencia_liquidacion = ?
+      WHERE id = ?
+    `).bind(fechaLiquidacion, referencia, id)
+  );
+
+  await db.batch(stmts);
+
+  return c.json({
+    success: true,
+    liquidados: ids.length,
+    referencia,
+    fechaLiquidacion,
+    mensaje: `Se liquidaron ${ids.length} honorarios profesionales con referencia ${referencia}`,
+  });
+});
+
+// DELETE /api/tratamientos-realizados/:id
+app.delete('/api/tratamientos-realizados/:id', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM registro_tratamientos_realizados WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
+});
+
+
 export default app;

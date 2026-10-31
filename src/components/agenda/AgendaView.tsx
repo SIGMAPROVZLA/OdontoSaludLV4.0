@@ -356,7 +356,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
         <button
           type="button"
           onClick={() => onNavigateTab?.('reserva')}
-          className="pointer-events-auto py-3 px-6 rounded-full bg-electric-blue hover:bg-primary text-white font-bold text-xs shadow-[0_8px_20px_rgba(0,132,255,0.4)] transition-all flex items-center gap-2 active:scale-95"
+          className="pointer-events-auto py-3 px-6 rounded-full bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-lg ring-2 ring-surface-container transition-all flex items-center gap-2 active:scale-95"
         >
           <span className="material-symbols-outlined text-[20px]">add</span>
           <span>Agendar Cita Rápida</span>

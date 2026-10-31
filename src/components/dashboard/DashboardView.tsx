@@ -297,10 +297,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       </section>
 
       {/* Banner de Acceso Rápido a Triaje & Citas Previas Web */}
-      <section className="bg-gradient-to-r from-dental-deep-navy to-[#184878] rounded-2xl p-3.5 text-surface-clean-white shadow-sm flex items-center justify-between gap-3 relative overflow-hidden">
-        <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-electric-blue/20 pointer-events-none" />
+      <section className="bg-dental-deep-navy rounded-2xl p-3.5 text-surface-clean-white shadow-md flex items-center justify-between gap-3 relative overflow-hidden border border-primary">
         <div className="flex items-center gap-3 min-w-0 relative z-10">
-          <div className="w-10 h-10 rounded-xl bg-electric-blue/25 text-vibrant-cyan flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 border border-border-subtle/30">
             <span className="material-symbols-outlined text-[22px]">assignment_turned_in</span>
           </div>
           <div className="min-w-0">
@@ -308,11 +307,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
               <span className="font-display font-bold text-xs text-white">
                 Recepción & Triaje Digital
               </span>
-              <span className="px-1.5 py-0.2 rounded-full bg-status-danger text-white text-[10px] font-extrabold animate-pulse">
+              <span className="px-1.5 py-0.5 rounded-full bg-status-danger text-white text-[10px] font-extrabold animate-pulse">
                 4 por aprobar
               </span>
             </div>
-            <p className="text-[11px] text-white/70 truncate mt-0.5">
+            <p className="text-[11px] text-surface-container truncate mt-0.5">
               Citas solicitadas desde Web Móvil y WhatsApp
             </p>
           </div>
@@ -321,7 +320,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         <button
           type="button"
           onClick={() => onNavigateTab('coordinacion')}
-          className="px-3 py-1.5 rounded-xl bg-electric-blue hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-1 relative z-10"
+          className="px-3 py-1.5 rounded-xl bg-primary hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-1 relative z-10"
         >
           <span>Revisar</span>
           <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
@@ -444,7 +443,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         <button
           type="button"
           onClick={() => onNavigateTab('reserva')}
-          className="py-3 px-5 rounded-full bg-gradient-to-r from-dental-deep-navy via-primary to-electric-blue hover:brightness-105 text-white font-bold text-xs shadow-[0_8px_24px_rgba(0,132,255,0.4)] transition-all flex items-center gap-2 active:scale-95 ring-2 ring-white"
+          className="py-3 px-5 rounded-full bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95 ring-2 ring-surface-container"
         >
           <span className="material-symbols-outlined text-[20px]">add_alarm</span>
           <span>Agendar Cita</span>

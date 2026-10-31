@@ -45,17 +45,17 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-dental-deep-navy/40 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-dental-ambient-bg/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="w-full max-w-md bg-surface-clean-white rounded-3xl shadow-[0_20px_50px_rgba(15,43,72,0.25)] border border-border-subtle overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md bg-surface-clean-white rounded-3xl shadow-2xl border border-border-subtle overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-modal="true"
         aria-labelledby="notification-center-title"
       >
         {/* Cabecera del Centro de Notificaciones */}
-        <div className="px-5 py-4 bg-gradient-to-r from-surface-clean-white to-surface-subtle-ice border-b border-border-subtle flex items-center justify-between">
+        <div className="px-5 py-4 bg-surface-clean-white border-b border-border-subtle flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center">
               <span className="material-symbols-outlined text-[20px]">notifications_active</span>
             </div>
             <div>
@@ -73,7 +73,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             <button
               type="button"
               onClick={marcarNotificacionesLeidas}
-              className="px-2 py-1 text-[11px] font-bold text-electric-blue hover:bg-electric-blue/10 rounded-lg transition-colors"
+              className="px-2 py-1 text-[11px] font-bold text-primary hover:bg-surface-container rounded-lg transition-colors"
               title="Marcar como leídas"
             >
               Leídas
@@ -89,15 +89,15 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
         </div>
 
         {/* Tarjeta Destacada: Estado en Vivo de la Tasa BCV */}
-        <div className="p-4 bg-gradient-to-br from-dental-deep-navy via-primary to-dental-deep-navy text-white relative overflow-hidden">
-          <div className="flex items-center justify-between text-[11px] text-secondary-fixed-dim">
+        <div className="p-4 bg-dental-deep-navy text-white relative overflow-hidden">
+          <div className="flex items-center justify-between text-[11px] text-surface-container">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
               <span className="font-bold uppercase tracking-wider text-white">
                 {tasaInfo?.esManual ? 'Tasa BCV (Manual)' : 'Tasa Oficial BCV en Línea'}
               </span>
             </div>
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-bold text-vibrant-cyan">
+            <span className="bg-primary px-2 py-0.5 rounded-full text-[10px] font-bold text-white border border-border-subtle/30">
               {tasaInfo?.origen === 'live_network'
                 ? 'Conexión Directa'
                 : tasaInfo?.origen === 'manual_override'
@@ -113,9 +113,9 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 4,
                 })}{' '}
-                <span className="text-xs font-bold text-vibrant-cyan">Bs / USD</span>
+                <span className="text-xs font-bold text-surface-container">Bs / USD</span>
               </span>
-              <p className="text-[10px] text-white/75 mt-0.5">
+              <p className="text-[10px] text-surface-container mt-0.5">
                 Fuente: {tasaInfo?.fuente || 'Banco Central de Venezuela'}
               </p>
             </div>
@@ -124,7 +124,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
               type="button"
               disabled={isRefreshing}
               onClick={() => actualizarTasaEnLinea(true)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-50 shadow-sm"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-50 shadow-sm"
               title="Sincronizar tasa oficial en vivo con el BCV"
             >
               <span
@@ -138,8 +138,8 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             </button>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-[10px]">
-            <span className="text-white/70">
+          <div className="mt-3 pt-2.5 border-t border-primary flex items-center justify-between text-[10px]">
+            <span className="text-surface-container">
               Vigencia:{' '}
               {tasaInfo?.fechaActualizacion
                 ? new Date(tasaInfo.fechaActualizacion).toLocaleDateString('es-VE')
@@ -149,7 +149,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             <button
               type="button"
               onClick={() => setModoEdicionTasa(!modoEdicionTasa)}
-              className="text-vibrant-cyan font-bold hover:underline flex items-center gap-0.5"
+              className="text-surface-container font-bold hover:underline flex items-center gap-0.5"
             >
               <span className="material-symbols-outlined text-[13px]">
                 {modoEdicionTasa ? 'expand_less' : 'tune'}

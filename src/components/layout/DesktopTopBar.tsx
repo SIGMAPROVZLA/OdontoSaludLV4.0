@@ -22,25 +22,45 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
   }).toUpperCase();
 
   return (
-    <header className="h-16 bg-white border-b border-border-subtle px-6 flex items-center justify-between shrink-0 shadow-sm z-30">
-      {/* 1. Fecha y Estado de Jornada */}
-      <div className="flex items-center gap-3">
-        <span className="material-symbols-outlined text-[20px] text-secondary">
-          calendar_today
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold tracking-wider text-dental-deep-navy">
+    <header className="h-16 bg-surface-clean-white border-b border-border-subtle px-6 flex items-center justify-between shrink-0 shadow-[0_2px_12px_rgba(23,18,29,0.05)] z-30">
+      {/* 1. Cabecera Unificada: OdontoSalud La Victoria • Tecnologia SIGMA LABS */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5">
+          <img
+            src="/brand/logo-odontosalud-vertical.png"
+            alt="Logo OdontoSalud La Victoria"
+            className="h-11 w-11 object-contain shrink-0"
+          />
+          <div>
+            <h1 className="font-display font-extrabold text-sm text-dental-deep-navy leading-tight">
+              OdontoSalud La Victoria
+            </h1>
+            <p className="text-[11px] font-bold text-primary tracking-wide leading-tight">
+              Tecnologia SIGMA LABS
+            </p>
+          </div>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-border-subtle">
+          <span className="text-[11px] font-bold tracking-wider text-secondary">
             {hoyTexto}
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-success/10 text-status-success text-[10px] font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse" />
-            Jornada Activa
           </span>
         </div>
       </div>
 
       {/* 2. Botones de Acción Rápida (Fiel a Google Stitch Desktop) */}
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onNavigateTab('data')}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-dental-deep-navy text-xs font-bold transition-all active:scale-95 shadow-sm"
+        >
+          <span className="material-symbols-outlined text-[16px] text-primary">
+            database
+          </span>
+          <span>Control de Data</span>
+        </button>
+
         <button
           type="button"
           onClick={() => onNavigateTab('odontograma')}
@@ -66,7 +86,7 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
         <button
           type="button"
           onClick={() => onNavigateTab('reserva')}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs font-bold transition-all active:scale-95 shadow-[0_4px_14px_rgba(0,132,255,0.3)]"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold transition-all active:scale-95 shadow-[0_4px_14px_rgba(81,64,95,0.35)]"
         >
           <span className="material-symbols-outlined text-[16px]">
             add_circle

@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --palette-obsidian: #17121D;
+  --palette-aubergine: #302538;
+  --palette-royal-plum: #51405F;
+  --palette-mauve: #796487;
+  --palette-lilac: #B09BB8;
+  --palette-silk: #E8DDEB;
+}
+
 @layer base {
   html,
   body {
@@ -9,6 +18,8 @@
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    background-color: #F4EEF7;
+    color: #17121D;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
   }
@@ -30,4 +41,23 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 24s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
 }

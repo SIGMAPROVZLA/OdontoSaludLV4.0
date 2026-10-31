@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type TabId = 'dashboard' | 'agenda' | 'coordinacion' | 'odontograma' | 'cobros' | 'reserva';
+export type TabId = 'dashboard' | 'agenda' | 'coordinacion' | 'odontograma' | 'cobros' | 'reserva' | 'data';
 
 interface BottomNavigationProps {
   activeTab: TabId;
@@ -19,10 +19,11 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     { id: 'coordinacion' as TabId, label: 'Triaje', icon: 'fact_check', badge: pendingCount },
     { id: 'odontograma' as TabId, label: 'Ficha', icon: 'dentistry' },
     { id: 'cobros' as TabId, label: 'Cobros', icon: 'payments' },
+    { id: 'data' as TabId, label: 'Control Data', icon: 'database' },
   ];
 
   return (
-    <nav className="fixed bottom-0 w-full z-50 pb-[env(safe-area-inset-bottom,0px)] bg-surface-clean-white/95 backdrop-blur-xl shadow-[0_-4px_16px_rgba(15,43,72,0.08)] border-t border-border-subtle">
+    <nav className="fixed bottom-0 w-full z-50 pb-[env(safe-area-inset-bottom,0px)] bg-surface-clean-white shadow-[0_-4px_20px_rgba(23,18,29,0.08)] border-t border-border-subtle">
       <div className="h-16 px-space-xs flex items-stretch justify-around max-w-5xl mx-auto">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -31,9 +32,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
               key={tab.id}
               type="button"
               onClick={() => onTabChange(tab.id)}
-              className={`flex flex-1 flex-col items-center justify-center min-w-[56px] min-h-[44px] py-1 transition-all relative ${
+              className={`flex flex-1 flex-col items-center justify-center min-w-[56px] min-h-[44px] py-1 transition-all active:scale-95 relative ${
                 isActive
-                  ? 'text-electric-blue font-bold scale-105'
+                  ? 'text-primary font-extrabold scale-105'
                   : 'text-secondary hover:text-dental-deep-navy'
               }`}
             >

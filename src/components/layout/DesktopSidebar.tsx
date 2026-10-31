@@ -22,65 +22,31 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
   ];
 
   return (
-    <aside className="w-64 bg-dental-deep-navy text-white flex flex-col shrink-0 min-h-screen border-r border-dental-ambient-bg select-none">
-      {/* 1. Header de Sede Activa (Dropdown de Stitch) */}
-      <div className="p-4 border-b border-white/10 relative">
-        <button
-          type="button"
-          onClick={() => setSedeDropdownOpen(!sedeDropdownOpen)}
-          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-left"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-electric-blue/20 flex items-center justify-center text-vibrant-cyan shrink-0">
-              <span className="material-symbols-outlined text-[18px]">domain</span>
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-wider uppercase text-white/50 block">
-                Sede Activa
-              </span>
-              <p className="text-xs font-bold text-white truncate">
-                {sedeActiva.nombre}
-              </p>
-            </div>
+    <aside className="w-64 bg-dental-deep-navy text-white flex flex-col shrink-0 min-h-screen border-r border-dental-ambient-bg select-none relative z-20">
+      {/* 1. Cabecera Corporativa OdontoSalud La Victoria */}
+      <div className="p-4 border-b border-secondary/30 relative">
+        <div className="w-full flex items-center gap-2.5 p-2.5 rounded-xl bg-dental-ambient-bg border border-secondary/40 text-left">
+          <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm p-0.5">
+            <img
+              src="/brand/logo-odontosalud-vertical.png"
+              alt="Logo OdontoSalud La Victoria"
+              className="w-full h-full object-contain"
+            />
           </div>
-          <span className="material-symbols-outlined text-[18px] text-white/60">
-            unfold_more
-          </span>
-        </button>
-
-        {/* Dropdown de Sedes */}
-        {sedeDropdownOpen && (
-          <div className="absolute top-20 left-4 right-4 z-50 bg-[#163657] border border-white/15 rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
-            <span className="text-[10px] uppercase font-bold text-white/50 px-3 py-1 block">
-              Cambiar Sucursal
+          <div className="min-w-0">
+            <h1 className="text-xs font-display font-extrabold text-white truncate leading-tight">
+              OdontoSalud La Victoria
+            </h1>
+            <span className="text-[10px] font-bold tracking-wider text-secondary-fixed block truncate mt-0.5">
+              Tecnologia SIGMA LABS
             </span>
-            {Object.values(SEDES_DISPONIBLES).map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => {
-                  cambiarSede(s.id as SedeId);
-                  setSedeDropdownOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-left transition-colors ${
-                  sedeActiva.id === s.id
-                    ? 'bg-electric-blue text-white'
-                    : 'text-white/80 hover:bg-white/10'
-                }`}
-              >
-                <span>{s.nombre}</span>
-                {sedeActiva.id === s.id && (
-                  <span className="material-symbols-outlined text-[16px]">check</span>
-                )}
-              </button>
-            ))}
           </div>
-        )}
+        </div>
       </div>
 
       {/* 2. Lista de Navegación Principal */}
       <nav className="flex-1 p-3 space-y-1.5 mt-2">
-        <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-white/40">
+        <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-outline-variant">
           Clínica & Operaciones
         </div>
 
@@ -91,13 +57,13 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
               key={item.id}
               type="button"
               onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                 isActive
-                  ? 'bg-electric-blue text-white shadow-[0_4px_16px_rgba(0,132,255,0.35)]'
-                  : 'text-white/70 hover:bg-white/5 hover:text-white'
+                  ? 'bg-primary text-white shadow-[0_4px_16px_rgba(23,18,29,0.4)] border border-outline-variant/40'
+                  : 'text-secondary-fixed hover:bg-dental-ambient-bg hover:text-white'
               }`}
             >
-              <span className={`material-symbols-outlined text-[20px] ${isActive ? 'text-white' : 'text-white/60'}`}>
+              <span className={`material-symbols-outlined text-[20px] ${isActive ? 'text-white' : 'text-outline-variant'}`}>
                 {item.icon}
               </span>
               <span>{item.label}</span>
@@ -105,28 +71,37 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
           );
         })}
 
-        <div className="pt-4 px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-white/40">
+        <div className="pt-4 px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-outline-variant">
           Administración
         </div>
 
         <button
           type="button"
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white/70 hover:bg-white/5 hover:text-white transition-all"
+          onClick={() => onTabChange('data')}
+          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
+            activeTab === 'data'
+              ? 'bg-primary text-white shadow-[0_4px_16px_rgba(23,18,29,0.4)] border border-outline-variant/40'
+              : 'text-secondary-fixed hover:bg-dental-ambient-bg hover:text-white'
+          }`}
         >
-          <span className="material-symbols-outlined text-[20px] text-white/60">
-            settings
+          <span
+            className={`material-symbols-outlined text-[20px] ${
+              activeTab === 'data' ? 'text-white' : 'text-outline-variant'
+            }`}
+          >
+            database
           </span>
-          <span>Configuración de Clínica</span>
+          <span>Control de Data</span>
         </button>
       </nav>
 
       {/* 3. Footer de Sede y Conectividad */}
-      <div className="p-4 border-t border-white/10 flex items-center justify-between text-xs text-white/60">
+      <div className="p-4 border-t border-secondary/30 flex items-center justify-between text-xs text-outline-variant">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
-          <span className="text-[11px] font-medium">Cloudflare D1 Sincronizado</span>
+          <span className="text-[11px] font-medium text-secondary-fixed">Cloudflare D1 Sincronizado</span>
         </div>
-        <span className="text-[10px] font-mono text-white/40">v4.0 Pro</span>
+        <span className="text-[10px] font-mono text-outline-variant">v4.0 Pro</span>
       </div>
     </aside>
   );
