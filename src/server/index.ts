@@ -290,26 +290,51 @@ app.get('/api/dashboard/pulse', async (c) => {
 // 2. Consulta y Creación de Citas
 app.get('/api/citas', async (c) => {
   const db = c.env.DB;
-  const sedeId = c.get('sedeId');
+  const sedeHeader = c.get('sedeId');
+  const sedeQuery = c.req.query('sedeId');
+  const sedeId = sedeQuery || sedeHeader;
   const fecha = c.req.query('fecha');
   const estado = c.req.query('estado');
+  const doctor = c.req.query('doctorNombre');
+  const paciente = c.req.query('pacienteId');
+  const motivo = c.req.query('motivo');
 
   let query = `
-    SELECT c.*, p.nombres, p.apellidos, p.telefono, p.cedula
+    SELECT c.*, p.nombres, p.apellidos, p.telefono, p.cedula, p.email, p.sexo, p.fecha_nacimiento, p.condicion_medica_id
     FROM citas c
-    JOIN pacientes p ON c.paciente_id = p.id
-    WHERE c.sede_id = ?
+    LEFT JOIN pacientes p ON c.paciente_id = p.id
+    WHERE 1=1
   `;
-  const params: any[] = [sedeId];
+  const params: any[] = [];
+
+  if (sedeId && sedeId !== 'all' && sedeId !== 'ambas') {
+    query += ` AND c.sede_id = ?`;
+    params.push(sedeId);
+  }
 
   if (fecha && fecha !== 'all') {
     query += ` AND c.fecha_cita = ?`;
     params.push(fecha);
   }
 
-  if (estado) {
+  if (estado && estado !== 'all') {
     query += ` AND c.estado = ?`;
     params.push(estado);
+  }
+
+  if (doctor && doctor !== 'all') {
+    query += ` AND c.doctor_nombre LIKE '%' || ? || '%'`;
+    params.push(doctor);
+  }
+
+  if (paciente) {
+    query += ` AND (c.paciente_id = ? OR p.cedula LIKE '%' || ? || '%' OR p.nombres LIKE '%' || ? || '%')`;
+    params.push(paciente, paciente, paciente);
+  }
+
+  if (motivo && motivo !== 'all') {
+    query += ` AND c.motivo LIKE '%' || ? || '%'`;
+    params.push(motivo);
   }
 
   query += ` ORDER BY c.fecha_cita DESC, c.hora_inicio ASC`;
@@ -326,6 +351,10 @@ app.get('/api/citas', async (c) => {
     pacienteNombre: `${row.nombres || ''} ${row.apellidos || ''}`.trim() || 'Paciente',
     pacienteCedula: row.cedula || '',
     pacienteTelefono: row.telefono || '',
+    pacienteEmail: row.email || '',
+    pacienteSexo: row.sexo || 'Femenino',
+    pacienteFechaNacimiento: row.fecha_nacimiento || '',
+    condicionMedicaId: row.condicion_medica_id || 'ninguna',
     doctorNombre: row.doctor_nombre || 'Dra. María Alejandra Domínguez',
     boxNumero: row.box_numero || 1,
     fechaCita: row.fecha_cita,
@@ -336,6 +365,13 @@ app.get('/api/citas', async (c) => {
   }));
 
   return c.json(mapped);
+});
+
+app.delete('/api/citas/:id', async (c) => {
+  const db = c.env.DB;
+  const { id } = c.req.param();
+  await db.prepare(`DELETE FROM citas WHERE id = ?`).bind(id).run();
+  return c.json({ success: true, id });
 });
 
 app.post('/api/citas', async (c) => {
@@ -953,7 +989,7 @@ app.get('/api/control-data', async (c) => {
   const db = c.env.DB;
   await ensureControlDataTables(db);
 
-  const [odontologosRes, higienistasRes, tratamientosRes, pacientesRes, condicionesRes] = await Promise.all([
+  const [odontologosRes, higienistasRes, tratamientosRes, pacientesRes, condicionesRes, citasRes]: any = await Promise.all([
     db.prepare(`SELECT * FROM staff_odontologos ORDER BY updated_at DESC`).all(),
     db.prepare(`SELECT * FROM staff_higienistas ORDER BY updated_at DESC`).all(),
     db.prepare(`SELECT * FROM catalogo_tratamientos ORDER BY codigo ASC`).all(),
@@ -963,44 +999,28 @@ app.get('/api/control-data', async (c) => {
         TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS nombres,
         p.cedula,
         p.telefono,
-        p.email,
-        COALESCE(p.sexo, r.sexo, 'Femenino') AS sexo,
-        COALESCE(p.fecha_nacimiento, r.fecha_nacimiento, '') AS fecha_nacimiento,
-        COALESCE(p.condicion_medica_id, r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
-        COALESCE(r.motivo, 'Evaluación Integral Odontológica') AS motivo,
-        COALESCE(r.fecha_cita, '2024-10-25') AS fecha_cita,
-        COALESCE(r.hora_inicio, '09:00 AM') AS hora_inicio,
-        COALESCE(r.doctor_nombre, 'Dra. María Alejandra Domínguez') AS doctor_nombre,
-        COALESCE(r.sede_id, 'victoria') AS sede_id,
-        COALESCE(r.estado, 'pendiente') AS estado,
-        COALESCE(r.es_urgencia, 0) AS es_urgencia
+        COALESCE(p.email, '') AS email,
+        COALESCE(p.sexo, 'Femenino') AS sexo,
+        COALESCE(p.fecha_nacimiento, '') AS fecha_nacimiento,
+        COALESCE(p.condicion_medica_id, 'ninguna') AS condicion_medica_id
       FROM pacientes p
-      LEFT JOIN registro_pacientes_reserva r 
-        ON REPLACE(REPLACE(LOWER(p.cedula), '.', ''), '-', '') = REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '')
-      UNION
-      SELECT 
-        r.id,
-        r.nombres,
-        r.cedula,
-        r.telefono,
-        r.email,
-        COALESCE(r.sexo, 'Femenino') AS sexo,
-        COALESCE(r.fecha_nacimiento, '') AS fecha_nacimiento,
-        COALESCE(r.condicion_medica_id, 'ninguna') AS condicion_medica_id,
-        r.motivo,
-        r.fecha_cita,
-        r.hora_inicio,
-        r.doctor_nombre,
-        r.sede_id,
-        r.estado,
-        r.es_urgencia
-      FROM registro_pacientes_reserva r
-      WHERE REPLACE(REPLACE(LOWER(r.cedula), '.', ''), '-', '') NOT IN (
-        SELECT REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', '') FROM pacientes
-      )
-      ORDER BY nombres ASC
+      ORDER BY p.nombres ASC
     `).all(),
     db.prepare(`SELECT * FROM catalogo_condiciones_medicas ORDER BY codigo_cie ASC`).all(),
+    db.prepare(`
+      SELECT 
+        c.*, 
+        TRIM(p.nombres || ' ' || COALESCE(p.apellidos, '')) AS paciente_nombre,
+        p.cedula AS paciente_cedula,
+        p.telefono AS paciente_telefono,
+        p.email AS paciente_email,
+        p.sexo AS paciente_sexo,
+        p.fecha_nacimiento AS paciente_fecha_nacimiento,
+        p.condicion_medica_id
+      FROM citas c
+      LEFT JOIN pacientes p ON c.paciente_id = p.id
+      ORDER BY c.fecha_cita DESC, c.hora_inicio ASC
+    `).all(),
   ]);
 
   return c.json({
@@ -1054,15 +1074,27 @@ app.get('/api/control-data', async (c) => {
         sexo: isRaymond ? 'Masculino' : (r.sexo || 'Femenino'),
         fechaNacimiento: isRaymond ? '1982-10-15' : (r.fecha_nacimiento || ''),
         condicionMedicaId: isRaymond ? 'med-1' : (r.condicion_medica_id || 'ninguna'),
-        motivo: r.motivo,
-        fechaCita: r.fecha_cita,
-        horaInicio: r.hora_inicio,
-        doctorNombre: r.doctor_nombre,
-        sedeId: r.sede_id,
-        estado: r.estado,
-        esUrgencia: Boolean(r.es_urgencia),
       };
     }),
+    citas: (citasRes?.results || []).map((r: any) => ({
+      id: r.id,
+      sedeId: r.sede_id,
+      pacienteId: r.paciente_id,
+      pacienteNombre: r.paciente_nombre || 'Paciente',
+      pacienteCedula: r.paciente_cedula || '',
+      pacienteTelefono: r.paciente_telefono || '',
+      pacienteEmail: r.paciente_email || '',
+      pacienteSexo: r.paciente_sexo || 'Femenino',
+      pacienteFechaNacimiento: r.paciente_fecha_nacimiento || '',
+      condicionMedicaId: r.condicion_medica_id || 'ninguna',
+      doctorNombre: r.doctor_nombre || 'Dra. María Alejandra Domínguez',
+      boxNumero: Number(r.box_numero || 1),
+      fechaCita: r.fecha_cita,
+      horaInicio: r.hora_inicio,
+      motivo: r.motivo || 'Consulta General',
+      estado: r.estado || 'pendiente',
+      esUrgencia: Boolean(r.es_urgencia),
+    })),
     condicionesMedicas: (condicionesRes?.results || []).map((r: any) => ({
       id: r.id,
       codigoCie: r.codigo_cie,
@@ -1360,6 +1392,7 @@ app.delete('/api/control-data/pacientes/:id', async (c) => {
   const db = c.env.DB;
   await ensureControlDataTables(db);
   const { id } = c.req.param();
+  await db.prepare(`DELETE FROM pacientes WHERE id = ?`).bind(id).run();
   await db.prepare(`DELETE FROM registro_pacientes_reserva WHERE id = ?`).bind(id).run();
   return c.json({ success: true, id });
 });

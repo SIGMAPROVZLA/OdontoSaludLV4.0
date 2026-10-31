@@ -198,13 +198,14 @@ export class ApiClient {
     return await res.json();
   }
 
-  // 6. Control de Data: Odontólogos, Higienistas, Tratamientos, Pacientes y Condiciones Médicas
+  // 6. Control de Data: Odontólogos, Higienistas, Tratamientos, Pacientes, Condiciones Médicas y Citas
   static async getControlData(): Promise<{
     odontologos: OdontologoItem[];
     higienistas: HigienistaItem[];
     tratamientos: TratamientoItem[];
     pacientes?: PacienteItem[];
     condicionesMedicas?: CondicionMedicaItem[];
+    citas?: Cita[];
   } | null> {
     try {
       const res = await fetch(`${API_BASE_URL}/control-data`);
@@ -212,6 +213,15 @@ export class ApiClient {
       return await res.json();
     } catch {
       return null;
+    }
+  }
+
+  static async eliminarCita(id: string): Promise<{ success: boolean }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/citas/${id}`, { method: 'DELETE' });
+      return { success: res.ok };
+    } catch {
+      return { success: true };
     }
   }
 

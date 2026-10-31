@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
+import { normalizarFechaInput } from '../booking/BookingFlow';
 import {
   OdontologoItem,
   HigienistaItem,
@@ -8,6 +9,7 @@ import {
   PacienteItem,
   CondicionMedicaItem,
   TratamientoRealizadoItem,
+  Cita,
   SedeId,
 } from '../../types/clinical';
 
@@ -209,18 +211,26 @@ const CATEGORIAS_TRATAMIENTO: TratamientoItem['categoria'][] = [
 
 const INITIAL_PACIENTES: PacienteItem[] = [
   {
+    id: 'pac-raymond',
+    nombres: 'Raymond Gilbonio',
+    cedula: 'V-16.762.319',
+    telefono: '04126841381',
+    email: 'raymond.gilbonio@odontosaludlv.com',
+    sexo: 'Masculino',
+    fechaNacimiento: '1982-10-15',
+    condicionMedicaId: 'med-1',
+    sedeId: 'victoria',
+  },
+  {
     id: 'pac-1',
     nombres: 'Patricia Velásquez',
     cedula: 'V-19.845.221',
     telefono: '+58 412-9876543',
     email: 'patricia.velasquez@gmail.com',
-    motivo: 'Evaluación Inicial & Dolor molar superior',
-    fechaCita: '2024-10-24',
-    horaInicio: '09:00 AM',
-    doctorNombre: 'Dra. María Alejandra Domínguez',
+    sexo: 'Femenino',
+    fechaNacimiento: '1989-06-14',
+    condicionMedicaId: 'ninguna',
     sedeId: 'victoria',
-    estado: 'pendiente',
-    esUrgencia: true,
   },
   {
     id: 'pac-2',
@@ -228,13 +238,10 @@ const INITIAL_PACIENTES: PacienteItem[] = [
     cedula: 'V-17.902.311',
     telefono: '+58 414-5550921',
     email: 'carlos.mendoza@hotmail.com',
-    motivo: 'Control Mensual de Ortodoncia Brackets',
-    fechaCita: '2024-10-24',
-    horaInicio: '10:30 AM',
-    doctorNombre: 'Dr. Carlos Mendoza Rivas',
+    sexo: 'Masculino',
+    fechaNacimiento: '1986-11-20',
+    condicionMedicaId: 'ninguna',
     sedeId: 'victoria',
-    estado: 'confirmada',
-    esUrgencia: false,
   },
   {
     id: 'pac-3',
@@ -242,15 +249,89 @@ const INITIAL_PACIENTES: PacienteItem[] = [
     cedula: 'V-22.109.833',
     telefono: '+58 424-3341122',
     email: 'marcos.ramos@gmail.com',
-    motivo: 'Profilaxis Ultrasónica & Pulido Coronario',
+    sexo: 'Masculino',
+    fechaNacimiento: '1994-03-05',
+    condicionMedicaId: 'ninguna',
+    sedeId: 'ambas',
+  },
+];
+
+const INITIAL_CITAS: Cita[] = [
+  {
+    id: 'cita-1',
+    sedeId: 'victoria',
+    pacienteId: 'pac-1',
+    pacienteNombre: 'Patricia Velásquez',
+    pacienteCedula: 'V-19.845.221',
+    pacienteTelefono: '+58 412-9876543',
+    doctorNombre: 'Dra. María Alejandra Domínguez',
+    boxNumero: 1,
+    fechaCita: '2024-10-24',
+    horaInicio: '09:00 AM',
+    motivo: 'Evaluación Inicial & Dolor molar superior',
+    estado: 'pendiente',
+    esUrgencia: true,
+  },
+  {
+    id: 'cita-2',
+    sedeId: 'victoria',
+    pacienteId: 'pac-2',
+    pacienteNombre: 'Carlos Mendoza',
+    pacienteCedula: 'V-17.902.311',
+    pacienteTelefono: '+58 414-5550921',
+    doctorNombre: 'Dr. Carlos Mendoza Rivas',
+    boxNumero: 2,
+    fechaCita: '2024-10-24',
+    horaInicio: '10:30 AM',
+    motivo: 'Control Mensual de Ortodoncia Brackets',
+    estado: 'confirmada',
+    esUrgencia: false,
+  },
+  {
+    id: 'cita-3',
+    sedeId: 'victoria',
+    pacienteId: 'pac-raymond',
+    pacienteNombre: 'Raymond Gilbonio',
+    pacienteCedula: 'V-16.762.319',
+    pacienteTelefono: '04126841381',
+    doctorNombre: 'Dra. María Alejandra Domínguez',
+    boxNumero: 1,
+    fechaCita: '2024-10-25',
+    horaInicio: '09:00 AM',
+    motivo: 'Evaluación Integral Odontológica',
+    estado: 'confirmada',
+    esUrgencia: false,
+  },
+  {
+    id: 'cita-4',
+    sedeId: 'tovar',
+    pacienteId: 'pac-3',
+    pacienteNombre: 'Marcos Ramos',
+    pacienteCedula: 'V-22.109.833',
+    pacienteTelefono: '+58 424-3341122',
+    doctorNombre: 'Dra. Valentina Páez Gómez',
+    boxNumero: 1,
     fechaCita: '2024-10-25',
     horaInicio: '02:00 PM',
-    doctorNombre: 'Dra. Valentina Páez Gómez',
-    sedeId: 'ambas',
+    motivo: 'Profilaxis Ultrasónica & Pulido Coronario',
     estado: 'completada',
     esUrgencia: false,
   },
 ];
+
+function calcularEdad(fechaNac?: string): string {
+  if (!fechaNac) return '';
+  const iso = normalizarFechaInput(fechaNac);
+  const birth = new Date(iso);
+  if (isNaN(birth.getTime())) return '';
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age > 0 ? `${age} años` : 'Menor de 1 año';
+}
 
 const INITIAL_CONDICIONES_MEDICAS: CondicionMedicaItem[] = [
   {
@@ -356,7 +437,7 @@ const NIVELES_RIESGO: CondicionMedicaItem['nivelRiesgo'][] = [
   'Crítico',
 ];
 
-type DataTabKey = 'odontologos' | 'higienistas' | 'pacientes' | 'tratamientos' | 'condiciones';
+type DataTabKey = 'odontologos' | 'higienistas' | 'pacientes' | 'citas' | 'tratamientos' | 'condiciones';
 
 // Clase utilitaria para iluminar bordes de campos cuando se están llenando o ya contienen valor
 const getIlluminatedFieldClass = (isFilled: boolean) =>
@@ -403,9 +484,37 @@ export const ControlDataView: React.FC = () => {
   const [pacientes, setPacientes] = useState<PacienteItem[]>(() => {
     try {
       const saved = localStorage.getItem('odontosalud_data_pacientes');
-      return saved ? JSON.parse(saved) : INITIAL_PACIENTES;
+      const list: PacienteItem[] = saved ? JSON.parse(saved) : INITIAL_PACIENTES;
+      return list.map((p) => {
+        const clean = (p.cedula || '').replace(/[^0-9]/g, '');
+        if (clean.includes('16762319')) {
+          return {
+            ...p,
+            nombres: 'Raymond Gilbonio',
+            cedula: 'V-16.762.319',
+            telefono: '04126841381',
+            email: 'raymond.gilbonio@odontosaludlv.com',
+            sexo: 'Masculino' as const,
+            fechaNacimiento: '1982-10-15',
+            condicionMedicaId: 'med-1',
+          };
+        }
+        return {
+          ...p,
+          fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+        };
+      });
     } catch {
       return INITIAL_PACIENTES;
+    }
+  });
+
+  const [citas, setCitas] = useState<Cita[]>(() => {
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      return saved ? JSON.parse(saved) : INITIAL_CITAS;
+    } catch {
+      return INITIAL_CITAS;
     }
   });
 
@@ -438,7 +547,29 @@ export const ControlDataView: React.FC = () => {
         setTratamientos(remote.tratamientos);
       }
       if (remote.pacientes && remote.pacientes.length > 0) {
-        setPacientes(remote.pacientes);
+        const sanitized = remote.pacientes.map((p) => {
+          const clean = (p.cedula || '').replace(/[^0-9]/g, '');
+          if (clean.includes('16762319')) {
+            return {
+              ...p,
+              nombres: 'Raymond Gilbonio',
+              cedula: 'V-16.762.319',
+              telefono: '04126841381',
+              email: 'raymond.gilbonio@odontosaludlv.com',
+              sexo: 'Masculino' as const,
+              fechaNacimiento: '1982-10-15',
+              condicionMedicaId: 'med-1',
+            };
+          }
+          return {
+            ...p,
+            fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+          };
+        });
+        setPacientes(sanitized);
+      }
+      if (remote.citas && remote.citas.length > 0) {
+        setCitas(remote.citas);
       }
       if (remote.condicionesMedicas && remote.condicionesMedicas.length > 0) {
         setCondicionesMedicas(remote.condicionesMedicas);
@@ -478,6 +609,14 @@ export const ControlDataView: React.FC = () => {
       // ignore
     }
   }, [pacientes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('odontosalud_data_citas', JSON.stringify(citas));
+    } catch {
+      // ignore
+    }
+  }, [citas]);
 
   useEffect(() => {
     try {
@@ -723,90 +862,89 @@ export const ControlDataView: React.FC = () => {
   };
 
   // =========================================================================
-  // ESTADO FORMULARIO TARJETA 3: PACIENTES EN RESERVA DE CITAS
+  // ESTADO FORMULARIO TARJETA 3: PADRÓN EXCLUSIVO DE PACIENTES (CRUD)
   // =========================================================================
   const [showPacForm, setShowPacForm] = useState<boolean>(false);
   const [editPacId, setEditPacId] = useState<string | null>(null);
   const [pacNombres, setPacNombres] = useState('');
-  const [pacCedula, setPacCedula] = useState('');
+  const [pacCedulaTipo, setPacCedulaTipo] = useState<'V' | 'E' | 'J' | 'G'>('V');
+  const [pacCedulaNumero, setPacCedulaNumero] = useState('');
+  const [pacSexo, setPacSexo] = useState<'Femenino' | 'Masculino' | 'Otro'>('Femenino');
+  const [pacFechaNacimiento, setPacFechaNacimiento] = useState('');
   const [pacTelefono, setPacTelefono] = useState('');
   const [pacEmail, setPacEmail] = useState('');
-  const [pacMotivo, setPacMotivo] = useState('Evaluación Integral Odontológica');
-  const [pacFechaCita, setPacFechaCita] = useState('2024-10-25');
-  const [pacHoraInicio, setPacHoraInicio] = useState('09:00 AM');
-  const [pacDoctorNombre, setPacDoctorNombre] = useState(
-    odontologos[0]?.nombres || 'Dra. María Alejandra Domínguez'
-  );
+  const [pacCondicionId, setPacCondicionId] = useState('ninguna');
   const [pacSedeId, setPacSedeId] = useState<SedeId | 'ambas'>('victoria');
-  const [pacEstado, setPacEstado] = useState<
-    'pendiente' | 'confirmada' | 'en_sillon' | 'completada' | 'cancelada'
-  >('confirmada');
-  const [pacEsUrgencia, setPacEsUrgencia] = useState<boolean>(false);
+  const [pacSearchQuery, setPacSearchQuery] = useState('');
 
   const isPacFormComplete =
     pacNombres.trim().length > 0 &&
-    pacCedula.trim().length > 0 &&
-    pacTelefono.trim().length > 0 &&
-    pacMotivo.trim().length > 0 &&
-    pacFechaCita.trim().length > 0 &&
-    pacDoctorNombre.trim().length > 0;
+    pacCedulaNumero.trim().length > 0 &&
+    pacTelefono.trim().length > 0;
 
   const limpiarFormPaciente = () => {
     setEditPacId(null);
     setPacNombres('');
-    setPacCedula('');
+    setPacCedulaTipo('V');
+    setPacCedulaNumero('');
+    setPacSexo('Femenino');
+    setPacFechaNacimiento('');
     setPacTelefono('');
     setPacEmail('');
-    setPacMotivo('Evaluación Integral Odontológica');
-    setPacFechaCita('2024-10-25');
-    setPacHoraInicio('09:00 AM');
-    setPacDoctorNombre(odontologos[0]?.nombres || 'Dra. María Alejandra Domínguez');
+    setPacCondicionId('ninguna');
     setPacSedeId('victoria');
-    setPacEstado('confirmada');
-    setPacEsUrgencia(false);
   };
 
   const handleEditarPaciente = (p: PacienteItem) => {
     setEditPacId(p.id);
     setPacNombres(p.nombres);
-    setPacCedula(p.cedula);
+
+    // Descomponer tipo de cédula y número
+    const rawCedula = p.cedula || '';
+    const match = rawCedula.match(/^([VEJG])[-.]?\s*(\d.*)$/i);
+    if (match) {
+      setPacCedulaTipo(match[1].toUpperCase() as 'V' | 'E' | 'J' | 'G');
+      setPacCedulaNumero(match[2].replace(/[^0-9]/g, ''));
+    } else {
+      setPacCedulaTipo('V');
+      setPacCedulaNumero(rawCedula.replace(/[^0-9]/g, ''));
+    }
+
+    setPacSexo(p.sexo || 'Femenino');
+    setPacFechaNacimiento(normalizarFechaInput(p.fechaNacimiento));
     setPacTelefono(p.telefono);
     setPacEmail(p.email || '');
-    setPacMotivo(p.motivo || 'Evaluación Odontológica');
-    setPacFechaCita(p.fechaCita || '2024-10-25');
-    setPacHoraInicio(p.horaInicio || '09:00 AM');
-    setPacDoctorNombre(p.doctorNombre || odontologos[0]?.nombres || 'Dra. María Alejandra Domínguez');
+    setPacCondicionId(p.condicionMedicaId || 'ninguna');
     setPacSedeId(p.sedeId || 'victoria');
-    setPacEstado(p.estado || 'confirmada');
-    setPacEsUrgencia(Boolean(p.esUrgencia));
     setShowPacForm(true);
   };
 
   const handleGuardarPaciente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacNombres.trim() || !pacCedula.trim()) return;
+    if (!pacNombres.trim() || !pacCedulaNumero.trim()) return;
+
+    // Formatear cédula canónica: V-XX.XXX.XXX
+    const cleanNum = pacCedulaNumero.replace(/[^0-9]/g, '');
+    const formattedCedula = `${pacCedulaTipo}-${cleanNum.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
     const nuevo: PacienteItem = {
       id: editPacId || `pac-${Date.now()}`,
       nombres: pacNombres.trim(),
-      cedula: pacCedula.trim(),
+      cedula: formattedCedula,
       telefono: pacTelefono.trim(),
       email: pacEmail.trim(),
-      motivo: pacMotivo.trim(),
-      fechaCita: pacFechaCita,
-      horaInicio: pacHoraInicio,
-      doctorNombre: pacDoctorNombre,
+      sexo: pacSexo,
+      fechaNacimiento: normalizarFechaInput(pacFechaNacimiento),
+      condicionMedicaId: pacCondicionId,
       sedeId: pacSedeId,
-      estado: pacEstado,
-      esUrgencia: pacEsUrgencia,
     };
 
     if (editPacId) {
       setPacientes((prev) => prev.map((item) => (item.id === editPacId ? nuevo : item)));
-      showToast(`✅ Paciente ${nuevo.nombres} actualizado correctamente.`);
+      showToast(`✅ Paciente ${nuevo.nombres} actualizado en el Padrón.`);
     } else {
       setPacientes((prev) => [nuevo, ...prev]);
-      showToast(`👤 Paciente ${nuevo.nombres} registrado en Reserva de Citas.`);
+      showToast(`👤 Paciente ${nuevo.nombres} incorporado al Padrón.`);
     }
 
     await ApiClient.guardarPaciente(nuevo);
@@ -821,7 +959,110 @@ export const ControlDataView: React.FC = () => {
       setShowPacForm(false);
     }
     await ApiClient.eliminarPaciente(id);
-    showToast(`🗑️ Registro de ${nombre} eliminado.`);
+    showToast(`🗑️ Paciente ${nombre} eliminado del Padrón.`);
+  };
+
+  // Filtrado de pacientes en búsqueda en vivo
+  const pacientesFiltrados = pacientes.filter((p) => {
+    const q = pacSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.nombres.toLowerCase().includes(q) ||
+      (p.cedula || '').toLowerCase().includes(q) ||
+      (p.telefono || '').toLowerCase().includes(q) ||
+      (p.email || '').toLowerCase().includes(q)
+    );
+  });
+
+  // =========================================================================
+  // ESTADO Y FILTROS TARJETA 4: CONTROL DE CITAS PROGRAMADAS
+  // =========================================================================
+  const [citasFiltroDoctor, setCitasFiltroDoctor] = useState<string>('todos');
+  const [citasFiltroPaciente, setCitasFiltroPaciente] = useState<string>('');
+  const [citasFiltroFecha, setCitasFiltroFecha] = useState<'todas' | 'hoy' | 'semana' | 'especifica'>('todas');
+  const [citasFechaEspecifica, setCitasFechaEspecifica] = useState<string>('');
+  const [citasFiltroTratamiento, setCitasFiltroTratamiento] = useState<string>('todos');
+  const [citasFiltroEstado, setCitasFiltroEstado] = useState<string>('todos');
+
+  const hoyStr = new Date().toISOString().split('T')[0];
+
+  const citasFiltradas = citas.filter((c) => {
+    // Filtro Doctor
+    if (citasFiltroDoctor !== 'todos' && c.doctorNombre !== citasFiltroDoctor) {
+      return false;
+    }
+    // Filtro Paciente (nombre o cédula)
+    if (citasFiltroPaciente.trim()) {
+      const q = citasFiltroPaciente.trim().toLowerCase();
+      const matchPac =
+        (c.pacienteNombre || '').toLowerCase().includes(q) ||
+        (c.pacienteCedula || '').toLowerCase().includes(q);
+      if (!matchPac) return false;
+    }
+    // Filtro Fecha
+    if (citasFiltroFecha === 'hoy') {
+      if (c.fechaCita !== hoyStr) return false;
+    } else if (citasFiltroFecha === 'semana') {
+      const fechaC = new Date(c.fechaCita);
+      const hoy = new Date();
+      const diffDays = (fechaC.getTime() - hoy.getTime()) / (1000 * 3600 * 24);
+      if (diffDays < -1 || diffDays > 7) return false;
+    } else if (citasFiltroFecha === 'especifica' && citasFechaEspecifica) {
+      if (c.fechaCita !== citasFechaEspecifica) return false;
+    }
+    // Filtro Tratamiento
+    if (citasFiltroTratamiento !== 'todos') {
+      if (!c.motivo.toLowerCase().includes(citasFiltroTratamiento.toLowerCase())) {
+        return false;
+      }
+    }
+    // Filtro Estado
+    if (citasFiltroEstado !== 'todos' && c.estado !== citasFiltroEstado) {
+      return false;
+    }
+    return true;
+  });
+
+  const citasPendientesCount = citas.filter((c) => c.estado === 'pendiente').length;
+
+  const handleAprobarCita = async (cita: Cita) => {
+    const actualizada: Cita = { ...cita, estado: 'confirmada' };
+    setCitas((prev) => prev.map((item) => (item.id === cita.id ? actualizada : item)));
+    await ApiClient.actualizarEstadoCita(cita.id, 'confirmada', cita.sedeId, cita.boxNumero);
+    showToast(`✅ Cita de ${cita.pacienteNombre} APROBADA y confirmada.`);
+  };
+
+  const handleCambiarEstadoCita = async (cita: Cita, nuevoEstado: Cita['estado']) => {
+    const actualizada: Cita = { ...cita, estado: nuevoEstado };
+    setCitas((prev) => prev.map((item) => (item.id === cita.id ? actualizada : item)));
+    await ApiClient.actualizarEstadoCita(cita.id, nuevoEstado, cita.sedeId, cita.boxNumero);
+    const nombresEstado: Record<string, string> = {
+      pendiente: '🟡 PENDIENTE',
+      confirmada: '🟢 CONFIRMADA',
+      en_sillon: '🔵 EN SILLÓN',
+      completada: '⚪ COMPLETADA',
+      cancelada: '🔴 CANCELADA',
+    };
+    showToast(`🔄 Estado de cita (${cita.pacienteNombre}): ${nombresEstado[nuevoEstado] || nuevoEstado}`);
+  };
+
+  const handleAprobarTodasPendientes = async () => {
+    const pendientes = citas.filter((c) => c.estado === 'pendiente');
+    if (pendientes.length === 0) return;
+
+    setCitas((prev) =>
+      prev.map((c) => (c.estado === 'pendiente' ? { ...c, estado: 'confirmada' } : c))
+    );
+
+    const ids = pendientes.map((c) => c.id);
+    await ApiClient.aprobarCitasLote(ids, 'victoria');
+    showToast(`🎉 ¡${pendientes.length} citas pendientes aprobadas en bloque con éxito!`);
+  };
+
+  const handleEliminarCita = async (id: string, pacienteNombre: string) => {
+    setCitas((prev) => prev.filter((c) => c.id !== id));
+    await ApiClient.eliminarCita(id);
+    showToast(`🗑️ Cita de ${pacienteNombre} eliminada del control.`);
   };
 
   // =========================================================================
@@ -1076,7 +1317,8 @@ export const ControlDataView: React.FC = () => {
   };
 
   // Configuración de las pestañas del selector animado
-  const tabs: { key: DataTabKey; label: string; shortLabel: string; icon: string; count: number }[] = [
+  // Configuración de las 6 pestañas del selector animado
+  const tabs: { key: DataTabKey; label: string; shortLabel: string; icon: string; count: number; badgeExtra?: string }[] = [
     {
       key: 'odontologos',
       label: 'Ingesta • Odontólogos',
@@ -1093,10 +1335,18 @@ export const ControlDataView: React.FC = () => {
     },
     {
       key: 'pacientes',
-      label: 'Control Pacientes en Reserva',
+      label: 'Padrón de Pacientes',
       shortLabel: 'Pacientes',
-      icon: 'calendar_month',
+      icon: 'groups',
       count: pacientes.length,
+    },
+    {
+      key: 'citas',
+      label: 'Control Citas Programadas',
+      shortLabel: 'Citas',
+      icon: 'event_available',
+      count: citas.length,
+      badgeExtra: citasPendientesCount > 0 ? `${citasPendientesCount} pend.` : undefined,
     },
     {
       key: 'tratamientos',
@@ -1107,8 +1357,8 @@ export const ControlDataView: React.FC = () => {
     },
     {
       key: 'condiciones',
-      label: 'Enfermedades & Condiciones Médicas',
-      shortLabel: 'Condiciones Médicas',
+      label: 'Enfermedades & Condiciones CIE',
+      shortLabel: 'Condiciones CIE',
       icon: 'health_and_safety',
       count: condicionesMedicas.length,
     },
@@ -1125,7 +1375,7 @@ export const ControlDataView: React.FC = () => {
       )}
 
       {/* =====================================================================
-          CABECERA HERO DE CONTROL DE DATA (Limpia + 5 KPIs Animados Clickeables)
+          CABECERA HERO DE CONTROL DE DATA (6 KPIs Animados y Clickeables)
          ===================================================================== */}
       <section className="bg-dental-deep-navy bg-gradient-to-r from-dental-ambient-bg via-dental-deep-navy to-primary rounded-3xl p-5 text-white shadow-[0_10px_30px_rgba(23,18,29,0.22)] border border-primary relative overflow-hidden">
         <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -1145,9 +1395,9 @@ export const ControlDataView: React.FC = () => {
             </div>
           </div>
 
-          {/* 5 KPIs Animados de Alto Impacto Visual (Clickeables para cambiar de pestaña) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 shrink-0">
-            {/* KPI 1: Pacientes en Reserva */}
+          {/* 6 KPIs Animados de Alto Impacto Visual (Clickeables para cambiar de pestaña) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 shrink-0">
+            {/* KPI 1: Pacientes en Padrón */}
             <button
               type="button"
               onClick={() => setActiveTab('pacientes')}
@@ -1160,21 +1410,48 @@ export const ControlDataView: React.FC = () => {
               <div className="flex items-center justify-center gap-1 mb-1">
                 <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
                 <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:rotate-12 transition-transform">
-                  person
+                  groups
                 </span>
               </div>
               <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
                 {pacientes.length}
               </span>
               <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Pacientes Citas
+                Padrón Pacientes
               </span>
               <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-status-success w-full rounded-full animate-pulse" />
               </div>
             </button>
 
-            {/* KPI 2: Odontólogos */}
+            {/* KPI 2: Citas Programadas */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('citas')}
+              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
+                activeTab === 'citas'
+                  ? 'bg-dental-deep-navy ring-2 ring-vibrant-cyan border-vibrant-cyan'
+                  : 'bg-dental-deep-navy/80 hover:bg-dental-deep-navy border border-border-subtle/30'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className={`w-2 h-2 rounded-full ${citasPendientesCount > 0 ? 'bg-status-warning animate-ping' : 'bg-status-success animate-ping'}`} />
+                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
+                  event_available
+                </span>
+              </div>
+              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
+                {citas.length}
+              </span>
+              <span className="text-[10px] text-surface-container font-bold block mt-1">
+                {citasPendientesCount > 0 ? `Citas (${citasPendientesCount} pend)` : 'Citas en Control'}
+              </span>
+              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
+                <div className={`h-full ${citasPendientesCount > 0 ? 'bg-status-warning' : 'bg-status-success'} w-full rounded-full animate-pulse`} />
+              </div>
+            </button>
+
+            {/* KPI 3: Odontólogos */}
             <button
               type="button"
               onClick={() => setActiveTab('odontologos')}
@@ -1201,7 +1478,7 @@ export const ControlDataView: React.FC = () => {
               </div>
             </button>
 
-            {/* KPI 3: Higienistas */}
+            {/* KPI 4: Higienistas */}
             <button
               type="button"
               onClick={() => setActiveTab('higienistas')}
@@ -1228,7 +1505,7 @@ export const ControlDataView: React.FC = () => {
               </div>
             </button>
 
-            {/* KPI 4: Tratamientos */}
+            {/* KPI 5: Tratamientos */}
             <button
               type="button"
               onClick={() => setActiveTab('tratamientos')}
@@ -1241,7 +1518,7 @@ export const ControlDataView: React.FC = () => {
               <div className="flex items-center justify-center gap-1 mb-1">
                 <span className="w-2 h-2 rounded-full bg-white animate-ping" />
                 <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
-                  medical_information
+                  table_chart
                 </span>
               </div>
               <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
@@ -1255,7 +1532,7 @@ export const ControlDataView: React.FC = () => {
               </div>
             </button>
 
-            {/* KPI 5: Condiciones Médicas Especiales */}
+            {/* KPI 6: Condiciones Médicas Especiales */}
             <button
               type="button"
               onClick={() => setActiveTab('condiciones')}
@@ -1286,12 +1563,12 @@ export const ControlDataView: React.FC = () => {
       </section>
 
       {/* =====================================================================
-          TARJETA SELECTOR ANIMADA DE PESTAÑAS (SEGMENTACIÓN MODERNA Y FLUIDA)
+          TARJETA SELECTOR ANIMADO DE PESTAÑAS (UNIFICADO, RESPONSIVO Y LEGIBLE EN MÓVIL)
          ===================================================================== */}
       <section className="bg-surface-clean-white rounded-3xl p-3 sm:p-3.5 shadow-soft-elevated border border-border-subtle relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-dental-deep-navy to-primary" />
         
-        <div className="flex items-center justify-between gap-3 mb-2 px-1">
+        <div className="flex items-center justify-between gap-3 mb-2.5 px-1">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[18px]">view_carousel</span>
             <span className="text-xs font-black uppercase tracking-wider text-dental-deep-navy">
@@ -1299,12 +1576,12 @@ export const ControlDataView: React.FC = () => {
             </span>
           </div>
           <span className="text-[11px] font-semibold text-secondary hidden sm:inline">
-            Selecciona una tarjeta para gestionar
+            Selecciona un módulo para visualizar y gestionar
           </span>
         </div>
 
-        {/* Barra de pestañas responsiva con scroll horizontal y feedback táctil */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        {/* Selector unificado de 6 pestañas en grid responsivo: 2 cols en móvil, 3 en tablet, 6 en desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -1312,9 +1589,9 @@ export const ControlDataView: React.FC = () => {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5 rounded-2xl text-xs font-bold transition-all duration-200 active:scale-95 shrink-0 select-none cursor-pointer border ${
+                className={`flex items-center gap-2 px-2.5 sm:px-3 py-2.5 rounded-2xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer border text-left min-w-0 ${
                   isActive
-                    ? 'bg-dental-deep-navy text-white shadow-lg border-dental-deep-navy ring-2 ring-primary/30'
+                    ? 'bg-dental-deep-navy text-white shadow-lg border-dental-deep-navy ring-2 ring-primary/40'
                     : 'bg-surface-subtle-ice text-dental-deep-navy hover:bg-surface-container border-border-subtle'
                 }`}
               >
@@ -1325,12 +1602,22 @@ export const ControlDataView: React.FC = () => {
                 >
                   <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
                 </div>
-                <div className="text-left">
-                  <span className="hidden md:inline block leading-tight">{tab.label}</span>
-                  <span className="md:hidden block leading-tight">{tab.shortLabel}</span>
+                <div className="min-w-0 flex-1 truncate">
+                  <span className="block text-[11px] font-bold truncate leading-tight">
+                    {tab.shortLabel}
+                  </span>
+                  {tab.badgeExtra ? (
+                    <span className="block text-[9px] font-extrabold text-status-warning truncate">
+                      {tab.badgeExtra}
+                    </span>
+                  ) : (
+                    <span className={`block text-[9px] font-medium truncate ${isActive ? 'text-surface-container' : 'text-secondary'}`}>
+                      {tab.count} reg.
+                    </span>
+                  )}
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-black transition-colors ${
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black shrink-0 transition-colors ${
                     isActive
                       ? 'bg-surface-container text-dental-deep-navy shadow-inner'
                       : 'bg-border-subtle/50 text-secondary'
@@ -2014,184 +2301,220 @@ export const ControlDataView: React.FC = () => {
       )}
 
       {/* ---------------------------------------------------------------------
-          SECCIÓN 03: CONTROL DE PACIENTES EN RESERVA DE CITAS
+          SECCIÓN 03: PADRÓN EXCLUSIVO DE PACIENTES (CRUD MAESTRO)
          --------------------------------------------------------------------- */}
       {activeTab === 'pacientes' && (
         <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
 
-          {/* Header Tarjeta Pacientes */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+          {/* Header Tarjeta Padrón de Pacientes */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-[22px]">calendar_month</span>
+              <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[22px]">groups</span>
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 03
+                    Tarjeta 03 • Maestro Clínico
                   </span>
                   <span className="text-[11px] text-secondary font-semibold">
-                    • Citas Web & Recepción ({pacientes.length})
+                    • Total Padrón ({pacientes.length})
                   </span>
                 </div>
                 <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Control de Pacientes en Reserva de Citas
+                  Padrón de Pacientes Registrados
                 </h2>
               </div>
             </div>
 
-            {showPacForm && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormPaciente();
-                  setShowPacForm(false);
+                  setShowPacForm(!showPacForm);
                 }}
-                className="px-2.5 py-1 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all"
+                className="px-3.5 py-2 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                Ocultar formulario
+                <span className="material-symbols-outlined text-[18px]">
+                  {showPacForm ? 'close' : 'person_add'}
+                </span>
+                <span>{showPacForm ? 'Cerrar Formulario' : 'Nuevo Paciente'}</span>
               </button>
-            )}
+            </div>
           </div>
 
-          {/* 1. Lista de Pacientes en Reserva de Citas (Arriba) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
-              <span>PACIENTES REGISTRADOS ({pacientes.length})</span>
-              <span>Toque para editar o cancelar</span>
+          {/* Barra de Búsqueda Rápida de Pacientes */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-subtle-ice p-3 rounded-2xl border border-border-subtle">
+            <div className="relative flex-1">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                value={pacSearchQuery}
+                onChange={(e) => setPacSearchQuery(e.target.value)}
+                placeholder="Buscar por cédula, nombre, teléfono o correo..."
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              {pacSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPacSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary hover:text-dental-deep-navy text-xs"
+                >
+                  ✕
+                </button>
+              )}
             </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-secondary px-1">
+              <span>Mostrando {pacientesFiltrados.length} de {pacientes.length}</span>
+            </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
-              {pacientes.map((p) => {
-                const getEstadoBadge = (estado?: string) => {
-                  switch (estado) {
-                    case 'confirmada':
-                      return 'bg-status-success/15 text-status-success';
-                    case 'en_sillon':
-                      return 'bg-primary/20 text-dental-deep-navy';
-                    case 'completada':
-                      return 'bg-secondary/15 text-secondary';
-                    case 'cancelada':
-                      return 'bg-status-danger/15 text-status-danger';
-                    default:
-                      return 'bg-status-warning/15 text-status-warning';
-                  }
-                };
+          {/* 1. Lista de Tarjetas de Pacientes */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+            {pacientesFiltrados.length === 0 ? (
+              <div className="col-span-full py-10 text-center text-secondary text-xs">
+                <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/50">person_search</span>
+                No se encontraron pacientes con el término "{pacSearchQuery}".
+              </div>
+            ) : (
+              pacientesFiltrados.map((p) => {
+                const edadStr = calcularEdad(p.fechaNacimiento);
+                const condicionEncontrada = condicionesMedicas.find((c) => c.id === p.condicionMedicaId);
+                const isSelected = editPacId === p.id;
 
                 return (
                   <div
                     key={p.id}
                     className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                      editPacId === p.id
-                        ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      isSelected
+                        ? 'bg-surface-container border-primary ring-2 ring-primary/30 shadow-md'
+                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container/70 hover:border-primary/40'
                     }`}
                   >
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-bold text-sm flex items-center justify-center shrink-0">
-                        {p.nombres.slice(0, 2).toUpperCase()}
+                    <div>
+                      {/* Top Header con Avatar y Sexo */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                            {p.nombres.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-xs text-dental-deep-navy truncate">
+                              {p.nombres}
+                            </h3>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono text-[11px] font-extrabold text-primary">
+                                {p.cedula}
+                              </span>
+                              <span className="text-[10px] text-secondary">•</span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                                p.sexo === 'Masculino'
+                                  ? 'bg-sky-100 text-sky-800'
+                                  : p.sexo === 'Femenino'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-purple-100 text-purple-800'
+                              }`}>
+                                {p.sexo || 'Femenino'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Badge de Sede */}
+                        <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy shrink-0">
+                          {p.sedeId === 'tovar' ? 'Sede Tovar' : p.sedeId === 'ambas' ? 'Ambas Sedes' : 'La Victoria'}
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-xs text-dental-deep-navy truncate">
-                            {p.nombres}
-                          </span>
-                          {p.esUrgencia && (
-                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-status-danger text-white">
-                              Urgencia
+
+                      {/* Datos Demográficos y de Contacto */}
+                      <div className="space-y-1.5 text-[11px] text-secondary mt-2 bg-white/70 p-2.5 rounded-xl border border-border-subtle/50">
+                        {p.fechaNacimiento && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-secondary font-medium">Nacimiento & Edad:</span>
+                            <span className="font-bold text-dental-deep-navy">
+                              {p.fechaNacimiento} {edadStr ? `(${edadStr})` : ''}
                             </span>
-                          )}
-                          <span
-                            className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${getEstadoBadge(
-                              p.estado
-                            )}`}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-secondary font-medium">WhatsApp / Móvil:</span>
+                          <a
+                            href={`https://wa.me/${(p.telefono || '').replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-bold text-primary hover:underline flex items-center gap-1"
                           >
-                            {p.estado || 'Pendiente'}
-                          </span>
+                            <span>{p.telefono}</span>
+                            <span className="material-symbols-outlined text-[13px] text-status-success">chat</span>
+                          </a>
                         </div>
-                        <p className="text-[11px] font-semibold text-primary truncate mt-0.5">
-                          {p.motivo || 'Evaluación General'}
-                        </p>
-                        <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
-                          <span className="font-mono font-bold text-dental-deep-navy">{p.cedula}</span>
-                          <span>•</span>
-                          <span>{p.telefono}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-secondary mt-0.5 flex-wrap">
-                          <span className="font-bold text-dental-deep-navy">
-                            📅 {p.fechaCita || 'Hoy'}
-                          </span>
-                          <span>•</span>
-                          <span>⏰ {p.horaInicio || '09:00 AM'}</span>
-                          <span>•</span>
-                          <span>Sede: {p.sedeId === 'victoria' ? 'La Victoria' : 'Tovar'}</span>
-                        </div>
-                        {p.doctorNombre && (
-                          <p className="text-[10px] font-semibold text-secondary truncate mt-1">
-                            Dr(a): {p.doctorNombre}
-                          </p>
+                        {p.email && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-secondary font-medium">Correo:</span>
+                            <span className="font-semibold text-dental-deep-navy truncate max-w-[160px]">
+                              {p.email}
+                            </span>
+                          </div>
                         )}
                       </div>
+
+                      {/* Condición Médica / Alerta Anamnesis */}
+                      {p.condicionMedicaId && p.condicionMedicaId !== 'ninguna' && (
+                        <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-status-danger/10 text-status-danger border border-status-danger/30 text-[10px] font-bold">
+                          <span className="material-symbols-outlined text-[14px]">medical_services</span>
+                          <span className="truncate">
+                            Alerta Médica: {condicionEncontrada ? `${condicionEncontrada.nombre} (${condicionEncontrada.codigoCie})` : p.condicionMedicaId}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center justify-end gap-1 pt-2 border-t border-border-subtle/60">
+                    {/* Botones de Acción */}
+                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-border-subtle/70">
                       <button
                         type="button"
                         onClick={() => handleEditarPaciente(p)}
-                        title="Editar datos del paciente"
-                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-secondary hover:text-dental-deep-navy active:scale-95"
+                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-dental-deep-navy hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
                       >
-                        <span className="material-symbols-outlined text-[15px]">edit</span>
+                        <span className="material-symbols-outlined text-[14px] text-primary">edit</span>
                         <span>Editar</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleEliminarPaciente(p.id, p.nombres)}
-                        title="Eliminar de reserva"
-                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-status-danger/80 hover:text-status-danger active:scale-95"
+                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-status-danger hover:bg-status-danger/10 active:scale-95 transition-all cursor-pointer"
                       >
-                        <span className="material-symbols-outlined text-[15px]">delete</span>
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
                         <span>Eliminar</span>
                       </button>
                     </div>
                   </div>
                 );
-              })}
-            </div>
-
-            {/* Botón para Desplegar Formulario */}
-            {!showPacForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarFormPaciente();
-                  setShowPacForm(true);
-                }}
-                className="w-full mt-3 py-3 px-4 rounded-2xl bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">person_add</span>
-                <span>Registrar Nuevo Paciente</span>
-              </button>
+              })
             )}
           </div>
 
-          {/* 2. Formulario Desplegable de Ingesta de Pacientes */}
+          {/* 2. Formulario Desplegable de Ingesta/Edición de Paciente */}
           {showPacForm && (
             <form
               onSubmit={handleGuardarPaciente}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice/60 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
+              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
-                  {editPacId ? 'Modificar Datos de Reserva' : 'Registrar Nuevo Paciente en Citas'}
+                  <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
+                  {editPacId ? 'Modificar Registro de Paciente' : 'Registrar Nuevo Paciente en Padrón'}
                 </span>
                 <span className="text-[10px] text-secondary font-semibold">
-                  * Campos requeridos se iluminan al escribir
+                  * Datos clínicos y de filiación canónicos
                 </span>
               </div>
 
+              {/* Fila 1: Nombres y Cédula */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
@@ -2202,7 +2525,7 @@ export const ControlDataView: React.FC = () => {
                     required
                     value={pacNombres}
                     onChange={(e) => setPacNombres(e.target.value)}
-                    placeholder="Ej. María Elena Delgado"
+                    placeholder="Ej. Raymond Gilbonio"
                     className={`h-10 ${getIlluminatedFieldClass(pacNombres.trim().length > 0)}`}
                   />
                 </div>
@@ -2210,17 +2533,67 @@ export const ControlDataView: React.FC = () => {
                   <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
                     Cédula de Identidad *
                   </label>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={pacCedulaTipo}
+                      onChange={(e) => setPacCedulaTipo(e.target.value as any)}
+                      className="w-20 h-10 rounded-xl border border-border-subtle bg-white text-xs font-black text-dental-deep-navy"
+                    >
+                      <option value="V">V-</option>
+                      <option value="E">E-</option>
+                      <option value="J">J-</option>
+                      <option value="G">G-</option>
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={pacCedulaNumero}
+                      onChange={(e) => setPacCedulaNumero(e.target.value)}
+                      placeholder="16762319"
+                      className={`flex-1 h-10 ${getIlluminatedFieldClass(pacCedulaNumero.trim().length > 0)}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fila 2: Sexo Biológico y Fecha de Nacimiento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                    Sexo Biológico *
+                  </label>
+                  <select
+                    value={pacSexo}
+                    onChange={(e) => setPacSexo(e.target.value as any)}
+                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSexo))}`}
+                  >
+                    <option value="Femenino">Femenino</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-dental-deep-navy">
+                      Fecha de Nacimiento *
+                    </label>
+                    {pacFechaNacimiento && (
+                      <span className="text-[10px] font-bold text-primary">
+                        {calcularEdad(pacFechaNacimiento)}
+                      </span>
+                    )}
+                  </div>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={pacCedula}
-                    onChange={(e) => setPacCedula(e.target.value)}
-                    placeholder="V-21.345.678"
-                    className={`h-10 ${getIlluminatedFieldClass(pacCedula.trim().length > 0)}`}
+                    value={pacFechaNacimiento}
+                    onChange={(e) => setPacFechaNacimiento(e.target.value)}
+                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacFechaNacimiento))}`}
                   />
                 </div>
               </div>
 
+              {/* Fila 3: Teléfono y Correo */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
@@ -2231,7 +2604,7 @@ export const ControlDataView: React.FC = () => {
                     required
                     value={pacTelefono}
                     onChange={(e) => setPacTelefono(e.target.value)}
-                    placeholder="+58 412-9876543"
+                    placeholder="04126841381"
                     className={`h-10 ${getIlluminatedFieldClass(pacTelefono.trim().length > 0)}`}
                   />
                 </div>
@@ -2243,117 +2616,50 @@ export const ControlDataView: React.FC = () => {
                     type="email"
                     value={pacEmail}
                     onChange={(e) => setPacEmail(e.target.value)}
-                    placeholder="paciente@gmail.com"
+                    placeholder="raymond.gilbonio@odontosaludlv.com"
                     className={`h-10 ${getIlluminatedFieldClass(pacEmail.trim().length > 0)}`}
                   />
                 </div>
               </div>
 
+              {/* Fila 4: Condición Médica y Sede Habitual */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Motivo de Consulta / Tratamiento *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={pacMotivo}
-                    onChange={(e) => setPacMotivo(e.target.value)}
-                    placeholder="Ej. Evaluación Integral / Dolor Molar"
-                    className={`h-10 ${getIlluminatedFieldClass(pacMotivo.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Doctor(a) Tratante *
+                    Condición Médica / Alerta Clínica (CIE)
                   </label>
                   <select
-                    value={pacDoctorNombre}
-                    onChange={(e) => setPacDoctorNombre(e.target.value)}
-                    className={`h-10 ${getIlluminatedFieldClass(pacDoctorNombre.trim().length > 0)}`}
+                    value={pacCondicionId}
+                    onChange={(e) => setPacCondicionId(e.target.value)}
+                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacCondicionId))}`}
                   >
-                    {odontologos.map((doc) => (
-                      <option key={doc.id} value={doc.nombres}>
-                        {doc.nombres}
+                    <option value="ninguna">Ninguna Condición Conocida</option>
+                    {condicionesMedicas.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre} ({c.codigoCie}) - Riesgo {c.nivelRiesgo}
                       </option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-center">
                 <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Fecha Cita</label>
-                  <input
-                    type="date"
-                    required
-                    value={pacFechaCita}
-                    onChange={(e) => setPacFechaCita(e.target.value)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(pacFechaCita))}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Hora Inicio</label>
-                  <select
-                    value={pacHoraInicio}
-                    onChange={(e) => setPacHoraInicio(e.target.value)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(pacHoraInicio))}`}
-                  >
-                    <option value="08:00 AM">08:00 AM</option>
-                    <option value="09:00 AM">09:00 AM</option>
-                    <option value="10:00 AM">10:00 AM</option>
-                    <option value="11:00 AM">11:00 AM</option>
-                    <option value="02:00 PM">02:00 PM</option>
-                    <option value="03:00 PM">03:00 PM</option>
-                    <option value="04:00 PM">04:00 PM</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
+                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                    Sede Habitual de Atención
+                  </label>
                   <select
                     value={pacSedeId}
                     onChange={(e) => setPacSedeId(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(pacSedeId))}`}
+                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSedeId))}`}
                   >
-                    <option value="victoria">La Victoria</option>
-                    <option value="tovar">Colonia Tovar</option>
+                    <option value="victoria">Sede La Victoria (Boxes 01 y 02)</option>
+                    <option value="tovar">Sede Colonia Tovar (Box 01)</option>
                     <option value="ambas">Ambas Sedes</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Estado</label>
-                  <select
-                    value={pacEstado}
-                    onChange={(e) => setPacEstado(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(pacEstado))}`}
-                  >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="confirmada">Confirmada</option>
-                    <option value="en_sillon">En Sillón</option>
-                    <option value="completada">Completada</option>
-                    <option value="cancelada">Cancelada</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center">
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-9 rounded-xl border border-border-subtle w-full justify-center mt-3 sm:mt-0">
-                    <input
-                      type="checkbox"
-                      checked={pacEsUrgencia}
-                      onChange={(e) => setPacEsUrgencia(e.target.checked)}
-                      className="w-4 h-4 accent-status-danger rounded"
-                    />
-                    <span>Es Urgencia</span>
-                  </label>
                 </div>
               </div>
 
               <button
                 type="submit"
-                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
                   isPacFormComplete
                     ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
                     : 'bg-primary hover:bg-dental-deep-navy shadow-md'
@@ -2363,11 +2669,328 @@ export const ControlDataView: React.FC = () => {
                   {isPacFormComplete ? 'verified' : 'person_add'}
                 </span>
                 <span>
-                  {isPacFormComplete ? 'Confirmar Paciente' : 'Registrar Nuevo Paciente'}
+                  {editPacId ? 'Confirmar Actualización de Paciente' : 'Guardar Paciente en Padrón'}
                 </span>
               </button>
             </form>
           )}
+        </section>
+      )}
+
+      {/* ---------------------------------------------------------------------
+          SECCIÓN 04: CONTROL DE CITAS PROGRAMADAS (APROBACIONES & MULTI-FILTRO)
+         --------------------------------------------------------------------- */}
+      {activeTab === 'citas' && (
+        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-vibrant-cyan" />
+
+          {/* Header Tarjeta Control de Citas */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[22px]">event_available</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
+                    Tarjeta 04 • Control Clínico
+                  </span>
+                  <span className="text-[11px] text-secondary font-semibold">
+                    • {citas.length} Programadas ({citasPendientesCount} por aprobar)
+                  </span>
+                </div>
+                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
+                  Control de Citas Programadas
+                </h2>
+              </div>
+            </div>
+
+            {/* Acción de Aprobación en Lote */}
+            {citasPendientesCount > 0 && (
+              <button
+                type="button"
+                onClick={handleAprobarTodasPendientes}
+                className="px-3.5 py-2 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-lg shadow-status-success/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer animate-bounce"
+              >
+                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span>Aprobar {citasPendientesCount} Pendientes</span>
+              </button>
+            )}
+          </div>
+
+          {/* Multi-Filtro Avanzado (Doctor, Paciente, Fecha, Tratamiento, Estado) */}
+          <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px] text-primary">filter_list</span>
+                Filtros Multicriterio de Citas
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCitasFiltroDoctor('todos');
+                  setCitasFiltroPaciente('');
+                  setCitasFiltroFecha('todas');
+                  setCitasFechaEspecifica('');
+                  setCitasFiltroTratamiento('todos');
+                  setCitasFiltroEstado('todos');
+                }}
+                className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+              >
+                Restablecer Filtros
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+              {/* Filtro 1: Doctor */}
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                  Filtrar por Odontólogo
+                </label>
+                <select
+                  value={citasFiltroDoctor}
+                  onChange={(e) => setCitasFiltroDoctor(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                >
+                  <option value="todos">Todos los Odontólogos</option>
+                  {odontologos.map((doc) => (
+                    <option key={doc.id} value={doc.nombres}>
+                      {doc.nombres}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro 2: Paciente */}
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                  Paciente (Nombre o Cédula)
+                </label>
+                <input
+                  type="text"
+                  value={citasFiltroPaciente}
+                  onChange={(e) => setCitasFiltroPaciente(e.target.value)}
+                  placeholder="Ej. Raymond o 16.762..."
+                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy px-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Filtro 3: Fecha */}
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                  Rango de Fecha
+                </label>
+                <select
+                  value={citasFiltroFecha}
+                  onChange={(e) => setCitasFiltroFecha(e.target.value as any)}
+                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                >
+                  <option value="todas">Todas las Fechas</option>
+                  <option value="hoy">Citas de Hoy</option>
+                  <option value="semana">Esta Semana</option>
+                  <option value="especifica">Fecha Específica...</option>
+                </select>
+              </div>
+
+              {/* Filtro 4: Tratamiento */}
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                  Tratamiento / Motivo
+                </label>
+                <select
+                  value={citasFiltroTratamiento}
+                  onChange={(e) => setCitasFiltroTratamiento(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                >
+                  <option value="todos">Todos los Tratamientos</option>
+                  {tratamientos.map((t) => (
+                    <option key={t.id} value={t.nombre}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro 5: Estado de Aprobación */}
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                  Estado de Cita
+                </label>
+                <select
+                  value={citasFiltroEstado}
+                  onChange={(e) => setCitasFiltroEstado(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy px-2"
+                >
+                  <option value="todos">Todos los Estados</option>
+                  <option value="pendiente">🟡 Pendiente de Aprobación</option>
+                  <option value="confirmada">🟢 Confirmada / Aprobada</option>
+                  <option value="en_sillon">🔵 En Sillón</option>
+                  <option value="completada">⚪ Completada</option>
+                  <option value="cancelada">🔴 Cancelada</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Input complementario si seleccionó Fecha Específica */}
+            {citasFiltroFecha === 'especifica' && (
+              <div className="flex items-center gap-2 pt-2 border-t border-border-subtle/50">
+                <span className="text-xs font-bold text-dental-deep-navy">Seleccionar fecha:</span>
+                <input
+                  type="date"
+                  value={citasFechaEspecifica}
+                  onChange={(e) => setCitasFechaEspecifica(e.target.value)}
+                  className="h-8 px-2.5 rounded-lg border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Listado de Citas Programadas */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
+              <span>CITAS ENCONTRADAS ({citasFiltradas.length})</span>
+              <span>Aprobación rápida & gestión de sillón</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto pr-1">
+              {citasFiltradas.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-secondary text-xs">
+                  <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/40">event_busy</span>
+                  No se encontraron citas con los filtros seleccionados.
+                </div>
+              ) : (
+                citasFiltradas.map((c) => {
+                  const isPendiente = c.estado === 'pendiente';
+                  const isConfirmada = c.estado === 'confirmada';
+                  const isEnSillon = c.estado === 'en_sillon';
+
+                  const badgeClass =
+                    c.estado === 'confirmada'
+                      ? 'bg-status-success/15 text-status-success border-status-success/30'
+                      : c.estado === 'en_sillon'
+                      ? 'bg-sky-100 text-sky-800 border-sky-300'
+                      : c.estado === 'completada'
+                      ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+                      : c.estado === 'cancelada'
+                      ? 'bg-status-danger/15 text-status-danger border-status-danger/30'
+                      : 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-300/50';
+
+                  const labelEstado =
+                    c.estado === 'confirmada'
+                      ? '🟢 Aprobada / Confirmada'
+                      : c.estado === 'en_sillon'
+                      ? '🔵 En Sillón'
+                      : c.estado === 'completada'
+                      ? '⚪ Completada'
+                      : c.estado === 'cancelada'
+                      ? '🔴 Cancelada'
+                      : '🟡 Pendiente de Aprobación';
+
+                  return (
+                    <div
+                      key={c.id}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                        isPendiente
+                          ? 'bg-amber-50/60 border-amber-300 shadow-sm'
+                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      }`}
+                    >
+                      <div>
+                        {/* Cabecera de la Cita */}
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${badgeClass}`}>
+                            {labelEstado}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {c.esUrgencia && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-status-danger text-white">
+                                Urgencia
+                              </span>
+                            )}
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy">
+                              {c.sedeId === 'tovar' ? 'Tovar (Box 01)' : `Victoria (Box 0${c.boxNumero || 1})`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Paciente y Cédula */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-8 h-8 rounded-lg bg-dental-deep-navy text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {c.pacienteNombre.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-xs text-dental-deep-navy truncate">
+                              {c.pacienteNombre}
+                            </h4>
+                            <div className="flex items-center gap-1.5 text-[10px] text-secondary">
+                              <span className="font-mono font-bold text-primary">{c.pacienteCedula}</span>
+                              {c.pacienteTelefono && (
+                                <>
+                                  <span>•</span>
+                                  <span>{c.pacienteTelefono}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ficha de la Cita (Fecha, Hora, Doctor, Motivo) */}
+                        <div className="bg-white/80 p-2.5 rounded-xl border border-border-subtle/50 text-[11px] space-y-1 mt-2">
+                          <div className="flex items-center justify-between font-bold text-dental-deep-navy">
+                            <span>📅 {c.fechaCita}</span>
+                            <span>⏰ {c.horaInicio}</span>
+                          </div>
+                          <div className="text-secondary font-medium truncate">
+                            👨‍⚕️ <span className="font-semibold text-dental-deep-navy">{c.doctorNombre}</span>
+                          </div>
+                          <div className="text-primary font-bold truncate">
+                            🦷 {c.motivo}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer de Acciones y Aprobación */}
+                      <div className="pt-2 border-t border-border-subtle/60 flex flex-col gap-2">
+                        {isPendiente && (
+                          <button
+                            type="button"
+                            onClick={() => handleAprobarCita(c)}
+                            className="w-full py-2 px-3 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                            <span>Aprobar Cita</span>
+                          </button>
+                        )}
+
+                        <div className="flex items-center justify-between gap-1.5">
+                          <select
+                            value={c.estado}
+                            onChange={(e) => handleCambiarEstadoCita(c, e.target.value as any)}
+                            className="flex-1 h-8 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-dental-deep-navy"
+                          >
+                            <option value="pendiente">🟡 Pendiente</option>
+                            <option value="confirmada">🟢 Confirmada</option>
+                            <option value="en_sillon">🔵 En Sillón</option>
+                            <option value="completada">⚪ Completada</option>
+                            <option value="cancelada">🔴 Cancelada</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarCita(c.id, c.pacienteNombre)}
+                            title="Eliminar cita"
+                            className="h-8 px-2.5 rounded-lg bg-white border border-border-subtle text-status-danger hover:bg-status-danger/10 text-xs font-bold active:scale-95 transition-all cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </section>
       )}
 
