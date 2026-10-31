@@ -633,6 +633,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       id: 'evaluacion',
       nombre: 'Evaluación & Diagnóstico Digital RVG',
       desc: '45 min • Inspección FDI y radiografía periapical',
+      duracionMin: 45,
       icon: 'dentistry',
       badge: 'Completa',
       isPopular: true,
@@ -641,12 +642,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       id: 'limpieza',
       nombre: 'Profilaxis Ultrasónica & Pulido Coronario',
       desc: '40 min • Destartraje ultrasónico y flúor',
+      duracionMin: 40,
       icon: 'clean_hands',
     },
     {
       id: 'urgencia',
       nombre: 'Urgencia Odontológica / Dolor Agudo',
       desc: '30 min • Alivio inmediato y atención prioritaria',
+      duracionMin: 30,
       icon: 'emergency',
       isUrgent: true,
     },
@@ -654,43 +657,181 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       id: 'ortodoncia',
       nombre: 'Control / Inicio de Ortodoncia',
       desc: '45 min • Brackets estéticos / autoligado',
+      duracionMin: 45,
       icon: 'grid_view',
     },
     {
       id: 'endodoncia',
       nombre: 'Endodoncia Microscópica',
       desc: '60 min • Terapia de conducto especializada',
+      duracionMin: 60,
       icon: 'vital_signs',
     },
     {
       id: 'estetica',
       nombre: 'Restauración Estética en Resina Nanohíbrida',
       desc: '45 min • Fotocurado estético y reconstrucción',
+      duracionMin: 45,
       icon: 'masks',
     },
   ];
 
-  const dates = [
-    { dia: 'JUE', num: '24', cupos: '5 cupos', status: 'active' },
-    { dia: 'VIE', num: '25', cupos: '1 cupo', status: 'warning' },
-    { dia: 'SÁB', num: '26', cupos: 'Disponible', status: 'success' },
-    { dia: 'LUN', num: '28', cupos: '4 cupos', status: 'success' },
-    { dia: 'MAR', num: '29', cupos: '3 cupos', status: 'success' },
-  ];
+  // Vista y Navegación de Fecha (Semanal de 6 días o Mensual con navegación de meses)
+  const [dateViewMode, setDateViewMode] = useState<'semanal' | 'mensual'>('semanal');
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => new Date(2024, 9, 24)); // Octubre 2024 como referencia clínica
 
+  // Detección de duración según tratamiento seleccionado (o 45 min por defecto)
+  const selectedTreatmentObj = treatments.find(
+    (t) => t.nombre.toLowerCase() === treatment.toLowerCase() || t.id === treatment
+  );
+  const duracionTratamientoMin = selectedTreatmentObj?.duracionMin || 45;
+
+  const calcularHoraFin = (horaInicio: string, minutos: number): string => {
+    try {
+      const [horaParte, ampm] = horaInicio.trim().split(' ');
+      const [hStr, mStr] = horaParte.split(':');
+      let h = parseInt(hStr, 10);
+      let m = parseInt(mStr, 10);
+      if (ampm === 'PM' && h < 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+
+      const totalMin = h * 60 + m + minutos;
+      let finH = Math.floor(totalMin / 60) % 24;
+      const finM = totalMin % 60;
+      const finAmpm = finH >= 12 ? 'PM' : 'AM';
+      if (finH > 12) finH -= 12;
+      if (finH === 0) finH = 12;
+
+      const padH = finH < 10 ? `0${finH}` : `${finH}`;
+      const padM = finM < 10 ? `0${finM}` : `${finM}`;
+      return `${padH}:${padM} ${finAmpm}`;
+    } catch {
+      return horaInicio;
+    }
+  };
+
+  // Turno Mañana Oficial Solicitado: 8:30 AM, 9:15 AM, 10:00 AM, 11:00 AM
   const morningSlots = [
-    { hora: '08:30 AM', sub: 'Libre' },
-    { hora: '09:00 AM', sub: selectedDoctor ? `Box 0${selectedDoctor.box}` : 'Libre' },
-    { hora: '10:30 AM', sub: 'Libre' },
-    { hora: '11:15 AM', sub: 'Libre' },
+    { hora: '08:30 AM', sub: 'Inicio matutino' },
+    { hora: '09:15 AM', sub: selectedDoctor ? `Box 0${selectedDoctor.box}` : 'Libre' },
+    { hora: '10:00 AM', sub: 'Libre' },
+    { hora: '11:00 AM', sub: 'Cierre matutino' },
   ];
 
+  // Turno Tarde Oficial Solicitado: 1:15 PM, 2:00 PM, 3:00 PM, 3:45 PM
   const afternoonSlots = [
-    { hora: '01:00 PM', sub: 'Nueva hora' },
-    { hora: '02:00 PM', sub: 'Libre' },
-    { hora: '03:15 PM', sub: 'Libre' },
-    { hora: '04:30 PM', sub: '1 Cita disp.' },
+    { hora: '01:15 PM', sub: 'Inicio vespertino' },
+    { hora: '02:00 PM', sub: selectedDoctor ? `Box 0${selectedDoctor.box}` : 'Libre' },
+    { hora: '03:00 PM', sub: 'Libre' },
+    { hora: '03:45 PM', sub: 'Cierre vespertino' },
   ];
+
+  const DIAS_SEMANA_6 = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+  const MESES_NOMBRES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  const MESES_ABR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+  // Obtiene los 6 días hábiles de la semana activa (LUN a SÁB) con cálculo visual de completitud
+  const getSemana6Dias = () => {
+    const base = new Date(currentMonthDate);
+    base.setDate(base.getDate() + weekOffset * 7);
+
+    const day = base.getDay();
+    const diff = base.getDate() - day + (day === 0 ? -6 : 1);
+    const lunes = new Date(base.getFullYear(), base.getMonth(), diff);
+
+    const semana = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(lunes);
+      d.setDate(lunes.getDate() + i);
+
+      const diaNum = d.getDate();
+      const cuposOcupados = [5, 3, 7, 2, 6, 4][(diaNum + i) % 6];
+      const cuposLibres = Math.max(1, 8 - cuposOcupados);
+      const porcentajeOcupacion = Math.round((cuposOcupados / 8) * 100);
+
+      let estado: 'disponible' | 'moderado' | 'critico' = 'disponible';
+      if (cuposLibres === 1) estado = 'critico';
+      else if (cuposLibres <= 3) estado = 'moderado';
+
+      semana.push({
+        dateObj: d,
+        diaSemana: DIAS_SEMANA_6[i],
+        numero: diaNum < 10 ? `0${diaNum}` : `${diaNum}`,
+        mesCorto: MESES_ABR[d.getMonth()],
+        fullString: `${DIAS_SEMANA_6[i]} ${diaNum} ${MESES_ABR[d.getMonth()]}`,
+        cuposLibres,
+        cuposOcupados,
+        porcentajeOcupacion,
+        estado,
+      });
+    }
+    return semana;
+  };
+
+  // Obtiene la matriz completa del mes con indicador de cupos
+  const getDiasDelMes = () => {
+    const year = currentMonthDate.getFullYear();
+    const month = currentMonthDate.getMonth();
+
+    const primerDia = new Date(year, month, 1);
+    const ultimoDia = new Date(year, month + 1, 0);
+    const diasEnMes = ultimoDia.getDate();
+
+    let startDayOfWeek = primerDia.getDay() - 1;
+    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+    const celdas = [];
+    for (let e = 0; e < startDayOfWeek; e++) {
+      celdas.push({ esVacio: true, id: `empty-${e}` } as any);
+    }
+
+    for (let d = 1; d <= diasEnMes; d++) {
+      const dateObj = new Date(year, month, d);
+      const dayOfWeek = dateObj.getDay();
+      const esDomingo = dayOfWeek === 0;
+
+      const diaSemanaStr = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'][dayOfWeek];
+      const mesCorto = MESES_ABR[month];
+      const fullString = `${diaSemanaStr} ${d} ${mesCorto}`;
+
+      const cuposOcupados = [5, 3, 7, 2, 6, 4][(d + dayOfWeek) % 6];
+      const cuposLibres = esDomingo ? 0 : Math.max(1, 8 - cuposOcupados);
+      const porcentajeOcupacion = esDomingo ? 100 : Math.round((cuposOcupados / 8) * 100);
+
+      let estado: 'disponible' | 'moderado' | 'critico' | 'cerrado' = 'disponible';
+      if (esDomingo) estado = 'cerrado';
+      else if (cuposLibres === 1) estado = 'critico';
+      else if (cuposLibres <= 3) estado = 'moderado';
+
+      celdas.push({
+        esVacio: false,
+        id: `day-${d}`,
+        numero: d < 10 ? `0${d}` : `${d}`,
+        diaSemana: diaSemanaStr,
+        mesCorto,
+        fullString,
+        esDomingo,
+        cuposLibres,
+        cuposOcupados,
+        porcentajeOcupacion,
+        estado,
+      });
+    }
+
+    return celdas;
+  };
+
+  const irMesAnterior = () => {
+    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const irMesSiguiente = () => {
+    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
 
   // Cálculo de Completitud en Vivo (5 Pasos: Sede 20% + Doctor 20% + Tratamiento 20% + Horario 20% + Paciente 20% = 100%)
   const calculateProgress = () => {
@@ -802,6 +943,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     );
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
   };
+
+  const semana6Dias = getSemana6Dias();
+  const diasDelMes = getDiasDelMes();
 
   return (
     <div className="flex flex-col gap-4 pb-44">
@@ -1614,6 +1758,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           ref={datetimeCardRef}
           className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 animate-in fade-in slide-in-from-top-3 duration-300 scroll-mt-4"
         >
+          {/* Cabecera */}
           <div className="flex items-center justify-between border-b border-border-subtle pb-3">
             <div>
               <div className="flex items-center gap-1.5">
@@ -1631,74 +1776,328 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             </span>
           </div>
 
-          <p className="text-xs text-secondary">
-            Selecciona el día y la hora que prefieras. Al tocar un horario, avanzarás directamente al paso final.
-          </p>
-
-          {/* Carrusel Horizontal de Días */}
-          <div>
-            <span className="text-xs font-bold text-dental-deep-navy block mb-2">1. Selecciona el Día:</span>
-            <div className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar">
-              {dates.map((d) => {
-                const dateStr = `${d.dia} ${d.num} Oct`;
-                const isSelected = selectedDate.includes(d.num);
-                return (
-                  <button
-                    key={d.num}
-                    type="button"
-                    onClick={() => setSelectedDate(dateStr)}
-                    className={`shrink-0 w-16 py-3 px-1 rounded-2xl text-center transition-all flex flex-col items-center gap-0.5 active:scale-95 cursor-pointer ${
-                      isSelected
-                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/40'
-                        : 'bg-surface-subtle-ice border border-border-subtle hover:bg-surface-container'
-                    }`}
-                  >
-                    <span
-                      className={`text-[11px] font-semibold ${
-                        isSelected ? 'text-surface-container' : 'text-secondary'
-                      }`}
-                    >
-                      {d.dia}
-                    </span>
-                    <span
-                      className={`text-lg font-extrabold ${
-                        isSelected ? 'text-white' : 'text-dental-deep-navy'
-                      }`}
-                    >
-                      {d.num}
-                    </span>
-                    <span
-                      className={`text-[9px] font-bold ${
-                        isSelected ? 'text-status-success' : 'text-status-success'
-                      }`}
-                    >
-                      {d.cupos}
-                    </span>
-                  </button>
-                );
-              })}
+          {/* Banner Informativo de Ajuste de Horarios según Duración Estimada de Tratamiento */}
+          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 flex items-start gap-3 shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+              <span className="material-symbols-outlined text-[19px]">schedule</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase font-black tracking-wider text-primary bg-white px-2 py-0.5 rounded-md border border-primary/30 shadow-2xs">
+                  ⏱️ Duración Estimada: {duracionTratamientoMin} min
+                </span>
+                <span className="text-xs font-bold text-dental-deep-navy truncate">
+                  {treatment || 'Evaluación Odontológica Integral'}
+                </span>
+              </div>
+              <p className="text-[11px] text-secondary mt-1 leading-snug">
+                Atención con <strong className="text-dental-deep-navy">{selectedDoctor ? selectedDoctor.nombre : 'Odontólogo Asignado'}</strong> (Box 0{selectedDoctor ? selectedDoctor.box : 1}). Los turnos de atención se bloquean automáticamente según el tiempo requerido en sillón clínico.
+              </p>
             </div>
           </div>
 
-          {/* Turno Mañana */}
+          {/* ===================================================================
+              SECCIÓN 1: SELECCIONA EL DÍA (VISIÓN SEMANAL DE 6 DÍAS / MENSUAL)
+             =================================================================== */}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-xs font-bold text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
+                1. Selecciona el Día:
+              </span>
+
+              {/* Conmutador de Vistas: Visión Semanal de 6 Días vs Cupos del Mes */}
+              <div className="inline-flex p-1 bg-surface-subtle-ice border border-border-subtle rounded-2xl text-[11px] font-bold shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setDateViewMode('semanal')}
+                  className={`px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    dateViewMode === 'semanal'
+                      ? 'bg-dental-deep-navy text-white shadow-xs'
+                      : 'text-secondary hover:text-dental-deep-navy'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">view_week</span>
+                  <span>Semana (6 Días)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateViewMode('mensual')}
+                  className={`px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    dateViewMode === 'mensual'
+                      ? 'bg-dental-deep-navy text-white shadow-xs'
+                      : 'text-secondary hover:text-dental-deep-navy'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">calendar_view_month</span>
+                  <span>Cupos del Mes</span>
+                </button>
+              </div>
+            </div>
+
+            {/* VISTA 1: VISIÓN SEMANAL DE 6 DÍAS CON INDICADOR VISUAL DE COMPLETITUD */}
+            {dateViewMode === 'semanal' && (
+              <div className="flex flex-col gap-2">
+                {/* Barra de Navegación de Semanas */}
+                <div className="flex items-center justify-between bg-surface-subtle-ice px-3 py-2 rounded-2xl border border-border-subtle text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setWeekOffset((prev) => prev - 1)}
+                    className="px-2.5 py-1 rounded-xl bg-white border border-border-subtle hover:bg-surface-container font-bold text-dental-deep-navy flex items-center gap-1 cursor-pointer transition-all active:scale-95 text-[11px] shadow-2xs"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">chevron_left</span>
+                    <span>Anterior</span>
+                  </button>
+
+                  <div className="text-center font-bold text-dental-deep-navy text-xs">
+                    <span className="text-secondary text-[11px] font-normal mr-1">Rango Semanal:</span>
+                    <strong className="text-dental-deep-navy">
+                      {semana6Dias[0]?.numero} {semana6Dias[0]?.mesCorto} — {semana6Dias[5]?.numero} {semana6Dias[5]?.mesCorto}
+                    </strong>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {weekOffset !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setWeekOffset(0)}
+                        className="px-2 py-1 rounded-xl bg-primary/10 text-primary font-bold hover:bg-primary hover:text-white transition-all text-[10px] cursor-pointer"
+                      >
+                        Semana Base
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset((prev) => prev + 1)}
+                      className="px-2.5 py-1 rounded-xl bg-white border border-border-subtle hover:bg-surface-container font-bold text-dental-deep-navy flex items-center gap-1 cursor-pointer transition-all active:scale-95 text-[11px] shadow-2xs"
+                    >
+                      <span>Siguiente</span>
+                      <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grilla de los 6 Días Hábiles (Lunes a Sábado) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {semana6Dias.map((d) => {
+                    const isSelected =
+                      selectedDate === d.fullString ||
+                      (selectedDate.includes(d.numero) && selectedDate.includes(d.diaSemana));
+                    return (
+                      <button
+                        key={d.fullString}
+                        type="button"
+                        onClick={() => setSelectedDate(d.fullString)}
+                        className={`p-3 rounded-2xl text-center transition-all flex flex-col items-center gap-1.5 active:scale-95 cursor-pointer relative border ${
+                          isSelected
+                            ? 'bg-dental-deep-navy text-white shadow-lg ring-2 ring-primary border-primary'
+                            : 'bg-white border-border-subtle hover:border-primary/40 hover:bg-surface-subtle-ice text-dental-deep-navy'
+                        }`}
+                      >
+                        <span className={`text-[11px] font-black tracking-wider uppercase ${isSelected ? 'text-primary/90' : 'text-secondary'}`}>
+                          {d.diaSemana}
+                        </span>
+                        <span className={`text-2xl font-black tabular-nums leading-none ${isSelected ? 'text-white' : 'text-dental-deep-navy'}`}>
+                          {d.numero}
+                        </span>
+                        <span className={`text-[10px] font-semibold ${isSelected ? 'text-white/80' : 'text-secondary'}`}>
+                          {d.mesCorto}
+                        </span>
+
+                        {/* Indicador Muy Visual de Completitud de Cupos */}
+                        <div className="w-full pt-1.5 border-t border-border-subtle/50 flex flex-col items-center gap-1">
+                          <span
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                              d.estado === 'critico'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : d.estado === 'moderado'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            } ${isSelected ? '!bg-white/15 !text-white !border-white/30' : ''}`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                d.estado === 'critico'
+                                  ? 'bg-rose-500 animate-pulse'
+                                  : d.estado === 'moderado'
+                                  ? 'bg-amber-500'
+                                  : 'bg-emerald-500'
+                              }`}
+                            />
+                            {d.cuposLibres} {d.cuposLibres === 1 ? 'libre' : 'libres'}
+                          </span>
+
+                          {/* Barra Visual de Completitud / Ocupación */}
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                d.estado === 'critico'
+                                  ? 'bg-rose-500'
+                                  : d.estado === 'moderado'
+                                  ? 'bg-amber-500'
+                                  : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${d.porcentajeOcupacion}%` }}
+                            />
+                          </div>
+                          <span className={`text-[8px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
+                            {d.porcentajeOcupacion}% ocupado
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* VISTA 2: CUPOS DEL MES CON FLECHAS DE NAVEGACIÓN (MES ANTERIOR / FUTURO) */}
+            {dateViewMode === 'mensual' && (
+              <div className="bg-surface-subtle-ice p-3.5 sm:p-4 rounded-2xl border border-border-subtle flex flex-col gap-3">
+                {/* Cabecera del Mes con Flechas */}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={irMesAnterior}
+                    className="w-9 h-9 rounded-xl bg-white border border-border-subtle flex items-center justify-center text-dental-deep-navy hover:bg-surface-container font-bold active:scale-95 cursor-pointer shadow-xs transition-all"
+                    title="Mes Anterior"
+                  >
+                    <span className="material-symbols-outlined text-[19px]">chevron_left</span>
+                  </button>
+
+                  <div className="text-center">
+                    <span className="font-display font-extrabold text-sm sm:text-base text-dental-deep-navy block">
+                      {MESES_NOMBRES[currentMonthDate.getMonth()]} {currentMonthDate.getFullYear()}
+                    </span>
+                    <span className="text-[10px] text-secondary">
+                      Toca un día para revisar cupos y turnos disponibles
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={irMesSiguiente}
+                    className="w-9 h-9 rounded-xl bg-white border border-border-subtle flex items-center justify-center text-dental-deep-navy hover:bg-surface-container font-bold active:scale-95 cursor-pointer shadow-xs transition-all"
+                    title="Mes Siguiente"
+                  >
+                    <span className="material-symbols-outlined text-[19px]">chevron_right</span>
+                  </button>
+                </div>
+
+                {/* Leyenda de Disponibilidad Mensual */}
+                <div className="flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap text-[10px] border-y border-border-subtle/80 py-1.5 bg-white/70 rounded-xl">
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-800">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Alta Disp. ({'>'}4 cupos)
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-amber-800">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    Pocos Cupos (2-3)
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-rose-800">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    Último Cupo (1)
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-slate-500">
+                    <span className="w-2 h-2 rounded-full bg-slate-300" />
+                    Domingo (Cerrado)
+                  </span>
+                </div>
+
+                {/* Cuadrícula de 7 Columnas del Mes */}
+                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center">
+                  {/* Días Cabecera */}
+                  {['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'].map((nom) => (
+                    <div key={nom} className="text-[10px] font-black text-secondary py-1">
+                      {nom}
+                    </div>
+                  ))}
+
+                  {/* Celdas del Calendario Mensual */}
+                  {diasDelMes.map((c: any) => {
+                    if (c.esVacio) {
+                      return <div key={c.id} className="h-12 rounded-xl" />;
+                    }
+
+                    const isSelected =
+                      selectedDate === c.fullString ||
+                      (selectedDate.includes(c.numero) && selectedDate.includes(c.diaSemana));
+
+                    if (c.esDomingo) {
+                      return (
+                        <div
+                          key={c.id}
+                          className="h-12 rounded-xl bg-slate-100/70 border border-slate-200/50 flex flex-col items-center justify-center text-slate-400 select-none"
+                          title="Domingo cerrado"
+                        >
+                          <span className="text-[11px] font-bold">{c.numero}</span>
+                          <span className="text-[8px] font-semibold">Cerrado</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedDate(c.fullString)}
+                        className={`h-12 rounded-xl transition-all flex flex-col items-center justify-center cursor-pointer active:scale-95 border ${
+                          isSelected
+                            ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary border-primary'
+                            : 'bg-white border-border-subtle hover:bg-surface-container text-dental-deep-navy'
+                        }`}
+                      >
+                        <span className={`text-[12px] font-bold ${isSelected ? 'text-white' : 'text-dental-deep-navy'}`}>
+                          {c.numero}
+                        </span>
+                        <span
+                          className={`text-[8px] font-black px-1.5 py-0.2 rounded-full ${
+                            c.estado === 'critico'
+                              ? 'bg-rose-100 text-rose-800'
+                              : c.estado === 'moderado'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          } ${isSelected ? '!bg-white/20 !text-white' : ''}`}
+                        >
+                          {c.cuposLibres} lib
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ===================================================================
+              SECCIÓN 2: TURNOS MATUTINOS Y VESPERTINOS CON AJUSTE DE DURACIÓN
+             =================================================================== */}
+
+          {/* Turno Mañana: 08:30 AM, 09:15 AM, 10:00 AM, 11:00 AM */}
           <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle">
             <div className="flex items-center gap-1.5 mb-2.5">
               <span className="material-symbols-outlined text-amber-500 text-[18px]">
                 wb_sunny
               </span>
               <span className="text-xs font-bold text-dental-deep-navy">Turno Mañana</span>
-              <span className="text-[10px] text-secondary ml-auto">Recomendado</span>
+              <span className="text-[10px] text-secondary ml-auto">
+                08:30 AM — 11:00 AM
+              </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {morningSlots.map((slot) => {
                 const isSelected = selectedSlot === slot.hora;
+                const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
                 return (
                   <button
                     key={slot.hora}
                     type="button"
                     onClick={() => {
                       setSelectedSlot(slot.hora);
-                      if (!selectedDate) setSelectedDate('JUE 24 Oct');
+                      if (!selectedDate) {
+                        const sem = getSemana6Dias();
+                        setSelectedDate(sem[0]?.fullString || 'JUE 24 Oct');
+                      }
                       if (pacienteEncontrado && nombres.trim()) {
                         setOpenStep(null);
                         setTimeout(() => {
@@ -1717,13 +2116,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         : 'bg-white border border-border-subtle text-dental-deep-navy hover:bg-surface-container'
                     }`}
                   >
-                    <span>{slot.hora}</span>
+                    <span className="text-xs font-black">{slot.hora}</span>
                     <span
-                      className={`text-[9px] truncate max-w-full ${
-                        isSelected ? 'text-white/80' : 'text-secondary'
+                      className={`text-[9px] truncate max-w-full font-medium ${
+                        isSelected ? 'text-white/80' : 'text-primary'
                       }`}
                     >
-                      {slot.sub}
+                      Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
                     </span>
                   </button>
                 );
@@ -1731,25 +2130,31 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             </div>
           </div>
 
-          {/* Turno Tarde */}
+          {/* Turno Tarde: 01:15 PM, 02:00 PM, 03:00 PM, 03:45 PM */}
           <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle">
             <div className="flex items-center gap-1.5 mb-2.5">
               <span className="material-symbols-outlined text-indigo-500 text-[18px]">
                 wb_twilight
               </span>
               <span className="text-xs font-bold text-dental-deep-navy">Turno Tarde</span>
-              <span className="text-[10px] text-primary font-bold ml-auto">1:00 PM Disponible</span>
+              <span className="text-[10px] text-primary font-bold ml-auto">
+                01:15 PM — 03:45 PM
+              </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {afternoonSlots.map((slot) => {
                 const isSelected = selectedSlot === slot.hora;
+                const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
                 return (
                   <button
                     key={slot.hora}
                     type="button"
                     onClick={() => {
                       setSelectedSlot(slot.hora);
-                      if (!selectedDate) setSelectedDate('JUE 24 Oct');
+                      if (!selectedDate) {
+                        const sem = getSemana6Dias();
+                        setSelectedDate(sem[0]?.fullString || 'JUE 24 Oct');
+                      }
                       if (pacienteEncontrado && nombres.trim()) {
                         setOpenStep(null);
                         setTimeout(() => {
@@ -1768,13 +2173,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         : 'bg-white border border-border-subtle text-dental-deep-navy hover:bg-surface-container'
                     }`}
                   >
-                    <span>{slot.hora}</span>
+                    <span className="text-xs font-black">{slot.hora}</span>
                     <span
-                      className={`text-[9px] truncate max-w-full ${
-                        isSelected ? 'text-white/80' : 'text-secondary'
+                      className={`text-[9px] truncate max-w-full font-medium ${
+                        isSelected ? 'text-white/80' : 'text-primary'
                       }`}
                     >
-                      {slot.sub}
+                      Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
                     </span>
                   </button>
                 );
