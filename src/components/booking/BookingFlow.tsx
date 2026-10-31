@@ -833,6 +833,50 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
+  // Escala de afluencia por horario en virtud del día elegido (Verde: Menos solicitado, Ámbar: Moderado, Índigo: Más solicitado)
+  const getDemandaTurno = (hora: string, fechaElegida: string) => {
+    const cleanNum = parseInt(fechaElegida.replace(/[^0-9]/g, '') || '24', 10);
+    const horasMenosSolicitadas = ['08:30 AM', '02:00 PM'];
+    const horasModeradas = ['09:15 AM', '03:45 PM'];
+
+    const esDiaPar = cleanNum % 2 === 0;
+
+    let nivel: 'baja' | 'media' | 'alta' = 'baja';
+    if (horasMenosSolicitadas.includes(hora)) {
+      nivel = esDiaPar ? 'baja' : 'media';
+    } else if (horasModeradas.includes(hora)) {
+      nivel = esDiaPar ? 'media' : 'baja';
+    } else {
+      nivel = 'alta';
+    }
+
+    if (nivel === 'baja') {
+      return {
+        nivel: 'baja',
+        etiqueta: 'Menos solicitado',
+        bordeColor: 'border-t-emerald-500',
+        badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        dotColor: 'bg-emerald-500',
+      };
+    } else if (nivel === 'media') {
+      return {
+        nivel: 'media',
+        etiqueta: 'Demanda media',
+        bordeColor: 'border-t-amber-500',
+        badgeBg: 'bg-amber-50 text-amber-800 border-amber-200',
+        dotColor: 'bg-amber-500',
+      };
+    } else {
+      return {
+        nivel: 'alta',
+        etiqueta: 'Más solicitado',
+        bordeColor: 'border-t-indigo-500',
+        badgeBg: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+        dotColor: 'bg-indigo-500',
+      };
+    }
+  };
+
   // Cálculo de Completitud en Vivo (5 Pasos: Sede 20% + Doctor 20% + Tratamiento 20% + Horario 20% + Paciente 20% = 100%)
   const calculateProgress = () => {
     let p = 0;
@@ -1877,8 +1921,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   </div>
                 </div>
 
-                {/* Grilla de los 6 Días Hábiles (Lunes a Sábado) */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {/* Grilla de los 6 Días Hábiles: 2 filas x 3 columnas en móvil (grid-cols-3) y 6 columnas en desktop (sm:grid-cols-6) */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
                   {semana6Dias.map((d) => {
                     const isSelected =
                       selectedDate === d.fullString ||
@@ -1888,61 +1932,75 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         key={d.fullString}
                         type="button"
                         onClick={() => setSelectedDate(d.fullString)}
-                        className={`p-3 rounded-2xl text-center transition-all flex flex-col items-center gap-1.5 active:scale-95 cursor-pointer relative border ${
+                        className={`p-2 sm:p-2.5 rounded-2xl text-center transition-all flex flex-col items-center justify-between active:scale-95 cursor-pointer relative overflow-hidden border ${
                           isSelected
                             ? 'bg-dental-deep-navy text-white shadow-lg ring-2 ring-primary border-primary'
-                            : 'bg-white border-border-subtle hover:border-primary/40 hover:bg-surface-subtle-ice text-dental-deep-navy'
+                            : 'bg-white border-border-subtle hover:border-primary/40 hover:bg-surface-subtle-ice text-dental-deep-navy shadow-2xs'
                         }`}
                       >
-                        <span className={`text-[11px] font-black tracking-wider uppercase ${isSelected ? 'text-primary/90' : 'text-secondary'}`}>
-                          {d.diaSemana}
-                        </span>
-                        <span className={`text-2xl font-black tabular-nums leading-none ${isSelected ? 'text-white' : 'text-dental-deep-navy'}`}>
-                          {d.numero}
-                        </span>
-                        <span className={`text-[10px] font-semibold ${isSelected ? 'text-white/80' : 'text-secondary'}`}>
-                          {d.mesCorto}
-                        </span>
+                        {/* Barra indicadora vertical en sentido de borde izquierdo con animación sutil */}
+                        <span
+                          className={`absolute left-0 top-0 bottom-0 w-1.5 sm:w-2 rounded-l-2xl transition-all duration-300 ${
+                            d.estado === 'critico'
+                              ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)] animate-pulse'
+                              : d.estado === 'moderado'
+                              ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                              : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                          }`}
+                        />
 
-                        {/* Indicador Muy Visual de Completitud de Cupos */}
-                        <div className="w-full pt-1.5 border-t border-border-subtle/50 flex flex-col items-center gap-1">
+                        {/* Contenido de alta legibilidad */}
+                        <div className="w-full pl-2 sm:pl-2.5 flex flex-col items-center justify-center">
                           <span
-                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                              d.estado === 'critico'
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : d.estado === 'moderado'
-                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            } ${isSelected ? '!bg-white/15 !text-white !border-white/30' : ''}`}
+                            className={`text-[11px] sm:text-xs font-black tracking-wider uppercase ${
+                              isSelected ? 'text-primary' : 'text-secondary'
+                            }`}
                           >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                d.estado === 'critico'
-                                  ? 'bg-rose-500 animate-pulse'
-                                  : d.estado === 'moderado'
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                              }`}
-                            />
-                            {d.cuposLibres} {d.cuposLibres === 1 ? 'libre' : 'libres'}
+                            {d.diaSemana}
+                          </span>
+                          <span
+                            className={`text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none my-0.5 ${
+                              isSelected ? 'text-white' : 'text-dental-deep-navy'
+                            }`}
+                          >
+                            {d.numero}
+                          </span>
+                          <span
+                            className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider ${
+                              isSelected ? 'text-white/80' : 'text-secondary'
+                            }`}
+                          >
+                            {d.mesCorto}
                           </span>
 
-                          {/* Barra Visual de Completitud / Ocupación */}
-                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${
+                          {/* Etiqueta explícita de citas libres con alto contraste */}
+                          <div className="w-full pt-1.5 border-t border-border-subtle/50 mt-1 flex flex-col items-center gap-0.5">
+                            <span
+                              className={`text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 leading-tight text-center ${
                                 d.estado === 'critico'
-                                  ? 'bg-rose-500'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                   : d.estado === 'moderado'
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${d.porcentajeOcupacion}%` }}
-                            />
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              } ${isSelected ? '!bg-white/20 !text-white !border-white/30' : ''}`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  d.estado === 'critico'
+                                    ? 'bg-rose-500 animate-pulse'
+                                    : d.estado === 'moderado'
+                                    ? 'bg-amber-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                              />
+                              <span className="truncate">
+                                {d.cuposLibres} {d.cuposLibres === 1 ? 'cita libre' : 'citas libres'}
+                              </span>
+                            </span>
+                            <span className={`text-[8px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
+                              {d.porcentajeOcupacion}% ocupado
+                            </span>
                           </div>
-                          <span className={`text-[8px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
-                            {d.porcentajeOcupacion}% ocupado
-                          </span>
                         </div>
                       </button>
                     );
@@ -2059,7 +2117,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                               : 'bg-emerald-100 text-emerald-800'
                           } ${isSelected ? '!bg-white/20 !text-white' : ''}`}
                         >
-                          {c.cuposLibres} lib
+                          {c.cuposLibres} {c.cuposLibres === 1 ? 'cita libre' : 'citas libres'}
                         </span>
                       </button>
                     );
@@ -2070,8 +2128,30 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           </div>
 
           {/* ===================================================================
-              SECCIÓN 2: TURNOS MATUTINOS Y VESPERTINOS CON AJUSTE DE DURACIÓN
+              SECCIÓN 2: TURNOS MATUTINOS Y VESPERTINOS CON ESCALA DE COLOR
              =================================================================== */}
+
+          {/* Leyenda Orientativa en Escala de Color para los Horarios según el Día Elegido */}
+          <div className="flex items-center justify-between flex-wrap gap-2 text-[10px] text-secondary bg-surface-subtle-ice px-3.5 py-2.5 rounded-2xl border border-border-subtle shadow-2xs">
+            <span className="font-extrabold text-dental-deep-navy flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-primary">speed</span>
+              Afluencia estimada para {selectedDate || 'el día seleccionado'}:
+            </span>
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Menos solicitado (Tranquilo)
+              </span>
+              <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                Demanda moderada
+              </span>
+              <span className="inline-flex items-center gap-1.5 font-bold text-indigo-800 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                Más solicitado (Pico)
+              </span>
+            </div>
+          </div>
 
           {/* Turno Mañana: 08:30 AM, 09:15 AM, 10:00 AM, 11:00 AM */}
           <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle">
@@ -2084,10 +2164,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 08:30 AM — 11:00 AM
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {morningSlots.map((slot) => {
                 const isSelected = selectedSlot === slot.hora;
                 const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
+                const demanda = getDemandaTurno(slot.hora, selectedDate);
                 return (
                   <button
                     key={slot.hora}
@@ -2110,20 +2191,32 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         }, 80);
                       }
                     }}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center cursor-pointer active:scale-95 ${
+                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between cursor-pointer active:scale-95 border-x border-b border-t-4 relative ${demanda.bordeColor} ${
                       isSelected
-                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30'
-                        : 'bg-white border border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
+                        : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
                     }`}
                   >
-                    <span className="text-xs font-black">{slot.hora}</span>
-                    <span
-                      className={`text-[9px] truncate max-w-full font-medium ${
-                        isSelected ? 'text-white/80' : 'text-primary'
-                      }`}
-                    >
-                      Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
-                    </span>
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="text-sm font-black tabular-nums">{slot.hora}</span>
+                      <span
+                        className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                          isSelected ? '!bg-white/20 !text-white !border-white/30' : demanda.badgeBg
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${demanda.dotColor}`} />
+                        {demanda.etiqueta}
+                      </span>
+                    </div>
+
+                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50">
+                      <span className={`font-semibold truncate ${isSelected ? 'text-white/80' : 'text-primary'}`}>
+                        Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
+                      </span>
+                      <span className={`text-[9px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
+                        {slot.sub}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
@@ -2141,10 +2234,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 01:15 PM — 03:45 PM
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {afternoonSlots.map((slot) => {
                 const isSelected = selectedSlot === slot.hora;
                 const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
+                const demanda = getDemandaTurno(slot.hora, selectedDate);
                 return (
                   <button
                     key={slot.hora}
@@ -2167,20 +2261,32 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         }, 80);
                       }
                     }}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center cursor-pointer active:scale-95 ${
+                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between cursor-pointer active:scale-95 border-x border-b border-t-4 relative ${demanda.bordeColor} ${
                       isSelected
-                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30'
-                        : 'bg-white border border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
+                        : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
                     }`}
                   >
-                    <span className="text-xs font-black">{slot.hora}</span>
-                    <span
-                      className={`text-[9px] truncate max-w-full font-medium ${
-                        isSelected ? 'text-white/80' : 'text-primary'
-                      }`}
-                    >
-                      Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
-                    </span>
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="text-sm font-black tabular-nums">{slot.hora}</span>
+                      <span
+                        className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                          isSelected ? '!bg-white/20 !text-white !border-white/30' : demanda.badgeBg
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${demanda.dotColor}`} />
+                        {demanda.etiqueta}
+                      </span>
+                    </div>
+
+                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50">
+                      <span className={`font-semibold truncate ${isSelected ? 'text-white/80' : 'text-primary'}`}>
+                        Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
+                      </span>
+                      <span className={`text-[9px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
+                        {slot.sub}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
