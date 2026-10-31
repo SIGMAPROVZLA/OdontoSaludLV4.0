@@ -348,7 +348,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<string>('');
 
-  const [cedulaTipo, setCedulaTipo] = useState<'V' | 'E' | 'J' | 'P'>('V');
+  const [cedulaTipo, setCedulaTipo] = useState<'V' | 'E' | 'J' | 'G' | 'P'>('V');
   const [cedulaNumero, setCedulaNumero] = useState<string>('');
   const [nombres, setNombres] = useState<string>('');
   const [sexo, setSexo] = useState<'Femenino' | 'Masculino' | 'Otro' | ''>('');
@@ -363,7 +363,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
   // 3. Modal Login Emergente con Validación de Cédula y Delay de 2 Segundos
   const [showAuthModal, setShowAuthModal] = useState<boolean>(true);
-  const [authCedulaTipo, setAuthCedulaTipo] = useState<'V' | 'E' | 'J' | 'P'>('V');
+  const [authCedulaTipo, setAuthCedulaTipo] = useState<'V' | 'E' | 'J' | 'G' | 'P'>('V');
   const [authCedulaInput, setAuthCedulaInput] = useState<string>('');
   const [authStatus, setAuthStatus] = useState<'idle' | 'validating' | 'verified' | 'not_found'>('idle');
   const [pacienteEncontrado, setPacienteEncontrado] = useState<PacienteItem | null>(null);
@@ -469,7 +469,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     const rawCedula = pacienteEncontrado.cedula || '';
     if (rawCedula.includes('-')) {
       const [tipo, num] = rawCedula.split('-');
-      if (['V', 'E', 'J', 'P'].includes(tipo.toUpperCase())) {
+      if (['V', 'E', 'J', 'G', 'P'].includes(tipo.toUpperCase())) {
         setCedulaTipo(tipo.toUpperCase() as any);
       }
       setCedulaNumero(num.trim());
@@ -845,7 +845,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
               />
               <div className="min-w-0">
                 <h2 className="font-display font-extrabold text-lg sm:text-xl text-dental-deep-navy leading-snug">
-                  Valida tú Identidad 😊👍
+                  Registrate y Valida tu Identidad 😊👍
                 </h2>
                 <p className="text-xs text-secondary mt-0.5">
                   Ingresa tu cédula para consultar tu historial clínico y agilizar tu turno.
@@ -874,7 +874,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   <option value="V">V-</option>
                   <option value="E">E-</option>
                   <option value="J">J-</option>
-                  <option value="P">P-</option>
+                  <option value="G">G-</option>
                 </select>
 
                 <div className="relative flex-1">
@@ -1873,7 +1873,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 <option value="V">V-</option>
                 <option value="E">E-</option>
                 <option value="J">J-</option>
-                <option value="P">P-</option>
+                <option value="G">G-</option>
               </select>
               <input
                 type="text"
