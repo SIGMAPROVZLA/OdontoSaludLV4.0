@@ -877,8 +877,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     onClick={handleContinuarPacienteRegistrado}
                     className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[18px]">calendar_add_on</span>
-                    <span>Solicitar Nueva Cita</span>
+                    <span className="material-symbols-outlined text-[18px]">verified</span>
+                    <span>Confirmar Datos y Continuar</span>
                   </button>
                 </div>
               )}
@@ -1041,6 +1041,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   <span className="text-[10px] font-bold uppercase tracking-wider text-secondary block">Profesional Asignado</span>
                   <span className="text-xs sm:text-sm font-bold text-dental-deep-navy leading-snug block">
                     {selectedDoctor ? selectedDoctor.nombre : 'Asignado'} <span className="text-secondary font-medium text-xs">(Box 0{selectedDoctor ? selectedDoctor.box : 1})</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Sede OdontoSalud */}
+              <div className="flex items-start gap-3 pt-2.5 pb-1">
+                <span className="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">location_on</span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-secondary block">Sede OdontoSalud</span>
+                  <span className="text-xs sm:text-sm font-bold text-dental-deep-navy leading-snug block">
+                    {selectedSedeId ? SEDES_DISPONIBLES[selectedSedeId].nombre : sedeActiva.nombre}
+                  </span>
+                  <span className="text-[10px] text-secondary block">
+                    {selectedSedeId ? SEDES_DISPONIBLES[selectedSedeId].direccion : sedeActiva.direccion}
                   </span>
                 </div>
               </div>
@@ -1582,10 +1596,17 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     onClick={() => {
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) setSelectedDate('JUE 24 Oct');
-                      setOpenStep('patient');
-                      setTimeout(() => {
-                        patientCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }, 80);
+                      if (pacienteEncontrado && nombres.trim()) {
+                        setOpenStep(null);
+                        setTimeout(() => {
+                          summaryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 80);
+                      } else {
+                        setOpenStep('patient');
+                        setTimeout(() => {
+                          patientCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 80);
+                      }
                     }}
                     className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center cursor-pointer active:scale-95 ${
                       isSelected
@@ -1626,10 +1647,17 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     onClick={() => {
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) setSelectedDate('JUE 24 Oct');
-                      setOpenStep('patient');
-                      setTimeout(() => {
-                        patientCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }, 80);
+                      if (pacienteEncontrado && nombres.trim()) {
+                        setOpenStep(null);
+                        setTimeout(() => {
+                          summaryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 80);
+                      } else {
+                        setOpenStep('patient');
+                        setTimeout(() => {
+                          patientCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 80);
+                      }
                     }}
                     className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center cursor-pointer active:scale-95 ${
                       isSelected
