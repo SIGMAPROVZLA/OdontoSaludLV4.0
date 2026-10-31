@@ -61,7 +61,7 @@ const INITIAL_ODONTOLOGOS_FALLBACK: OdontologoItem[] = [
     telefono: '+58 424-3349011',
     email: 'v.paez@odontosalud.ve',
     sedeId: 'victoria',
-    boxAsignado: 3,
+    boxAsignado: 1,
     turno: 'Tarde',
     porcentajeHonorarios: 45,
     estado: 'en_guardia',
@@ -720,7 +720,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   </span>
                   <span>✨ Bienvenidos a OdontoSalud La Victoria y Colonia Tovar · La Clínica Odontológica de la familia victoriana y coloniera ✨</span>
                   <span className="text-primary font-black">✦</span>
-                  <span>📍 Sedes en La Victoria y La Colonia Tovar con equipamiento digital RVG 2.0 y bioseguridad certificada</span>
+                  <span>📍 Sedes en La Victoria (C.C. Márquez del Toro) y La Colonia Tovar (C. C San Martín de Tours) con equipamiento digital RVG 2.0 y bioseguridad certificada</span>
                   <span className="text-primary font-black">✦</span>
                   <span className="inline-flex items-center gap-1 font-mono font-bold text-primary bg-white px-2 py-0.5 rounded-lg border border-border-subtle/60 shadow-2xs">
                     <span className="material-symbols-outlined text-[13px] text-primary">schedule</span>
@@ -728,7 +728,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   </span>
                   <span>✨ Bienvenidos a OdontoSalud La Victoria y Colonia Tovar · La Clínica Odontológica de la familia victoriana y coloniera ✨</span>
                   <span className="text-primary font-black">✦</span>
-                  <span>📍 Sedes en La Victoria y La Colonia Tovar con equipamiento digital RVG 2.0 y bioseguridad certificada</span>
+                  <span>📍 Sedes en La Victoria (C.C. Márquez del Toro) y La Colonia Tovar (C. C San Martín de Tours) con equipamiento digital RVG 2.0 y bioseguridad certificada</span>
                 </div>
               </div>
             </div>
@@ -1166,7 +1166,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             </span>
             <span>✨ Bienvenidos a OdontoSalud La Victoria y Colonia Tovar · La Clínica Odontológica de la familia victoriana y coloniera ✨</span>
             <span className="text-primary font-black">✦</span>
-            <span>📍 Atención Integral en Sede La Victoria (C.C. Márquez del Toro) y Sede La Colonia Tovar (C.C. Manantial)</span>
+            <span>📍 Atención Integral en Sede La Victoria (C.C. Márquez del Toro) y Sede La Colonia Tovar (C. C San Martín de Tours)</span>
             <span className="text-primary font-black">✦</span>
             <span className="inline-flex items-center gap-1 font-mono font-bold text-primary bg-white px-2 py-0.5 rounded-lg border border-border-subtle/60 shadow-2xs">
               <span className="material-symbols-outlined text-[13px] text-primary">schedule</span>
@@ -1174,7 +1174,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             </span>
             <span>✨ Bienvenidos a OdontoSalud La Victoria y Colonia Tovar · La Clínica Odontológica de la familia victoriana y coloniera ✨</span>
             <span className="text-primary font-black">✦</span>
-            <span>📍 Atención Integral en Sede La Victoria (C.C. Márquez del Toro) y Sede La Colonia Tovar (C.C. Manantial)</span>
+            <span>📍 Atención Integral en Sede La Victoria (C.C. Márquez del Toro) y Sede La Colonia Tovar (C. C San Martín de Tours)</span>
           </div>
         </div>
       </div>
@@ -1240,7 +1240,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   OdontoSalud La Victoria
                 </h3>
                 <p className="text-xs text-primary font-bold mt-0.5">
-                  Sede Principal • Boxes 1 al 4 & Cirugía RVG
+                  Sede Principal • Boxes 1 y 2 & Cirugía RVG
                 </p>
                 <p className="text-[11px] text-secondary mt-1 flex items-start gap-1">
                   <span className="material-symbols-outlined text-[15px] text-primary shrink-0 mt-0.5">pin_drop</span>
@@ -1251,7 +1251,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
               <div className="pt-2 border-t border-border-subtle/60 flex items-center justify-between text-[11px]">
                 <span className="text-secondary flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px] text-status-success">medical_services</span>
-                  <span>4 Boxes Clínicos & RVG 2.0</span>
+                  <span>2 Boxes Clínicos & RVG 2.0</span>
                 </span>
                 <span className="font-bold text-primary group-hover:translate-x-1 transition-transform inline-flex items-center gap-0.5">
                   <span>Seleccionar</span>
@@ -1291,18 +1291,18 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   OdontoSalud La Colonia Tovar
                 </h3>
                 <p className="text-xs text-status-success font-bold mt-0.5">
-                  Sucursal • Atención Integral & Ortodoncia
+                  Sucursal • Box Clínico & Atención Integral
                 </p>
                 <p className="text-[11px] text-secondary mt-1 flex items-start gap-1">
                   <span className="material-symbols-outlined text-[15px] text-status-success shrink-0 mt-0.5">pin_drop</span>
-                  <span>C. C. Manantial, Sector La Ballesta, Colonia Tovar, Aragua</span>
+                  <span>Casco Central, Av. Codazzi, C. C San Martín de Tours, Planta Alta, Local N° 7</span>
                 </p>
               </div>
 
               <div className="pt-2 border-t border-border-subtle/60 flex items-center justify-between text-[11px]">
                 <span className="text-secondary flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px] text-status-success">forest</span>
-                  <span>2 Boxes Clínicos & Montaña</span>
+                  <span>1 Box Clínico & Montaña</span>
                 </span>
                 <span className="font-bold text-status-success group-hover:translate-x-1 transition-transform inline-flex items-center gap-0.5">
                   <span>Seleccionar</span>
@@ -1966,7 +1966,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     {selectedSedeId === 'tovar' ? 'La Colonia Tovar' : 'La Victoria'}
                   </p>
                   <span className="text-[10px] text-secondary truncate block">
-                    {selectedSedeId === 'tovar' ? 'Sector La Ballesta' : 'C.C. Márquez del Toro'}
+                    {selectedSedeId === 'tovar' ? 'C. C San Martín de Tours, P.A. Local 7' : 'C.C. Márquez del Toro, PB Local 18'}
                   </span>
                 </div>
               </div>

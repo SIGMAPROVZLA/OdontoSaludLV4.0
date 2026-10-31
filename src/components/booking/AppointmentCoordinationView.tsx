@@ -76,7 +76,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       motivo: 'Profilaxis & Destartraje ultrasónico completo',
       fechaTexto: 'Mañana',
       horaTexto: '10:30 AM',
-      boxSugerido: 3,
+      boxSugerido: 1,
       doctorSugerido: 'Higienista Dental',
       estado: 'confirmada',
       tiempoTranscurrido: 'Ayer 18:30',

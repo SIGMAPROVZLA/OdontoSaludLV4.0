@@ -49,7 +49,7 @@ const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
     telefono: '+58 424-3349011',
     email: 'v.paez@odontosalud.ve',
     sedeId: 'victoria',
-    boxAsignado: 3,
+    boxAsignado: 1,
     turno: 'Tarde',
     porcentajeHonorarios: 45,
     estado: 'en_guardia',

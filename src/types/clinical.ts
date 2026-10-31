@@ -7,6 +7,7 @@ export interface SedeInfo {
   direccion: string;
   telefono: string;
   whatsapp: string;
+  email: string;
   totalBoxes: number;
 }
 

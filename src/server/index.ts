@@ -252,8 +252,8 @@ app.get('/api/dashboard/pulse', async (c) => {
     minutosTranscurridos: c.estado === 'en_sillon' ? 20 : undefined,
   }));
 
-  // Generar estado de Boxes según la capacidad de la sede
-  const totalBoxes = sedeId === 'victoria' ? 4 : 2;
+  // Generar estado de Boxes según la capacidad de la sede (La Victoria: 2 Boxes, Colonia Tovar: 1 Box)
+  const totalBoxes = sedeId === 'victoria' ? 2 : 1;
   const boxes = Array.from({ length: totalBoxes }, (_, i) => {
     const num = i + 1;
     const ocupado = (boxesOcupados.results || []).find((b: any) => b.box_numero === num);
@@ -267,7 +267,7 @@ app.get('/api/dashboard/pulse', async (c) => {
     }
     return {
       boxNumero: num,
-      estado: num === 3 ? 'limpieza' : 'disponible',
+      estado: 'disponible',
     };
   });
 

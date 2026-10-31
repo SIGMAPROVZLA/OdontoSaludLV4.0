@@ -76,8 +76,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
       pacienteNombre: 'Carlos Morales',
       pacienteCedula: 'V-18.776.321',
       pacienteTelefono: '+58 412-7771122',
-      doctorNombre: 'Dr. Silva',
-      boxNumero: 3,
+      doctorNombre: 'Dr. Carlos Mendoza',
+      boxNumero: 2,
       fechaCita: '2024-10-23',
       horaInicio: '11:45 AM',
       motivo: 'Exodoncia Simple Molar #38',
@@ -86,13 +86,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
     },
   ];
 
-  const filteredCitas = citasMock.filter((c) => {
-    if (selectedBox === 'all') return true;
-    if (selectedBox === 'box1') return c.boxNumero === 1;
-    if (selectedBox === 'box2') return c.boxNumero === 2;
-    if (selectedBox === 'box3') return c.boxNumero === 3;
-    return true;
-  });
+  const filteredCitas = citasMock
+    .filter((c) => c.boxNumero <= sedeActiva.totalBoxes)
+    .filter((c) => {
+      if (selectedBox === 'all') return true;
+      if (selectedBox === 'box1') return c.boxNumero === 1;
+      if (selectedBox === 'box2') return c.boxNumero === 2;
+      return true;
+    });
 
   return (
     <div className="flex flex-col gap-3.5 pb-28">
@@ -106,7 +107,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed text-xs font-bold">
           <span className="material-symbols-outlined text-[14px]">chair</span>
-          <span>3/4 Sillones Ocupados</span>
+          <span>{Math.min(sedeActiva.totalBoxes, 1)}/{sedeActiva.totalBoxes} {sedeActiva.totalBoxes === 1 ? 'Sillón Ocupado' : 'Sillones Ocupados'}</span>
         </div>
       </div>
 
@@ -161,7 +162,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
         </div>
       </div>
 
-      {/* Filtros Horizontales por Box */}
+      {/* Filtros Horizontales por Box según capacidad de la sede */}
       <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         <button
           type="button"
@@ -172,7 +173,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
               : 'bg-surface-clean-white border border-border-subtle text-dental-deep-navy'
           }`}
         >
-          Todos ({citasMock.length})
+          Todos ({filteredCitas.length})
         </button>
 
         <button
@@ -185,34 +186,23 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-vibrant-cyan" />
-          Box 1 (Dra. Domínguez)
+          Box 1 ({sedeActiva.id === 'tovar' ? 'Atención Integral' : 'Dra. Domínguez'})
         </button>
 
-        <button
-          type="button"
-          onClick={() => setSelectedBox('box2')}
-          className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
-            selectedBox === 'box2'
-              ? 'bg-primary text-surface-clean-white shadow-sm'
-              : 'bg-surface-clean-white border border-border-subtle text-dental-deep-navy'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-status-success" />
-          Box 2 (Ortodoncia)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSelectedBox('box3')}
-          className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
-            selectedBox === 'box3'
-              ? 'bg-primary text-surface-clean-white shadow-sm'
-              : 'bg-surface-clean-white border border-border-subtle text-dental-deep-navy'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-status-warning" />
-          Box 3 (Cirugía)
-        </button>
+        {sedeActiva.totalBoxes >= 2 && (
+          <button
+            type="button"
+            onClick={() => setSelectedBox('box2')}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
+              selectedBox === 'box2'
+                ? 'bg-primary text-surface-clean-white shadow-sm'
+                : 'bg-surface-clean-white border border-border-subtle text-dental-deep-navy'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-status-success" />
+            Box 2 (Ortodoncia & Estética)
+          </button>
+        )}
       </div>
 
       {/* Timeline Stream de Citas del Día */}
