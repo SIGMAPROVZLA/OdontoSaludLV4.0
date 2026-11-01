@@ -28,6 +28,7 @@ export interface ToothRecord {
   nombre: string;
   surfaces: ToothSurfaces;
   isAbsent?: boolean;
+  procedimientoGeneral?: 'ninguno' | 'endodoncia' | 'exodoncia' | 'corona';
   diagnostico?: string;
   actualizadoPor?: string;
   updatedAt?: string;
@@ -255,5 +256,29 @@ export interface LiquidarHonorariosRequest {
   ids: string[];
   referencia: string;
   fechaLiquidacion?: string;
+}
+
+export interface EvolucionClinicaItem {
+  id: string;
+  pacienteId: string;
+  citaId?: string;
+  odontologoId?: string;
+  odontologoNombre: string;
+  piezaFdi?: number;
+  texto: string;
+  indicacionesReceta?: string;
+  fecha?: string;
+  createdAt?: string;
+}
+
+export interface RadiografiaItem {
+  id: string;
+  pacienteId: string;
+  piezaFdi?: number;
+  tipo: 'periapical_rvg' | 'panoramica' | 'foto_intraoral';
+  r2StorageUrl?: string;
+  imagenData?: string;
+  observaciones?: string;
+  fechaToma: string;
 }
 

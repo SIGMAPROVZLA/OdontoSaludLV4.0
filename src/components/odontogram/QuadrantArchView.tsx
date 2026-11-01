@@ -6,11 +6,18 @@ import { ToothEditorModal } from './ToothEditorModal';
 interface QuadrantArchViewProps {
   teeth: ToothRecord[];
   onUpdateTooth: (updatedTooth: ToothRecord) => void;
+  ultimaModificacion?: {
+    fecha?: string;
+    doctor?: string;
+  };
+  isNuevoOdontograma?: boolean;
 }
 
 export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
   teeth,
   onUpdateTooth,
+  ultimaModificacion,
+  isNuevoOdontograma = false,
 }) => {
   const [selectedTooth, setSelectedTooth] = useState<ToothRecord | null>(() => {
     return teeth.find((t) => t.numeroFdi === 16) || teeth[0] || null;
@@ -23,6 +30,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
         numeroFdi: fdi,
         nombre: `Pieza ${fdi}`,
         surfaces: { V: 'sano', M: 'sano', O: 'sano', D: 'sano', L: 'sano' },
+        procedimientoGeneral: 'ninguno',
       }
     );
   };
@@ -43,6 +51,29 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     onUpdateTooth(updatedTooth);
   };
 
+  const toggleProcedimientoGeneral = (tipo: 'endodoncia' | 'exodoncia') => {
+    if (!selectedTooth) return;
+    const nuevo = selectedTooth.procedimientoGeneral === tipo ? 'ninguno' : tipo;
+    const updated: ToothRecord = {
+      ...selectedTooth,
+      procedimientoGeneral: nuevo,
+      updatedAt: new Date().toISOString(),
+    };
+    setSelectedTooth(updated);
+    onUpdateTooth(updated);
+  };
+
+  const toggleAusente = () => {
+    if (!selectedTooth) return;
+    const updated: ToothRecord = {
+      ...selectedTooth,
+      isAbsent: !selectedTooth.isAbsent,
+      updatedAt: new Date().toISOString(),
+    };
+    setSelectedTooth(updated);
+    onUpdateTooth(updated);
+  };
+
   // Cuadrantes FDI
   const q1 = [18, 17, 16, 15, 14, 13, 12, 11];
   const q2 = [21, 22, 23, 24, 25, 26, 27, 28];
@@ -50,47 +81,76 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
   const q3 = [31, 32, 33, 34, 35, 36, 37, 38];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 animate-in fade-in duration-300">
       {/* Contenedor Odontograma Clínico Interactivo FDI */}
-      <div className="bg-surface-clean-white rounded-2xl p-space-md shadow-sm border border-border-subtle flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+      <div className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <span className="text-[11px] font-bold text-tertiary uppercase tracking-wider block">
-              Inspección Clínica
-            </span>
-            <h3 className="font-display font-bold text-lg text-dental-deep-navy">
-              Odontograma FDI Activo
-            </h3>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[22px]">dentistry</span>
+              <h3 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy">
+                Odontograma FDI Activo
+              </h3>
+            </div>
+            <p className="text-xs text-secondary mt-0.5">
+              Inspección clínica dental de 5 caras con indicación de Endodoncia y Exodoncia
+            </p>
           </div>
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-low text-secondary text-xs font-semibold">
-            <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">
-              touch_app
-            </span>
-            <span>Toque una pieza</span>
+
+          {/* Badge de Última Modificación */}
+          <div className="shrink-0 flex items-center gap-1.5">
+            {ultimaModificacion?.fecha ? (
+              <span className="text-[11px] font-bold text-dental-deep-navy bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs">
+                <span className="material-symbols-outlined text-[14px] text-primary">history</span>
+                <span>Últ. Modificación: {ultimaModificacion.fecha}</span>
+                {ultimaModificacion.doctor && (
+                  <span className="text-secondary font-medium">({ultimaModificacion.doctor})</span>
+                )}
+              </span>
+            ) : isNuevoOdontograma ? (
+              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs animate-pulse">
+                <span className="material-symbols-outlined text-[14px] text-emerald-600">new_releases</span>
+                <span>Odontograma Inicial en Blanco</span>
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold text-secondary bg-surface-subtle-ice px-2.5 py-1 rounded-full border border-border-subtle">
+                Sincronizado con D1
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Leyenda clínica de estados */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 bg-surface-subtle-ice p-2.5 rounded-xl border border-border-subtle">
+        {/* Leyenda clínica de estados enriquecida con Endodoncia y Exodoncia */}
+        <div className="flex flex-wrap items-center gap-2 bg-surface-subtle-ice p-2.5 rounded-xl border border-border-subtle text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-status-success shrink-0" />
-            <span className="text-xs text-on-surface truncate">Sano</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-status-success shrink-0" />
+            <span className="text-[11px] font-semibold text-dental-deep-navy">Sano</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-status-danger shrink-0" />
-            <span className="text-xs text-on-surface truncate">Caries Activa</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-status-danger shrink-0" />
+            <span className="text-[11px] font-semibold text-dental-deep-navy">Caries</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-electric-blue shrink-0" />
-            <span className="text-xs text-on-surface truncate">Resina / Obt.</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-electric-blue shrink-0" />
+            <span className="text-[11px] font-semibold text-dental-deep-navy">Resina / Obt.</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-status-warning shrink-0" />
-            <span className="text-xs text-on-surface truncate">Corona / Prot.</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-status-warning shrink-0" />
+            <span className="text-[11px] font-semibold text-dental-deep-navy">Corona / Prot.</span>
+          </div>
+          {/* Selector Especial: Endodoncia */}
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-purple-100 border border-purple-300 text-purple-900 shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-600 shrink-0 ring-1 ring-white" />
+            <span className="text-[11px] font-bold">⚡ Endodoncia (Conducto)</span>
+          </div>
+          {/* Selector Especial: Exodoncia */}
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-rose-100 border border-rose-300 text-rose-900 shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0 ring-1 ring-white" />
+            <span className="text-[11px] font-bold">✕ Exodoncia (Extracción)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-outline-variant shrink-0" />
-            <span className="text-xs text-on-surface truncate">Ausente</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+            <span className="text-[11px] font-semibold text-secondary">Ausente</span>
           </div>
         </div>
 
@@ -136,6 +196,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                     fdi={fdi}
                     surfaces={tooth.surfaces}
                     isAbsent={tooth.isAbsent}
+                    procedimientoGeneral={tooth.procedimientoGeneral}
                     isSelected={selectedTooth?.numeroFdi === fdi}
                     onSelectTooth={handleSelectTooth}
                     onSelectFace={handleSelectFace}
@@ -152,6 +213,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                     fdi={fdi}
                     surfaces={tooth.surfaces}
                     isAbsent={tooth.isAbsent}
+                    procedimientoGeneral={tooth.procedimientoGeneral}
                     isSelected={selectedTooth?.numeroFdi === fdi}
                     onSelectTooth={handleSelectTooth}
                     onSelectFace={handleSelectFace}
@@ -186,6 +248,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                     fdi={fdi}
                     surfaces={tooth.surfaces}
                     isAbsent={tooth.isAbsent}
+                    procedimientoGeneral={tooth.procedimientoGeneral}
                     isSelected={selectedTooth?.numeroFdi === fdi}
                     onSelectTooth={handleSelectTooth}
                     onSelectFace={handleSelectFace}
@@ -202,6 +265,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                     fdi={fdi}
                     surfaces={tooth.surfaces}
                     isAbsent={tooth.isAbsent}
+                    procedimientoGeneral={tooth.procedimientoGeneral}
                     isSelected={selectedTooth?.numeroFdi === fdi}
                     onSelectTooth={handleSelectTooth}
                     onSelectFace={handleSelectFace}
@@ -212,29 +276,40 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
           </div>
         </div>
 
-        {/* Tarjeta Detalle de Hallazgo Seleccionado */}
+        {/* Tarjeta Detalle de Hallazgo Seleccionado con Botones Rápidos */}
         {selectedTooth && (
-          <div className="bg-surface-subtle-ice rounded-xl p-3.5 flex items-center justify-between gap-3 border border-border-subtle">
+          <div className="bg-surface-subtle-ice rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-border-subtle">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-1.5 bg-surface-clean-white rounded-xl shadow-sm border border-border-subtle shrink-0">
                 <AnatomicalToothSvg
                   fdi={selectedTooth.numeroFdi}
                   surfaces={selectedTooth.surfaces}
                   isAbsent={selectedTooth.isAbsent}
+                  procedimientoGeneral={selectedTooth.procedimientoGeneral}
                   size="sm"
                 />
               </div>
 
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-display font-bold text-sm text-dental-deep-navy">
-                    Pieza {selectedTooth.numeroFdi}
+                  <span className="font-display font-extrabold text-sm text-dental-deep-navy">
+                    Pieza FDI {selectedTooth.numeroFdi}
                   </span>
+                  {selectedTooth.procedimientoGeneral === 'endodoncia' && (
+                    <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 font-bold text-[10px]">
+                      ⚡ Endodoncia Indicada
+                    </span>
+                  )}
+                  {selectedTooth.procedimientoGeneral === 'exodoncia' && (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[10px]">
+                      ✕ Exodoncia Indicada
+                    </span>
+                  )}
                   <span className="px-2 py-0.5 rounded-full bg-surface-container text-primary font-semibold text-[10px]">
                     {selectedTooth.isAbsent ? 'Ausente' : 'Inspeccionada'}
                   </span>
                 </div>
-                <p className="text-xs text-secondary mt-0.5 line-clamp-2">
+                <p className="text-xs text-secondary mt-0.5 line-clamp-1">
                   {selectedTooth.diagnostico || 'Esmalte íntegro, sin signos patológicos'}
                 </p>
                 <div className="flex items-center gap-1.5 text-[10px] text-primary mt-1 font-semibold">
@@ -248,14 +323,57 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              aria-label="Editar diagnóstico por caras de la pieza"
-              className="w-10 h-10 rounded-xl bg-primary text-surface-clean-white flex items-center justify-center hover:bg-primary-container transition-all shrink-0 shadow-sm active:scale-95"
-            >
-              <span className="material-symbols-outlined text-[20px]">tune</span>
-            </button>
+            {/* Botones de Acción Rápida para la Pieza */}
+            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center flex-wrap">
+              <button
+                type="button"
+                onClick={() => toggleProcedimientoGeneral('endodoncia')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                  selectedTooth.procedimientoGeneral === 'endodoncia'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-surface-clean-white border border-purple-300 text-purple-800 hover:bg-purple-50'
+                }`}
+                title="Marcar o desmarcar Endodoncia en esta pieza"
+              >
+                <span>⚡ Endo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleProcedimientoGeneral('exodoncia')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                  selectedTooth.procedimientoGeneral === 'exodoncia'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-surface-clean-white border border-rose-300 text-rose-800 hover:bg-rose-50'
+                }`}
+                title="Marcar o desmarcar Exodoncia en esta pieza"
+              >
+                <span>✕ Exo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleAusente}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                  selectedTooth.isAbsent
+                    ? 'bg-slate-700 text-white shadow-xs'
+                    : 'bg-surface-clean-white border border-border-subtle text-secondary hover:bg-surface-container'
+                }`}
+                title="Marcar como ausente o presente"
+              >
+                <span>Ausente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                aria-label="Editar diagnóstico por caras de la pieza"
+                className="px-3 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-surface-clean-white text-xs font-bold transition-all shrink-0 shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+                <span>Editar Caras</span>
+              </button>
+            </div>
           </div>
         )}
       </div>

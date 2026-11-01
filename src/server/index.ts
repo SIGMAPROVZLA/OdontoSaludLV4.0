@@ -676,6 +676,7 @@ app.get('/api/pacientes/cedula/:cedula', async (c) => {
 app.get('/api/pacientes/:id/odontograma', async (c) => {
   const db = c.env.DB;
   const { id } = c.req.param();
+  await ensureControlDataTables(db);
 
   const results = await db
     .prepare(
@@ -688,49 +689,235 @@ app.get('/api/pacientes/:id/odontograma', async (c) => {
     .bind(id)
     .all();
 
-  return c.json(results.results);
+  const mapped = (results?.results || []).map((r: any) => ({
+    numeroFdi: Number(r.numero_fdi),
+    nombre: `Pieza ${r.numero_fdi}`,
+    surfaces: {
+      V: r.cara_vestibular || 'sano',
+      M: r.cara_mesial || 'sano',
+      O: r.cara_oclusal || 'sano',
+      D: r.cara_distal || 'sano',
+      L: r.cara_palatino_lingual || 'sano',
+    },
+    isAbsent: r.estado_general === 'ausente',
+    procedimientoGeneral:
+      r.procedimiento_general ||
+      (r.estado_general === 'endodoncia'
+        ? 'endodoncia'
+        : r.estado_general === 'exodoncia'
+        ? 'exodoncia'
+        : 'ninguno'),
+    diagnostico: r.diagnostico || '',
+    actualizadoPor: r.actualizado_por || 'Dra. María Alejandra Domínguez',
+    updatedAt: r.updated_at,
+  }));
+
+  return c.json(mapped);
 });
 
 app.post('/api/pacientes/:id/odontograma', async (c) => {
   const db = c.env.DB;
   const { id: pacienteId } = c.req.param();
-  const { numeroFdi, caras, isAbsent, actualizadoPor } = await c.req.json();
 
-  const recordId = `${pacienteId}-${numeroFdi}`;
+  try {
+    await ensureControlDataTables(db);
+
+    const body = await c.req.json();
+    const numeroFdi = Number(body.numeroFdi || body.toothNumber || body.numero_fdi);
+    if (!numeroFdi || isNaN(numeroFdi)) {
+      return c.json({ success: false, error: 'numeroFdi es obligatorio' }, 400);
+    }
+
+    const caras = body.caras || body.surfaces || {};
+    const isAbsent = Boolean(body.isAbsent);
+    const procedimientoGeneral = body.procedimientoGeneral || body.procedimiento_general || 'ninguno';
+    const diagnostico = body.diagnostico || '';
+    const actualizadoPor = body.actualizadoPor || body.actualizado_por || 'Dra. María Alejandra Domínguez';
+
+    const recordId = `${pacienteId}-${numeroFdi}`;
+    const estadoGen = isAbsent
+      ? 'ausente'
+      : procedimientoGeneral === 'endodoncia'
+      ? 'endodoncia'
+      : procedimientoGeneral === 'exodoncia'
+      ? 'exodoncia'
+      : 'presente';
+
+    await db
+      .prepare(
+        `
+        INSERT INTO odontograma_piezas (
+          id, paciente_id, numero_fdi, cara_vestibular, cara_mesial,
+          cara_oclusal, cara_distal, cara_palatino_lingual, estado_general,
+          procedimiento_general, diagnostico, actualizado_por, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          cara_vestibular = excluded.cara_vestibular,
+          cara_mesial = excluded.cara_mesial,
+          cara_oclusal = excluded.cara_oclusal,
+          cara_distal = excluded.cara_distal,
+          cara_palatino_lingual = excluded.cara_palatino_lingual,
+          estado_general = excluded.estado_general,
+          procedimiento_general = excluded.procedimiento_general,
+          diagnostico = excluded.diagnostico,
+          actualizado_por = excluded.actualizado_por,
+          updated_at = CURRENT_TIMESTAMP
+      `
+      )
+      .bind(
+        recordId,
+        pacienteId,
+        numeroFdi,
+        caras?.V || 'sano',
+        caras?.M || 'sano',
+        caras?.O || 'sano',
+        caras?.D || 'sano',
+        caras?.L || 'sano',
+        estadoGen,
+        procedimientoGeneral,
+        diagnostico,
+        actualizadoPor
+      )
+      .run();
+
+    return c.json({ success: true, message: `Pieza FDI ${numeroFdi} guardada exitosamente` });
+  } catch (err: any) {
+    console.error('Error guardando pieza de odontograma:', err);
+    return c.json({ success: false, error: err?.message || String(err) }, 500);
+  }
+});
+
+// 3.1. Evoluciones Clínicas del Paciente
+app.get('/api/pacientes/:id/evoluciones', async (c) => {
+  const db = c.env.DB;
+  const { id } = c.req.param();
+  await ensureControlDataTables(db);
+
+  const res = await db
+    .prepare(
+      `
+    SELECT * FROM evoluciones_clinicas
+    WHERE paciente_id = ?
+    ORDER BY created_at DESC
+  `
+    )
+    .bind(id)
+    .all();
+
+  return c.json(
+    (res?.results || []).map((r: any) => ({
+      id: r.id,
+      pacienteId: r.paciente_id,
+      citaId: r.cita_id,
+      odontologoId: r.odontologo_id,
+      odontologoNombre: r.odontologo_nombre || 'Odontólogo',
+      piezaFdi: r.pieza_fdi,
+      texto: r.texto,
+      indicacionesReceta: r.indicaciones_receta,
+      createdAt: r.created_at,
+    }))
+  );
+});
+
+app.post('/api/pacientes/:id/evoluciones', async (c) => {
+  const db = c.env.DB;
+  const { id: pacienteId } = c.req.param();
+  await ensureControlDataTables(db);
+  const b = await c.req.json();
+  const evoId = `evo-${Date.now()}`;
 
   await db
     .prepare(
       `
-      INSERT INTO odontograma_piezas (
-        id, paciente_id, numero_fdi, cara_vestibular, cara_mesial,
-        cara_oclusal, cara_distal, cara_palatino_lingual, estado_general, actualizado_por
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        cara_vestibular = excluded.cara_vestibular,
-        cara_mesial = excluded.cara_mesial,
-        cara_oclusal = excluded.cara_oclusal,
-        cara_distal = excluded.cara_distal,
-        cara_palatino_lingual = excluded.cara_palatino_lingual,
-        estado_general = excluded.estado_general,
-        actualizado_por = excluded.actualizado_por,
-        updated_at = CURRENT_TIMESTAMP
-    `
+    INSERT INTO evoluciones_clinicas (
+      id, paciente_id, cita_id, odontologo_id, odontologo_nombre, pieza_fdi, texto, indicaciones_receta, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `
     )
     .bind(
-      recordId,
+      evoId,
       pacienteId,
-      numeroFdi,
-      caras?.V || 'sano',
-      caras?.M || 'sano',
-      caras?.O || 'sano',
-      caras?.D || 'sano',
-      caras?.L || 'sano',
-      isAbsent ? 'ausente' : 'presente',
-      actualizadoPor || 'Dra. María Alejandra Domínguez'
+      b.citaId || null,
+      b.odontologoId || null,
+      b.odontologoNombre || 'Dra. María Alejandra Domínguez',
+      b.piezaFdi || null,
+      b.texto || '',
+      b.indicacionesReceta || ''
     )
     .run();
 
-  return c.json({ success: true, message: `Pieza FDI ${numeroFdi} guardada exitosamente` });
+  return c.json({ success: true, id: evoId, fecha: new Date().toISOString() });
+});
+
+// 3.2. Radiografías Digitales e Imágenes Intraorales del Paciente
+app.get('/api/pacientes/:id/radiografias', async (c) => {
+  const db = c.env.DB;
+  const { id } = c.req.param();
+  await ensureControlDataTables(db);
+
+  const res = await db
+    .prepare(
+      `
+    SELECT * FROM radiografias
+    WHERE paciente_id = ?
+    ORDER BY fecha_toma DESC
+  `
+    )
+    .bind(id)
+    .all();
+
+  return c.json(
+    (res?.results || []).map((r: any) => ({
+      id: r.id,
+      pacienteId: r.paciente_id,
+      piezaFdi: r.pieza_fdi,
+      tipo: r.tipo || 'periapical_rvg',
+      r2StorageUrl: r.r2_storage_url,
+      imagenData: r.imagen_data,
+      observaciones: r.observaciones,
+      fechaToma: r.fecha_toma,
+    }))
+  );
+});
+
+app.post('/api/pacientes/:id/radiografias', async (c) => {
+  const db = c.env.DB;
+  const { id: pacienteId } = c.req.param();
+
+  try {
+    await ensureControlDataTables(db);
+    const b = await c.req.json();
+    const rxId = `rx-${Date.now()}`;
+    const tipoValido = ['periapical_rvg', 'panoramica', 'foto_intraoral'].includes(b.tipo)
+      ? b.tipo
+      : 'periapical_rvg';
+    const r2Url = b.r2StorageUrl || `local-rvg://${pacienteId}/${rxId}.jpg`;
+    const observaciones = b.notasDiagnosticas || b.observaciones || 'Captura Sensor RVG 2.0 en sillón';
+
+    await db
+      .prepare(
+        `
+      INSERT INTO radiografias (
+        id, paciente_id, pieza_fdi, tipo, r2_storage_url, imagen_data, observaciones, fecha_toma
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `
+      )
+      .bind(
+        rxId,
+        pacienteId,
+        b.piezaFdi || null,
+        tipoValido,
+        r2Url,
+        b.imagenData || '',
+        observaciones
+      )
+      .run();
+
+    return c.json({ success: true, id: rxId, fecha: new Date().toISOString() });
+  } catch (err: any) {
+    console.error('Error guardando radiografía:', err);
+    return c.json({ success: false, error: err?.message || String(err) }, 500);
+  }
 });
 
 // 4. Módulo de Presupuestos Clínicos y Cobros en Box (Cloudflare D1)
@@ -1265,6 +1452,28 @@ async function ensureControlDataTables(db: D1Database) {
   try { await db.prepare("ALTER TABLE presupuestos ADD COLUMN procedimiento TEXT DEFAULT 'Tratamiento Odontológico General'").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE pagos ADD COLUMN tasa_bcv REAL").run(); } catch (_) {}
 
+  // Migraciones defensivas de odontograma y radiografías
+  try { await db.prepare("ALTER TABLE odontograma_piezas ADD COLUMN diagnostico TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE odontograma_piezas ADD COLUMN procedimiento_general TEXT DEFAULT 'ninguno'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE radiografias ADD COLUMN imagen_data TEXT").run(); } catch (_) {}
+
+  // Tabla D1 de Evoluciones Clínicas en Sillón
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS evoluciones_clinicas (
+        id TEXT PRIMARY KEY,
+        paciente_id TEXT NOT NULL,
+        cita_id TEXT,
+        odontologo_id TEXT,
+        odontologo_nombre TEXT,
+        pieza_fdi INTEGER,
+        texto TEXT NOT NULL,
+        indicaciones_receta TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
   // Ejecutar saneamiento integral de pacientes, citas y presupuestos
   await sanearBaseDeDatos(db);
 
@@ -1285,6 +1494,29 @@ async function ensureControlDataTables(db: D1Database) {
       )`
     )
     .run();
+
+  // Semilla de Catálogo de Condiciones Médicas si está vacío
+  try {
+    const cCount = (await db.prepare(`SELECT COUNT(*) as count FROM catalogo_condiciones_medicas`).first()) as any;
+    if (!cCount || cCount.count === 0) {
+      const initialCond = [
+        ['med-1', 'I10', 'Hipertensión Arterial Sistémica (HAS)', 'Cardiovascular', 'Moderado', 'Xerostomía farmacológica, hiperplasia gingival por nifedipino/amlodipino.', 'Monitorear tensión arterial previa. Citas cortas matutinas. Máx. 2 carpules con epinefrina 1:100.000.', 'Contraindicada Norepinefrina. Evitar epinefrina en crisis (>160/100 mmHg).', 0, 1],
+        ['med-2', 'E11.9', 'Diabetes Mellitus Tipo 2 (No Insulinodependiente)', 'Endocrina & Metabólica', 'Moderado', 'Periodontitis acelerada con pérdida ósea, cicatrización retardada y candidiasis bucal.', 'Verificar glucemia capilar y HbA1c (< 7.5%). Citas matutinas post-ingesta y medicación.', 'Técnica troncular con aspiración obligatoria.', 0, 1],
+        ['med-3', 'Z88.0', 'Alergia Severa a Penicilinas y Betalactámicos', 'Alergias & Farmacología', 'Crítico', 'Riesgo de angioedema de labios, lengua y shock anafiláctico agudo.', 'ALERTA ROJA EN FICHA. Prohibido amoxicilina o ampicilina. Usar Azitromicina o Clindamicina.', 'Evitar anestésicos con sulfitos o parabenos.', 1, 1],
+        ['med-4', 'D68.9', 'Paciente Anticoagulado (Warfarina / Rivaroxabán / AAS)', 'Hematológica & Coagulación', 'Alto', 'Hemorragias gingivales espontáneas, petequias en mucosa yugal, hematomas submucosos.', 'Solicitar INR reciente (< 72 hrs, ideal 2.0-3.0). Hemostáticos locales obligatorios.', 'Evitar bloqueo troncular profundo sin hemostasia previa.', 0, 1],
+        ['med-5', 'O00-O9A', 'Embarazo en Segundo Trimestre (Semanas 14 a 28)', 'Especial & Gestación', 'Bajo', 'Gingivitis gravídica hormonal, tumor del embarazo (épulis angiomatoso sangrante).', 'Período idóneo para profilaxis y tratamientos. Posición semi-sentada con almohada derecha.', 'PROHIBIDA Prilocaína con Felipresina (induce contracciones uterinas).', 0, 1],
+      ];
+      for (const cond of initialCond) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO catalogo_condiciones_medicas (
+            id, codigo_cie, nombre, categoria, nivel_riesgo, manifestacion_bucal, protocolo_dental, anestesico_contraindicado, requiere_profilaxis_antibiotica, activo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(...cond).run();
+      }
+    }
+  } catch (err) {
+    console.error('Error inicializando catalogo_condiciones_medicas:', err);
+  }
 
   // Tabla D1 de Registro y Cruce de Tratamientos Realizados (Historial Clínico + Liquidación de Honorarios)
   await db

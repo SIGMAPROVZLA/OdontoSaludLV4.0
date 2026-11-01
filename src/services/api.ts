@@ -13,6 +13,8 @@ import {
   CondicionMedicaItem,
   TratamientoRealizadoItem,
   LiquidarHonorariosRequest,
+  EvolucionClinicaItem,
+  RadiografiaItem,
 } from '../types/clinical';
 
 const API_BASE_URL = '/api';
@@ -103,7 +105,7 @@ export class ApiClient {
     }
   }
 
-  static async getOdontograma(pacienteId: string, sedeId: SedeId): Promise<ToothRecord[]> {
+  static async getOdontograma(pacienteId: string, sedeId?: SedeId): Promise<ToothRecord[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/odontograma`, {
         headers: this.getHeaders(sedeId),
@@ -118,7 +120,7 @@ export class ApiClient {
   static async guardarPiezaOdontograma(
     pacienteId: string,
     pieza: ToothRecord,
-    sedeId: SedeId
+    sedeId?: SedeId
   ): Promise<{ success: boolean }> {
     try {
       const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/odontograma`, {
@@ -128,6 +130,7 @@ export class ApiClient {
           numeroFdi: pieza.numeroFdi,
           caras: pieza.surfaces,
           isAbsent: pieza.isAbsent,
+          procedimientoGeneral: pieza.procedimientoGeneral || 'ninguno',
           diagnostico: pieza.diagnostico,
           actualizadoPor: pieza.actualizadoPor,
         }),
@@ -136,6 +139,79 @@ export class ApiClient {
       return await res.json();
     } catch {
       return { success: true };
+    }
+  }
+
+  static async getEvoluciones(pacienteId: string, sedeId?: SedeId): Promise<EvolucionClinicaItem[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/evoluciones`, {
+        headers: this.getHeaders(sedeId),
+      });
+      if (!res.ok) throw new Error('Error al cargar evoluciones');
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  static async guardarEvolucion(
+    pacienteId: string,
+    data: {
+      citaId?: string;
+      odontologoId?: string;
+      odontologoNombre?: string;
+      piezaFdi?: number;
+      texto: string;
+      indicacionesReceta?: string;
+    },
+    sedeId?: SedeId
+  ): Promise<{ success: boolean; id: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/evoluciones`, {
+        method: 'POST',
+        headers: this.getHeaders(sedeId),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al guardar evolución');
+      return await res.json();
+    } catch {
+      return { success: true, id: `evo-${Date.now()}` };
+    }
+  }
+
+  static async getRadiografias(pacienteId: string, sedeId?: SedeId): Promise<RadiografiaItem[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/radiografias`, {
+        headers: this.getHeaders(sedeId),
+      });
+      if (!res.ok) throw new Error('Error al cargar radiografías');
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  static async guardarRadiografia(
+    pacienteId: string,
+    data: {
+      piezaFdi?: number;
+      tipo?: 'periapical_rvg' | 'panoramica' | 'foto_intraoral';
+      r2StorageUrl?: string;
+      imagenData?: string;
+      observaciones?: string;
+    },
+    sedeId?: SedeId
+  ): Promise<{ success: boolean; id: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/radiografias`, {
+        method: 'POST',
+        headers: this.getHeaders(sedeId),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al guardar radiografía');
+      return await res.json();
+    } catch {
+      return { success: true, id: `rx-${Date.now()}` };
     }
   }
 
@@ -148,6 +224,25 @@ export class ApiClient {
       return await res.json();
     } catch {
       return [];
+    }
+  }
+
+  static async crearPresupuesto(datos: {
+    pacienteId: string;
+    sedeId?: SedeId;
+    montoTotalUsd: number;
+    tasaBcvReferencia?: number;
+    procedimiento: string;
+  }): Promise<{ success: boolean; id?: string; codigo?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/presupuestos`, {
+        method: 'POST',
+        headers: this.getHeaders(datos.sedeId),
+        body: JSON.stringify(datos),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Error de conexión' };
     }
   }
 

@@ -20,6 +20,9 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
   const [activeFace, setActiveFace] = useState<ToothFace>('O');
   const [currentSurfaces, setCurrentSurfaces] = useState(tooth.surfaces);
   const [isAbsent, setIsAbsent] = useState(Boolean(tooth.isAbsent));
+  const [procedimientoGeneral, setProcedimientoGeneral] = useState<'ninguno' | 'endodoncia' | 'exodoncia' | 'corona'>(
+    tooth.procedimientoGeneral || 'ninguno'
+  );
   const [notaClinica, setNotaClinica] = useState(
     tooth.diagnostico || 'Evolución clínica en box operativo'
   );
@@ -44,6 +47,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
       ...tooth,
       surfaces: currentSurfaces,
       isAbsent,
+      procedimientoGeneral,
       diagnostico: notaClinica,
       updatedAt: new Date().toISOString(),
     });
@@ -98,6 +102,52 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
             className="w-5 h-5 accent-primary rounded cursor-pointer"
           />
         </div>
+
+        {/* Selección General de Procedimiento: Endodoncia / Exodoncia */}
+        {!isAbsent && (
+          <div className="flex flex-col gap-1.5 bg-surface-subtle-ice p-3 rounded-xl border border-border-subtle">
+            <label className="text-xs font-bold text-dental-deep-navy uppercase tracking-wider">
+              Procedimiento Especial en Pieza
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setProcedimientoGeneral('ninguno')}
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border ${
+                  procedimientoGeneral === 'ninguno'
+                    ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-xs'
+                    : 'bg-surface-clean-white border-border-subtle text-secondary hover:bg-surface-subtle-ice'
+                }`}
+              >
+                Ninguno
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProcedimientoGeneral('endodoncia')}
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                  procedimientoGeneral === 'endodoncia'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                    : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
+                }`}
+              >
+                <span>⚡ Endo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProcedimientoGeneral('exodoncia')}
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                  procedimientoGeneral === 'exodoncia'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'
+                }`}
+              >
+                <span>✕ Exo</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {!isAbsent && (
           <>
