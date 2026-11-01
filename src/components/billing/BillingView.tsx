@@ -2,11 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useSede } from '../../context/SedeContext';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
-import { TratamientoRealizadoItem, OdontologoItem, Presupuesto } from '../../types/clinical';
+import {
+  TratamientoRealizadoItem,
+  OdontologoItem,
+  Presupuesto,
+  PagoItem,
+  MetodoPago,
+} from '../../types/clinical';
+import { compressImage } from '../../utils/imageCompression';
 
 export const BillingView: React.FC = () => {
   const { sedeActiva, sedeId } = useSede();
   const { tasaBcv, tasaInfo, isRefreshing, actualizarTasaEnLinea } = useTasaCambio();
+
+  // Selector de Sede para Control Financiero (La Victoria, Colonia Tovar o Ambas Consolidado)
+  const [filtroSedeFinanciera, setFiltroSedeFinanciera] = useState<'victoria' | 'tovar' | 'ambas'>(
+    (sedeId as any) || 'victoria'
+  );
 
   // Pestañas principales de la vista
   const [activeTab, setActiveTab] = useState<'cobros' | 'honorarios'>('cobros');
@@ -17,9 +29,22 @@ export const BillingView: React.FC = () => {
   const [busquedaPresupuesto, setBusquedaPresupuesto] = useState('');
   const [isLoadingPresupuestos, setIsLoadingPresupuestos] = useState(false);
 
-  const [resumenCobros, setResumenCobros] = useState({
+  const [resumenCobros, setResumenCobros] = useState<{
+    cobradoHoyUsd: number;
+    cobradoHoyBs: number;
+    efectivoDivisasUsd: number;
+    efectivoBs: number;
+    digitalUsd: number;
+    presupuestosPendientesUsd: number;
+    totalPresupuestosActivos: number;
+    consolidado?: any;
+    victoria?: any;
+    tovar?: any;
+  }>({
     cobradoHoyUsd: 0,
+    cobradoHoyBs: 0,
     efectivoDivisasUsd: 0,
+    efectivoBs: 0,
     digitalUsd: 0,
     presupuestosPendientesUsd: 0,
     totalPresupuestosActivos: 0,
@@ -28,10 +53,24 @@ export const BillingView: React.FC = () => {
   // Estado para Cobros en Box
   const [selectedPresupuestoId, setSelectedPresupuestoId] = useState<string>('');
   const [montoUsd, setMontoUsd] = useState<number>(0);
-  const [metodo, setMetodo] = useState<'pago_movil' | 'divisas_efectivo' | 'zelle' | 'punto_venta'>('pago_movil');
+  const [tipoPago, setTipoPago] = useState<'completo' | 'abono'>('completo');
+  const [metodo, setMetodo] = useState<MetodoPago>('pago_movil');
   const [referencia, setReferencia] = useState('');
+  const [fotoComprobante, setFotoComprobante] = useState<string | null>(null);
+  const [isCompressingFoto, setIsCompressingFoto] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorCobro, setErrorCobro] = useState<string | null>(null);
+
+  // Estado para Historial de Pagos Realizados
+  const [pagosRealizados, setPagosRealizados] = useState<PagoItem[]>([]);
+  const [isLoadingPagos, setIsLoadingPagos] = useState(false);
+  const [fotoAmpliadaModal, setFotoAmpliadaModal] = useState<string | null>(null);
+
+  // Estado para Cierre Diario de Caja
+  const [modalCierreDiario, setModalCierreDiario] = useState(false);
+  const [isSubmittingCierre, setIsSubmittingCierre] = useState(false);
+  const [cierreExitoMensaje, setCierreExitoMensaje] = useState<string | null>(null);
+  const [observacionesCierre, setObservacionesCierre] = useState('');
 
   // Estado para Modal de Recibo Digital
   const [reciboModalData, setReciboModalData] = useState<{
@@ -42,6 +81,7 @@ export const BillingView: React.FC = () => {
     montoUsd: number;
     montoBs: string;
     metodo: string;
+    tipoPago?: string;
     referencia?: string;
     fecha: string;
     nuevoSaldoUsd?: number;
@@ -63,29 +103,56 @@ export const BillingView: React.FC = () => {
     maximumFractionDigits: 2,
   });
 
+  // Métodos de Pago disponibles (Zelle sustituido por Efectivo Bolívares)
+  const METODOS_PAGO: { id: MetodoPago; label: string; icon: string; esEfectivo?: boolean }[] = [
+    { id: 'pago_movil', label: 'Pago Móvil', icon: 'smartphone' },
+    { id: 'efectivo_usd', label: 'Efectivo USD', icon: 'payments', esEfectivo: true },
+    { id: 'efectivo_bs', label: 'Efectivo Bolívares', icon: 'local_atm', esEfectivo: true },
+    { id: 'punto_venta', label: 'Punto de Venta', icon: 'credit_card' },
+    { id: 'transferencia', label: 'Transferencia', icon: 'account_balance' },
+  ];
+
   // Cargar Presupuestos y Métricas de Cobros desde D1
-  const cargarPresupuestosYResumen = async () => {
+  const cargarPresupuestosYResumen = async (sedeFiltro = filtroSedeFinanciera) => {
     setIsLoadingPresupuestos(true);
     try {
       const [presupuestosData, resumenData] = await Promise.all([
-        ApiClient.getPresupuestos(sedeId),
-        ApiClient.getResumenCobros(sedeId),
+        ApiClient.getPresupuestos(sedeFiltro === 'ambas' ? undefined : (sedeFiltro as any)),
+        ApiClient.getResumenCobros(sedeFiltro),
       ]);
 
       setPresupuestos(presupuestosData || []);
       if (resumenData?.success) {
         setResumenCobros({
-          cobradoHoyUsd: resumenData.cobradoHoyUsd,
-          efectivoDivisasUsd: resumenData.efectivoDivisasUsd,
-          digitalUsd: resumenData.digitalUsd,
-          presupuestosPendientesUsd: resumenData.presupuestosPendientesUsd,
-          totalPresupuestosActivos: resumenData.totalPresupuestosActivos,
+          cobradoHoyUsd: resumenData.cobradoHoyUsd || 0,
+          cobradoHoyBs: resumenData.cobradoHoyBs || (resumenData.cobradoHoyUsd * tasaBcv),
+          efectivoDivisasUsd: resumenData.efectivoDivisasUsd || 0,
+          efectivoBs: resumenData.efectivoBs || 0,
+          digitalUsd: resumenData.digitalUsd || 0,
+          presupuestosPendientesUsd: resumenData.presupuestosPendientesUsd || 0,
+          totalPresupuestosActivos: resumenData.totalPresupuestosActivos || 0,
+          consolidado: resumenData.consolidado,
+          victoria: resumenData.victoria,
+          tovar: resumenData.tovar,
         });
       }
     } catch (err) {
       console.error('Error al cargar presupuestos y resumen de cobros:', err);
     } finally {
       setIsLoadingPresupuestos(false);
+    }
+  };
+
+  // Cargar historial de pagos realizados desde D1
+  const cargarPagosRealizados = async (sedeFiltro = filtroSedeFinanciera) => {
+    setIsLoadingPagos(true);
+    try {
+      const data = await ApiClient.getPagos(sedeFiltro === 'ambas' ? undefined : (sedeFiltro as any));
+      setPagosRealizados(data || []);
+    } catch (err) {
+      console.error('Error cargando pagos realizados:', err);
+    } finally {
+      setIsLoadingPagos(false);
     }
   };
 
@@ -103,7 +170,9 @@ export const BillingView: React.FC = () => {
           setTratamientosHonorarios(res.tratamientos);
         }
       } else {
-        const res = await ApiClient.getTratamientosRealizados({ sedeId });
+        const res = await ApiClient.getTratamientosRealizados({
+          sedeId: filtroSedeFinanciera === 'ambas' ? undefined : (filtroSedeFinanciera as any),
+        });
         if (res.success) {
           setTratamientosHonorarios(res.tratamientos);
         }
@@ -114,17 +183,19 @@ export const BillingView: React.FC = () => {
   };
 
   useEffect(() => {
-    cargarPresupuestosYResumen();
-  }, [sedeId]);
+    cargarPresupuestosYResumen(filtroSedeFinanciera);
+    cargarPagosRealizados(filtroSedeFinanciera);
+  }, [filtroSedeFinanciera, sedeId]);
 
   useEffect(() => {
     cargarDatosHonorarios();
-  }, [selectedDoctorId, sedeId]);
+  }, [selectedDoctorId, filtroSedeFinanciera]);
 
   // Manejar selección de un presupuesto para cobrar en Box
   const seleccionarPresupuestoParaCobro = (p: Presupuesto) => {
     setSelectedPresupuestoId(p.id);
     const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
+    setTipoPago('completo');
     setMontoUsd(saldo > 0 ? saldo : p.montoTotalUsd);
     setErrorCobro(null);
 
@@ -137,13 +208,32 @@ export const BillingView: React.FC = () => {
 
   const presupuestoSeleccionado = presupuestos.find((p) => p.id === selectedPresupuestoId);
 
-  // Registro de Cobro en D1 con Prevención de Duplicados
+  // Manejar captura o subida de foto del comprobante con compresión en cliente
+  const handleSubirComprobante = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressingFoto(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
+      setFotoComprobante(compressed);
+    } catch (err) {
+      console.error('Error comprimiendo comprobante:', err);
+      const reader = new FileReader();
+      reader.onload = () => setFotoComprobante(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setIsCompressingFoto(false);
+    }
+  };
+
+  // Registro de Cobro en D1 con Prevención de Duplicados y Comprobante
   const handleCobro = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorCobro(null);
 
     if (!selectedPresupuestoId) {
-      setErrorCobro('Por favor selecciona el presupuesto clínico o paciente a cobrar.');
+      setErrorCobro('Por favor selecciona el presupuesto clínico fijado para el paciente.');
       return;
     }
 
@@ -152,8 +242,11 @@ export const BillingView: React.FC = () => {
       return;
     }
 
-    if (metodo !== 'divisas_efectivo' && !referencia.trim()) {
-      setErrorCobro(`Se requiere el número de comprobante o referencia bancaria para pagos con ${metodo === 'pago_movil' ? 'Pago Móvil' : metodo === 'zelle' ? 'Zelle' : 'Punto de Venta'}.`);
+    const esEfectivo = metodo === 'efectivo_usd' || metodo === 'efectivo_bs' || (metodo as any) === 'divisas_efectivo';
+    if (!esEfectivo && !referencia.trim()) {
+      setErrorCobro(`Se requiere el número de comprobante o referencia bancaria para pagos con ${
+        metodo === 'pago_movil' ? 'Pago Móvil' : metodo === 'punto_venta' ? 'Punto de Venta' : 'Transferencia'
+      }.`);
       return;
     }
 
@@ -167,8 +260,11 @@ export const BillingView: React.FC = () => {
           metodo,
           referencia: referencia.trim(),
           tasaBcv,
+          tipoPago,
+          fotoComprobanteData: fotoComprobante || undefined,
+          sedeId: presupuestoSeleccionado?.sedeId || (sedeId as any),
         },
-        sedeId
+        presupuestoSeleccionado?.sedeId || (sedeId as any)
       );
 
       if (!res.success) {
@@ -185,6 +281,7 @@ export const BillingView: React.FC = () => {
         montoUsd,
         montoBs: montoBsCalculado,
         metodo,
+        tipoPago,
         referencia: referencia.trim() || undefined,
         fecha: new Date().toLocaleDateString('es-VE', { hour: '2-digit', minute: '2-digit' }),
         nuevoSaldoUsd: res.saldoPendienteUsd,
@@ -192,7 +289,11 @@ export const BillingView: React.FC = () => {
 
       // Limpiar formulario y recargar datos frescos de D1
       setReferencia('');
-      await cargarPresupuestosYResumen();
+      setFotoComprobante(null);
+      await Promise.all([
+        cargarPresupuestosYResumen(filtroSedeFinanciera),
+        cargarPagosRealizados(filtroSedeFinanciera),
+      ]);
     } catch (err: any) {
       setErrorCobro(err?.message || 'Error de comunicación con el servidor de cobros.');
     } finally {
@@ -200,7 +301,48 @@ export const BillingView: React.FC = () => {
     }
   };
 
-  // Filtrado de presupuestos
+  // Registrar Cierre Diario de Caja en D1
+  const handleEjecutarCierreDiario = async () => {
+    setIsSubmittingCierre(true);
+    setCierreExitoMensaje(null);
+    try {
+      const res = await ApiClient.registrarCierreDiario({
+        sedeId: filtroSedeFinanciera,
+        tasaBcv,
+        cerradoPor: 'Caja Central / Recepción',
+        observaciones: observacionesCierre.trim() || 'Cierre de jornada de caja',
+      });
+
+      if (res.success && res.cierre) {
+        setCierreExitoMensaje(
+          `¡Cierre de caja registrado exitosamente (${res.cierre.id})! Total: $${res.cierre.totalUsd.toFixed(2)} USD (${res.cierre.totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)`
+        );
+        setModalCierreDiario(false);
+        setObservacionesCierre('');
+        await Promise.all([
+          cargarPresupuestosYResumen(filtroSedeFinanciera),
+          cargarPagosRealizados(filtroSedeFinanciera),
+        ]);
+        setTimeout(() => setCierreExitoMensaje(null), 7000);
+      } else {
+        setErrorCobro(res.error || 'Error al registrar el cierre diario.');
+      }
+    } catch (err: any) {
+      setErrorCobro(err?.message || 'Error de comunicación al procesar el cierre.');
+    } finally {
+      setIsSubmittingCierre(false);
+    }
+  };
+
+  // Filtrado de presupuestos vigentes (creados y fijados en consulta)
+  const presupuestosVigentes = presupuestos.filter(
+    (p) =>
+      p.estado === 'en_espera' ||
+      p.estado === 'aprobado_parcial' ||
+      (p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd > 0 : p.montoTotalUsd - p.montoAbonadoUsd > 0)
+  );
+
+  // Filtrado para la lista general
   const presupuestosFiltrados = presupuestos.filter((p) => {
     if (filtroEstadoPresupuestos !== 'todos' && p.estado !== filtroEstadoPresupuestos) {
       return false;
@@ -271,47 +413,147 @@ export const BillingView: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-4 pb-28">
-      {/* Resumen Financiero Hero */}
-      <div className="bg-dental-deep-navy rounded-2xl p-4 text-surface-clean-white shadow-md relative overflow-hidden border border-primary">
-        <div className="flex items-center justify-between text-xs text-surface-container">
-          <span>Control Financiero & Cobros • {sedeActiva.nombre}</span>
+      {/* Alerta de Cierre Diario Exitoso */}
+      {cierreExitoMensaje && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold flex items-center justify-between gap-2 shadow-sm animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[22px] text-emerald-600">task_alt</span>
+            <span>{cierreExitoMensaje}</span>
+          </div>
           <button
             type="button"
-            onClick={() => actualizarTasaEnLinea(true)}
-            className="inline-flex items-center gap-1 bg-primary hover:bg-white hover:text-dental-deep-navy text-white px-2.5 py-0.5 rounded-full font-bold transition-all text-[11px] active:scale-95 border border-border-subtle/30"
-            title="Actualizar tasa oficial en vivo con el BCV"
+            onClick={() => setCierreExitoMensaje(null)}
+            className="text-emerald-700 hover:text-emerald-900"
           >
-            <span className={`material-symbols-outlined text-[13px] ${isRefreshing ? 'animate-spin' : ''}`}>
-              sync
-            </span>
-            <span>Tasa BCV: {Number(tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs/$</span>
-            <span className="text-[9px] text-surface-container uppercase font-extrabold">
-              {tasaInfo?.esManual ? 'Manual' : 'Oficial'}
-            </span>
+            <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
+      )}
 
-        <div className="mt-3">
-          <span className="text-[11px] text-surface-container uppercase tracking-wider font-bold">
-            Cobrado en Jornada Hoy
+      {/* =========================================================================
+          TARJETA HERO KPI: CONTROL FINANCIERO CON SELECTOR DE SEDE Y CIERRE DIARIO
+         ========================================================================= */}
+      <div className="bg-dental-deep-navy rounded-2xl p-4 text-surface-clean-white shadow-md relative overflow-hidden border border-primary">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+          {/* Botón / Selector de Sede sobre el Título Control Financiero */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-white/10 backdrop-blur-xs p-1 rounded-xl border border-white/20 shadow-inner">
+              <span className="material-symbols-outlined text-[17px] text-vibrant-cyan pl-1">
+                account_balance
+              </span>
+              <span className="text-[11px] font-black uppercase text-surface-container pr-1 tracking-wider">
+                Control Financiero:
+              </span>
+              {(['victoria', 'tovar', 'ambas'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setFiltroSedeFinanciera(s);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all active:scale-95 cursor-pointer ${
+                    filtroSedeFinanciera === s
+                      ? 'bg-primary text-white shadow-sm ring-1 ring-white/30'
+                      : 'text-surface-container hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {s === 'victoria' ? '📍 La Victoria' : s === 'tovar' ? '📍 Colonia Tovar' : '🌐 Ambas Sedes'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {/* Botón de Cierre de Caja Diario */}
+            <button
+              type="button"
+              onClick={() => setModalCierreDiario(true)}
+              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-xl font-bold transition-all text-xs active:scale-95 shadow-xs border border-emerald-400/40 cursor-pointer"
+              title="Registrar Cierre Diario de Caja en D1"
+            >
+              <span className="material-symbols-outlined text-[15px]">lock_clock</span>
+              <span>Cierre de Caja</span>
+            </button>
+
+            {/* Consulta y Actualización en Línea de Tasa BCV */}
+            <button
+              type="button"
+              onClick={() => actualizarTasaEnLinea(true)}
+              className="inline-flex items-center gap-1 bg-primary hover:bg-white hover:text-dental-deep-navy text-white px-2.5 py-1 rounded-xl font-bold transition-all text-xs active:scale-95 border border-border-subtle/30"
+              title="Actualizar tasa oficial en vivo con el BCV"
+            >
+              <span className={`material-symbols-outlined text-[13px] ${isRefreshing ? 'animate-spin' : ''}`}>
+                sync
+              </span>
+              <span>Tasa BCV: {Number(tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs/$</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Métrica Principal: Cobrado en Jornada Hoy */}
+        <div className="mt-3.5">
+          <span className="text-[11px] text-surface-container uppercase tracking-wider font-extrabold">
+            Cobrado en Jornada Hoy {filtroSedeFinanciera === 'ambas' ? '• Consolidado Ambas Sedes' : `• Sede ${filtroSedeFinanciera === 'victoria' ? 'La Victoria' : 'Colonia Tovar'}`}
           </span>
           <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="font-display font-extrabold text-3xl text-white">
+            <span className="font-display font-black text-3xl text-white">
               ${resumenCobros.cobradoHoyUsd.toFixed(2)} USD
             </span>
-            <span className="text-xs text-surface-container">
-              ≈ {(resumenCobros.cobradoHoyUsd * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+            <span className="text-xs text-surface-container font-semibold">
+              ≈ {(resumenCobros.cobradoHoyBs || resumenCobros.cobradoHoyUsd * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
             </span>
           </div>
         </div>
 
+        {/* Subtítulo Detallado con Resultados Cobrados en La Victoria y Colonia Tovar cuando se eligen Ambas Sedes */}
+        {filtroSedeFinanciera === 'ambas' && (
+          <div className="mt-3 p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-vibrant-cyan shrink-0 animate-pulse" />
+              <div>
+                <span className="text-surface-container block text-[10px] uppercase font-bold tracking-wider">
+                  📍 Sede La Victoria
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-extrabold text-white text-sm">
+                    ${Number(resumenCobros.victoria?.cobradoHoyUsd || 0).toFixed(2)} USD
+                  </span>
+                  <span className="text-surface-container text-[11px]">
+                    (≈ {(Number(resumenCobros.victoria?.cobradoHoyUsd || 0) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px sm:h-8 w-full sm:w-px bg-white/20" />
+
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+              <div>
+                <span className="text-surface-container block text-[10px] uppercase font-bold tracking-wider">
+                  📍 Sede Colonia Tovar
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-extrabold text-white text-sm">
+                    ${Number(resumenCobros.tovar?.cobradoHoyUsd || 0).toFixed(2)} USD
+                  </span>
+                  <span className="text-surface-container text-[11px]">
+                    (≈ {(Number(resumenCobros.tovar?.cobradoHoyUsd || 0) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Desglose por Instrumento de Pago */}
         <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-primary text-xs">
           <div>
-            <span className="text-surface-container block text-[10px]">Efectivo Divisas</span>
+            <span className="text-surface-container block text-[10px]">Efectivo Divisas USD</span>
             <span className="font-bold text-sm text-white">${resumenCobros.efectivoDivisasUsd.toFixed(2)}</span>
           </div>
           <div>
-            <span className="text-surface-container block text-[10px]">Pago Móvil / Zelle</span>
+            <span className="text-surface-container block text-[10px]">Efectivo Bs / Pago Móvil / Tarjeta</span>
             <span className="font-bold text-sm text-white">${resumenCobros.digitalUsd.toFixed(2)}</span>
           </div>
           <div>
@@ -351,15 +593,15 @@ export const BillingView: React.FC = () => {
       </div>
 
       {/* =========================================================================
-          PESTAÑA 1: COBROS EN BOX Y PRESUPUESTOS (CLOUDFLARE D1)
+          PESTAÑA 1: COBROS EN BOX, PRESUPUESTOS Y PAGOS REALIZADOS (D1)
          ========================================================================= */}
       {activeTab === 'cobros' && (
         <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-          {/* Formulario Deslizable de Conciliación de Cobro */}
+          {/* Formulario de Cobro en Box */}
           <form
             id="form-cobro-box"
             onSubmit={handleCobro}
-            className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3"
+            className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3.5"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -381,10 +623,10 @@ export const BillingView: React.FC = () => {
               </div>
             )}
 
-            {/* Selector de Presupuesto o Paciente a Cobrar */}
+            {/* Selector de Presupuesto Clínico Vigente Creado y Fijado en Cita */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
-                <span>Presupuesto Clínico / Paciente Asignado</span>
+                <span>Presupuesto Clínico Vigente (Paciente & Cita)</span>
                 {selectedPresupuestoId && (
                   <button
                     type="button"
@@ -392,7 +634,7 @@ export const BillingView: React.FC = () => {
                       setSelectedPresupuestoId('');
                       setMontoUsd(0);
                     }}
-                    className="text-[11px] text-red-600 hover:underline font-normal"
+                    className="text-[11px] text-red-600 hover:underline font-normal cursor-pointer"
                   >
                     Deseleccionar
                   </button>
@@ -400,25 +642,44 @@ export const BillingView: React.FC = () => {
               </label>
 
               {presupuestoSeleccionado ? (
-                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-1 text-xs">
+                <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col gap-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-dental-deep-navy text-sm">
-                      👤 {presupuestoSeleccionado.pacienteNombre}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-dental-deep-navy text-sm">
+                        👤 {presupuestoSeleccionado.pacienteNombre}
+                      </span>
+                      {presupuestoSeleccionado.pacienteCedula && (
+                        <span className="font-mono text-[11px] bg-surface-container text-dental-deep-navy px-2 py-0.5 rounded-md font-bold">
+                          {presupuestoSeleccionado.pacienteCedula}
+                        </span>
+                      )}
+                    </div>
                     <span className="font-mono text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-bold">
                       {presupuestoSeleccionado.codigo}
                     </span>
                   </div>
-                  <div className="text-[11px] text-secondary">
-                    Cédula: <span className="font-bold text-dental-deep-navy">{presupuestoSeleccionado.pacienteCedula || 'Sin cédula'}</span> • Tratamiento: <span className="font-semibold">{presupuestoSeleccionado.procedimiento}</span>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-secondary">
+                    <span>📅 Cita / Fecha: <strong>{presupuestoSeleccionado.createdAt ? presupuestoSeleccionado.createdAt.split('T')[0] : 'Hoy'}</strong></span>
+                    <span>•</span>
+                    <span>🦷 Procedimiento: <strong className="text-dental-deep-navy">{presupuestoSeleccionado.procedimiento}</strong></span>
+                    <span>•</span>
+                    <span>📍 Sede: <strong className="capitalize">{presupuestoSeleccionado.sedeId}</strong></span>
                   </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-primary/10 mt-1">
+
+                  <div className="flex items-center justify-between pt-2 border-t border-primary/10 text-xs">
                     <span className="text-secondary">
-                      Total: <strong className="text-dental-deep-navy">${presupuestoSeleccionado.montoTotalUsd}</strong> | Abonado: <strong className="text-status-success">${presupuestoSeleccionado.montoAbonadoUsd}</strong>
+                      Total: <strong className="text-dental-deep-navy">${presupuestoSeleccionado.montoTotalUsd} USD</strong> | Ya Abonado: <strong className="text-status-success">${presupuestoSeleccionado.montoAbonadoUsd} USD</strong>
                     </span>
-                    <span className="font-bold text-primary">
-                      Saldo Pendiente: ${presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)} USD
-                    </span>
+                    <div className="text-right">
+                      <span className="text-[10px] text-secondary block font-semibold">Saldo Pendiente</span>
+                      <span className="font-extrabold text-sm text-primary">
+                        ${presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)} USD
+                        <span className="text-[11px] font-normal text-secondary ml-1">
+                          (≈ {((presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                        </span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -433,14 +694,15 @@ export const BillingView: React.FC = () => {
                       setSelectedPresupuestoId('');
                     }
                   }}
-                  className="w-full h-11 px-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  className="w-full h-12 px-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
                 >
-                  <option value="">-- Seleccionar Paciente / Presupuesto para Cobrar --</option>
-                  {presupuestos.map((p) => {
+                  <option value="">-- Seleccionar Presupuesto Vigente Fijado en Cita --</option>
+                  {presupuestosVigentes.map((p) => {
                     const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
+                    const fecha = p.createdAt ? p.createdAt.split('T')[0] : 'Hoy';
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.pacienteNombre} ({p.pacienteCedula || 'S/C'}) - {p.codigo} - Saldo: ${saldo} USD [{p.estado.toUpperCase()}]
+                        👤 {p.pacienteNombre} ({p.pacienteCedula || 'S/C'}) • 📅 {fecha} • 🦷 {p.procedimiento} • Saldo: ${saldo} USD
                       </option>
                     );
                   })}
@@ -448,10 +710,62 @@ export const BillingView: React.FC = () => {
               )}
             </div>
 
-            {/* Montos en USD y Bs */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Selector de Modalidad: Pago Completo vs Abono */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
+                <span>Tipo de Cobro</span>
+                <span className="text-[10px] text-secondary">Selecciona modalidad</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoPago('completo');
+                    if (presupuestoSeleccionado) {
+                      const saldo = presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd);
+                      setMontoUsd(saldo > 0 ? saldo : presupuestoSeleccionado.montoTotalUsd);
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all active:scale-95 cursor-pointer ${
+                    tipoPago === 'completo'
+                      ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-xs'
+                      : 'bg-surface-clean-white border-border-subtle text-dental-deep-navy hover:bg-surface-subtle-ice'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">verified</span>
+                  <span>Pago Completo (100% Saldo)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoPago('abono');
+                    if (presupuestoSeleccionado) {
+                      const saldo = presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd);
+                      if (montoUsd === 0 || montoUsd >= saldo) {
+                        setMontoUsd(Math.max(10, Math.round(saldo / 2)));
+                      }
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all active:scale-95 cursor-pointer ${
+                    tipoPago === 'abono'
+                      ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-xs'
+                      : 'bg-surface-clean-white border-border-subtle text-dental-deep-navy hover:bg-surface-subtle-ice'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">pie_chart</span>
+                  <span>Abono Parcial</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Montos en USD y Equivalente en Bs calculado en vivo */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-dental-deep-navy">Monto a Cobrar (USD)</label>
+                <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
+                  <span>Monto a Cobrar (USD)</span>
+                  {tipoPago === 'abono' && <span className="text-[10px] text-amber-600 font-bold">Abono configurable</span>}
+                </label>
                 <div className="relative flex items-center">
                   <span className="absolute left-3 text-secondary text-sm font-bold">$</span>
                   <input
@@ -462,13 +776,16 @@ export const BillingView: React.FC = () => {
                     value={montoUsd || ''}
                     onChange={(e) => setMontoUsd(parseFloat(e.target.value) || 0)}
                     placeholder="0.00"
-                    className="w-full h-11 pl-7 pr-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full h-11 pl-7 pr-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-dental-deep-navy">Equivalente Oficial (Bs.)</label>
+                <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
+                  <span>Equivalente Oficial (Bs.)</span>
+                  <span className="text-[10px] text-secondary font-mono">Tasa: {tasaBcv.toFixed(2)} Bs/$</span>
+                </label>
                 <input
                   type="text"
                   readOnly
@@ -478,23 +795,18 @@ export const BillingView: React.FC = () => {
               </div>
             </div>
 
-            {/* Selector de Método de Pago */}
+            {/* Selector de Método de Pago (Zelle sustituido por Efectivo Bolívares) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-dental-deep-navy">Método de Pago</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'pago_movil', label: 'Pago Móvil', icon: 'smartphone' },
-                  { id: 'divisas_efectivo', label: 'Efectivo USD', icon: 'payments' },
-                  { id: 'zelle', label: 'Zelle', icon: 'account_balance' },
-                  { id: 'punto_venta', label: 'Punto de Venta', icon: 'credit_card' },
-                ].map((m) => {
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {METODOS_PAGO.map((m) => {
                   const isSelected = metodo === m.id;
                   return (
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setMetodo(m.id as any)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all active:scale-95 ${
+                      onClick={() => setMetodo(m.id)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer ${
                         isSelected
                           ? 'bg-primary text-surface-clean-white border-primary shadow-sm'
                           : 'bg-surface-clean-white border-border-subtle text-dental-deep-navy hover:bg-surface-subtle-ice'
@@ -508,23 +820,91 @@ export const BillingView: React.FC = () => {
               </div>
             </div>
 
-            {/* Referencia o Comprobante */}
+            {/* Número de Referencia o Comprobante */}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
-                <span>Número de Referencia / Comprobante</span>
-                {metodo !== 'divisas_efectivo' && (
-                  <span className="text-[10px] text-amber-600 font-normal">Obligatorio (Anti-duplicados)</span>
+                <span>Número de Referencia / Serial Bancario</span>
+                {metodo !== 'efectivo_usd' && metodo !== 'efectivo_bs' && (
+                  <span className="text-[10px] text-amber-600 font-bold">Obligatorio (Prevención Doble Cobro)</span>
                 )}
               </label>
               <input
                 type="text"
                 value={referencia}
                 onChange={(e) => setReferencia(e.target.value)}
-                placeholder={metodo === 'divisas_efectivo' ? 'Opcional para efectivo' : 'Ej: PM-492810 (Últimos dígitos o serial)'}
-                className="w-full h-11 px-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                placeholder={
+                  metodo === 'efectivo_usd' || metodo === 'efectivo_bs'
+                    ? 'Opcional para pagos en efectivo'
+                    : 'Ej: PM-592810 (Últimos dígitos o serial de aprobación)'
+                }
+                className="w-full h-11 px-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary font-bold shadow-xs"
               />
             </div>
 
+            {/* Adjuntar Foto del Comprobante / Voucher (OCR Capa 1 y Conciliación) */}
+            <div className="flex flex-col gap-2 p-3 rounded-2xl bg-surface-subtle-ice border border-border-subtle">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-dental-deep-navy flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[18px] text-primary">document_scanner</span>
+                  <span>Foto del Comprobante / Voucher de Pago</span>
+                </label>
+                <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
+                  Capa 1 Conciliación OCR
+                </span>
+              </div>
+
+              <p className="text-[11px] text-secondary">
+                Captura con la cámara del teléfono o sube el voucher para verificación contable y resguardo comprimido.
+              </p>
+
+              {fotoComprobante ? (
+                <div className="relative rounded-xl overflow-hidden border border-primary/30 max-h-48 bg-dental-deep-navy/5 flex items-center justify-center p-2">
+                  <img
+                    src={fotoComprobante}
+                    alt="Comprobante Bancario"
+                    className="max-h-44 object-contain rounded-lg shadow-sm"
+                  />
+                  <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFotoAmpliadaModal(fotoComprobante)}
+                      className="p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-all text-xs"
+                      title="Ver imagen ampliada"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">zoom_in</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFotoComprobante(null)}
+                      className="p-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all text-xs"
+                      title="Eliminar foto"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    id="foto-comprobante-input"
+                    onChange={handleSubirComprobante}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="foto-comprobante-input"
+                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-primary/40 bg-white hover:bg-primary/5 text-primary text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                    <span>{isCompressingFoto ? 'Comprimiendo imagen...' : 'Tomar / Adjuntar Foto del Comprobante'}</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Botón de Envío */}
             <button
               type="submit"
               disabled={isProcessing}
@@ -535,6 +915,157 @@ export const BillingView: React.FC = () => {
             </button>
           </form>
 
+          {/* =========================================================================
+              TARJETA: HISTORIAL DE PAGOS REALIZADOS & CONCILIACIÓN EN BOX
+             ========================================================================= */}
+          <div className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                  <span className="material-symbols-outlined text-[22px]">receipt_long</span>
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-dental-deep-navy">
+                    Pagos Realizados en Box
+                  </h3>
+                  <p className="text-xs text-secondary">
+                    {pagosRealizados.length} transacciones registradas y conciliadas en Cloudflare D1
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => cargarPagosRealizados(filtroSedeFinanciera)}
+                className="px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-dental-deep-navy text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <span className={`material-symbols-outlined text-[15px] ${isLoadingPagos ? 'animate-spin' : ''}`}>
+                  refresh
+                </span>
+                <span>Actualizar</span>
+              </button>
+            </div>
+
+            {isLoadingPagos ? (
+              <div className="p-8 text-center text-secondary text-xs flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                <span>Cargando transacciones desde Cloudflare D1...</span>
+              </div>
+            ) : pagosRealizados.length === 0 ? (
+              <div className="p-8 text-center text-secondary text-xs bg-surface-subtle-ice rounded-xl border border-border-subtle">
+                No hay pagos registrados hoy en esta sede.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-subtle text-[11px] text-secondary font-bold">
+                      <th className="py-2.5 px-3">Fecha & Recibo</th>
+                      <th className="py-2.5 px-3">Paciente</th>
+                      <th className="py-2.5 px-3">Procedimiento</th>
+                      <th className="py-2.5 px-3">Modalidad</th>
+                      <th className="py-2.5 px-3">Método & Ref</th>
+                      <th className="py-2.5 px-3 text-right">Monto USD / Bs</th>
+                      <th className="py-2.5 px-3 text-center">Comprobante</th>
+                      <th className="py-2.5 px-3 text-center">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle font-medium">
+                    {pagosRealizados.map((pago) => {
+                      const fechaStr = pago.fechaPago ? pago.fechaPago.replace('T', ' ').slice(0, 16) : 'Hoy';
+                      const metodoLabel =
+                        pago.metodo === 'pago_movil'
+                          ? 'Pago Móvil'
+                          : pago.metodo === 'efectivo_usd' || pago.metodo === 'divisas_efectivo'
+                          ? 'Efectivo USD'
+                          : pago.metodo === 'efectivo_bs'
+                          ? 'Efectivo Bs.'
+                          : pago.metodo === 'punto_venta'
+                          ? 'Punto de Venta'
+                          : pago.metodo === 'transferencia'
+                          ? 'Transferencia'
+                          : pago.metodo;
+
+                      return (
+                        <tr key={pago.id} className="hover:bg-surface-subtle-ice/60 transition-colors">
+                          <td className="py-3 px-3">
+                            <span className="font-mono text-[10px] bg-surface-container text-dental-deep-navy font-bold px-1.5 py-0.5 rounded block w-fit">
+                              {pago.id}
+                            </span>
+                            <span className="text-[10px] text-secondary block mt-0.5">{fechaStr}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <strong className="text-dental-deep-navy block">{pago.pacienteNombre}</strong>
+                            <span className="text-[10px] text-secondary font-mono">{pago.pacienteCedula || 'Sin cédula'}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="line-clamp-1 max-w-[140px] text-[11px] text-secondary">
+                              {pago.procedimiento || 'Tratamiento'}
+                            </span>
+                            <span className="text-[9px] font-mono text-primary font-bold">
+                              {pago.presupuestoCodigo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                pago.tipoPago === 'abono'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {pago.tipoPago === 'abono' ? 'Abono Parcial' : 'Pago Completo'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="font-bold text-dental-deep-navy block text-[11px]">{metodoLabel}</span>
+                            {pago.referencia ? (
+                              <span className="text-[10px] font-mono text-primary font-semibold">Ref: {pago.referencia}</span>
+                            ) : (
+                              <span className="text-[10px] text-secondary italic">Sin ref</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <span className="font-extrabold text-sm text-status-success block">
+                              ${pago.montoUsd.toFixed(2)} USD
+                            </span>
+                            <span className="text-[10px] text-secondary block">
+                              ≈ {(pago.montoBs || pago.montoUsd * (pago.tasaBcv || tasaBcv)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {pago.fotoComprobanteData ? (
+                              <button
+                                type="button"
+                                onClick={() => setFotoAmpliadaModal(pago.fotoComprobanteData!)}
+                                className="w-10 h-10 rounded-lg overflow-hidden border border-primary/30 inline-flex items-center justify-center hover:scale-105 transition-all shadow-xs cursor-pointer"
+                                title="Ver foto del comprobante"
+                              >
+                                <img
+                                  src={pago.fotoComprobanteData}
+                                  alt="Comprobante"
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-secondary italic">Sin foto</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] inline-flex items-center gap-1 border border-emerald-200">
+                              <span className="material-symbols-outlined text-[11px]">verified</span>
+                              <span>Conciliado</span>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Lista de Presupuestos Activos */}
           <div className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -543,7 +1074,7 @@ export const BillingView: React.FC = () => {
                   Presupuestos Clínicos Registrados
                 </h3>
                 <span className="text-xs text-secondary">
-                  {presupuestosFiltrados.length} presupuestos en {sedeActiva.nombre}
+                  {presupuestosFiltrados.length} presupuestos registrados
                 </span>
               </div>
 
@@ -553,7 +1084,7 @@ export const BillingView: React.FC = () => {
                 value={busquedaPresupuesto}
                 onChange={(e) => setBusquedaPresupuesto(e.target.value)}
                 placeholder="Buscar por paciente, cédula o código..."
-                className="h-9 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary"
+                className="h-9 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
               />
             </div>
 
@@ -564,7 +1095,7 @@ export const BillingView: React.FC = () => {
                   key={est}
                   type="button"
                   onClick={() => setFiltroEstadoPresupuestos(est)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all capitalize active:scale-95 ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all capitalize active:scale-95 cursor-pointer ${
                     filtroEstadoPresupuestos === est
                       ? 'bg-dental-deep-navy text-white shadow-xs'
                       : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy'
@@ -588,7 +1119,7 @@ export const BillingView: React.FC = () => {
               </div>
             ) : presupuestosFiltrados.length === 0 ? (
               <div className="p-8 text-center text-secondary text-xs bg-surface-subtle-ice rounded-xl border border-border-subtle">
-                No se encontraron presupuestos en esta sede con el filtro aplicado.
+                No se encontraron presupuestos con el filtro aplicado.
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -663,7 +1194,7 @@ export const BillingView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => seleccionarPresupuestoParaCobro(p)}
-                            className="px-3 py-1 rounded-lg bg-primary hover:bg-dental-deep-navy text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1"
+                            className="px-3 py-1 rounded-lg bg-primary hover:bg-dental-deep-navy text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
                           >
                             <span className="material-symbols-outlined text-[13px]">add_card</span>
                             <span>Cobrar en Box</span>
@@ -760,7 +1291,7 @@ export const BillingView: React.FC = () => {
                     key={est}
                     type="button"
                     onClick={() => setFiltroEstadoHonorarios(est)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all capitalize active:scale-95 ${
+                    className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all capitalize active:scale-95 cursor-pointer ${
                       filtroEstadoHonorarios === est
                         ? 'bg-dental-deep-navy text-white shadow-xs'
                         : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy'
@@ -775,7 +1306,7 @@ export const BillingView: React.FC = () => {
                 <button
                   type="button"
                   onClick={seleccionarTodosPendientes}
-                  className="px-2.5 py-1 rounded-xl bg-surface-subtle-ice border border-border-subtle text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all active:scale-95"
+                  className="px-2.5 py-1 rounded-xl bg-surface-subtle-ice border border-border-subtle text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all active:scale-95 cursor-pointer"
                 >
                   Seleccionar Pendientes
                 </button>
@@ -784,7 +1315,7 @@ export const BillingView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setModalLiquidacion(true)}
-                    className="px-3.5 py-1 rounded-xl bg-status-success text-white text-[11px] font-bold shadow-md hover:bg-dental-deep-navy transition-all active:scale-95 flex items-center gap-1"
+                    className="px-3.5 py-1 rounded-xl bg-status-success text-white text-[11px] font-bold shadow-md hover:bg-dental-deep-navy transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[15px]">check_circle</span>
                     <span>Liquidar ({selectedIds.length})</span>
@@ -893,7 +1424,104 @@ export const BillingView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Confirmación de Liquidación por Lote */}
+      {/* =========================================================================
+          MODAL: REGISTRAR CIERRE DIARIO DE CAJA
+         ========================================================================= */}
+      {modalCierreDiario && (
+        <div className="fixed inset-0 z-50 bg-dental-deep-navy/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-surface-clean-white w-full max-w-md rounded-3xl p-5 flex flex-col gap-3.5 shadow-2xl animate-in zoom-in-95 border border-border-subtle">
+            <div className="flex items-center gap-2.5 border-b border-border-subtle pb-2.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                <span className="material-symbols-outlined text-[26px]">lock_clock</span>
+              </div>
+              <div>
+                <h4 className="font-display font-extrabold text-base text-dental-deep-navy">
+                  Cierre Diario de Caja en Box
+                </h4>
+                <p className="text-xs text-secondary">
+                  Consolidación de ingresos y resguardo contable en D1
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle flex flex-col gap-2 text-xs">
+              <div className="flex justify-between items-center text-[11px] text-secondary">
+                <span>Ámbito del Cierre:</span>
+                <strong className="text-dental-deep-navy uppercase">
+                  {filtroSedeFinanciera === 'ambas' ? 'Ambas Sedes (Consolidado)' : `Sede ${filtroSedeFinanciera === 'victoria' ? 'La Victoria' : 'Colonia Tovar'}`}
+                </strong>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-secondary">
+                <span>Fecha Contable:</span>
+                <strong className="text-dental-deep-navy">{new Date().toISOString().split('T')[0]}</strong>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-secondary">
+                <span>Tasa Oficial BCV Aplicada:</span>
+                <strong className="font-mono text-primary">{tasaBcv.toFixed(2)} Bs/$</strong>
+              </div>
+
+              <div className="pt-2 border-t border-border-subtle flex justify-between items-baseline">
+                <span className="font-bold text-dental-deep-navy">Total Cobrado Hoy:</span>
+                <div className="text-right">
+                  <span className="font-black text-lg text-status-success block">
+                    ${resumenCobros.cobradoHoyUsd.toFixed(2)} USD
+                  </span>
+                  <span className="text-[11px] text-secondary font-semibold">
+                    ≈ {(resumenCobros.cobradoHoyBs || resumenCobros.cobradoHoyUsd * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+                  </span>
+                </div>
+              </div>
+
+              {filtroSedeFinanciera === 'ambas' && (
+                <div className="pt-1.5 border-t border-dashed border-border-subtle text-[11px] text-secondary flex flex-col gap-0.5">
+                  <div className="flex justify-between">
+                    <span>• La Victoria:</span>
+                    <strong>${Number(resumenCobros.victoria?.cobradoHoyUsd || 0).toFixed(2)} USD</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>• Colonia Tovar:</span>
+                    <strong>${Number(resumenCobros.tovar?.cobradoHoyUsd || 0).toFixed(2)} USD</strong>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">Observaciones / Nota de Caja</label>
+              <textarea
+                rows={2}
+                value={observacionesCierre}
+                onChange={(e) => setObservacionesCierre(e.target.value)}
+                placeholder="Ej. Cierre conforme de jornada sin discrepancias de arqueo."
+                className="w-full p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setModalCierreDiario(false)}
+                className="flex-1 py-3 rounded-xl bg-surface-subtle-ice text-secondary font-bold text-xs hover:bg-border-subtle transition-all active:scale-95 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingCierre}
+                onClick={handleEjecutarCierreDiario}
+                className="flex-1 py-3 rounded-xl bg-status-success hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                <span>{isSubmittingCierre ? 'Guardando...' : 'Confirmar Cierre'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Liquidación de Honorarios */}
       {modalLiquidacion && (
         <div className="fixed inset-0 z-50 bg-dental-deep-navy/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-surface-clean-white w-full max-w-sm rounded-3xl p-5 flex flex-col gap-3.5 shadow-2xl animate-in zoom-in-95 border border-border-subtle">
@@ -940,6 +1568,32 @@ export const BillingView: React.FC = () => {
                 <span>{isLiquidating ? 'Liquidando...' : 'Confirmar'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Foto de Comprobante Ampliada */}
+      {fotoAmpliadaModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setFotoAmpliadaModal(null)}
+        >
+          <div className="relative max-w-2xl max-h-[85vh] bg-surface-clean-white p-3 rounded-3xl shadow-2xl flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setFotoAmpliadaModal(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+            <img
+              src={fotoAmpliadaModal}
+              alt="Comprobante Bancario Ampliado"
+              className="max-h-[75vh] object-contain rounded-2xl"
+            />
+            <span className="text-xs font-mono text-secondary mt-2">
+              Comprobante de Pago • Verificación OCR y Conciliación
+            </span>
           </div>
         </div>
       )}
@@ -991,6 +1645,13 @@ export const BillingView: React.FC = () => {
                   </span>
                 </div>
               )}
+
+              <div className="flex justify-between text-[11px]">
+                <span className="text-secondary">Tipo de Cobro:</span>
+                <span className="font-bold text-primary uppercase">
+                  {reciboModalData.tipoPago === 'abono' ? 'Abono Parcial' : 'Pago Completo'}
+                </span>
+              </div>
 
               <div className="flex justify-between text-[11px]">
                 <span className="text-secondary">Método:</span>

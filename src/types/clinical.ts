@@ -121,12 +121,73 @@ export interface Presupuesto {
   createdAt: string;
 }
 
+export type MetodoPago =
+  | 'pago_movil'
+  | 'efectivo_usd'
+  | 'efectivo_bs'
+  | 'punto_venta'
+  | 'transferencia'
+  | 'divisas_efectivo'
+  | 'zelle';
+
 export interface PagoRegistroRequest {
   presupuestoId: string;
   montoUsd: number;
-  metodo: 'pago_movil' | 'divisas_efectivo' | 'zelle' | 'punto_venta';
+  metodo: MetodoPago;
   referencia?: string;
   tasaBcv?: number;
+  tipoPago?: 'completo' | 'abono';
+  fotoComprobanteData?: string;
+  sedeId?: SedeId;
+}
+
+export interface PagoItem {
+  id: string;
+  presupuestoId: string;
+  presupuestoCodigo?: string;
+  pacienteNombre?: string;
+  pacienteCedula?: string;
+  procedimiento?: string;
+  sedeId?: SedeId;
+  montoUsd: number;
+  montoBs?: number;
+  tasaBcv: number;
+  metodo: MetodoPago | string;
+  referencia?: string;
+  tipoPago?: 'completo' | 'abono';
+  fotoComprobanteData?: string;
+  estado?: 'confirmado' | 'pendiente_ocr' | 'conciliado';
+  fechaPago: string;
+}
+
+export interface CierreDiarioItem {
+  id: string;
+  sedeId: SedeId | 'ambas';
+  fecha: string;
+  totalUsd: number;
+  totalBs: number;
+  tasaBcv: number;
+  totalVictoriaUsd?: number;
+  totalVictoriaBs?: number;
+  totalTovarUsd?: number;
+  totalTovarBs?: number;
+  totalEfectivoUsd: number;
+  totalEfectivoBs: number;
+  totalPagoMovilBs: number;
+  totalPuntoVentaBs: number;
+  totalTransferenciaBs: number;
+  cantidadPagos: number;
+  cerradoPor?: string;
+  observaciones?: string;
+  createdAt: string;
+}
+
+export interface RegistrarCierreDiarioRequest {
+  sedeId: SedeId | 'ambas';
+  fecha?: string;
+  tasaBcv: number;
+  cerradoPor?: string;
+  observaciones?: string;
 }
 
 export interface TasaCambioInfo {

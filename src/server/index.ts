@@ -984,19 +984,44 @@ app.get('/api/presupuestos', async (c) => {
 
 app.get('/api/presupuestos/resumen', async (c) => {
   const db = c.env.DB;
+  const cache = c.env.CACHE;
   await ensureControlDataTables(db);
+  const sedeIdParam = c.req.query('sedeId') || c.get('sedeId');
 
-  // Cobrado en la jornada de hoy
-  const cobradoHoyRes: any = await db.prepare(`
+  // Obtener tasa actual del BCV
+  let currentTasa = 49.85;
+  try {
+    const tasaData = await getOrFetchBcvRate(db, cache);
+    if (tasaData?.tasa && !isNaN(tasaData.tasa) && tasaData.tasa > 0) {
+      currentTasa = tasaData.tasa;
+    }
+  } catch (_) {}
+
+  // Consulta por sede: La Victoria
+  const victoriaRes: any = await db.prepare(`
     SELECT 
-      COALESCE(SUM(monto_usd), 0) as total_usd,
-      COALESCE(SUM(CASE WHEN metodo = 'divisas_efectivo' THEN monto_usd ELSE 0 END), 0) as efectivo_usd,
-      COALESCE(SUM(CASE WHEN metodo != 'divisas_efectivo' THEN monto_usd ELSE 0 END), 0) as digital_usd
-    FROM pagos
-    WHERE date(fecha_pago) = date('now')
-  `).first();
+      COALESCE(SUM(pg.monto_usd), 0) as total_usd,
+      COALESCE(SUM(CASE WHEN pg.metodo IN ('efectivo_usd', 'divisas_efectivo') THEN pg.monto_usd ELSE 0 END), 0) as efectivo_usd,
+      COALESCE(SUM(CASE WHEN pg.metodo = 'efectivo_bs' THEN COALESCE(pg.monto_bs, pg.monto_usd * ?) ELSE 0 END), 0) as efectivo_bs,
+      COALESCE(SUM(CASE WHEN pg.metodo NOT IN ('efectivo_usd', 'divisas_efectivo', 'efectivo_bs') THEN pg.monto_usd ELSE 0 END), 0) as digital_usd
+    FROM pagos pg
+    JOIN presupuestos pr ON pg.presupuesto_id = pr.id
+    WHERE date(pg.fecha_pago) = date('now') AND pr.sede_id = 'victoria'
+  `).bind(currentTasa).first();
 
-  // Saldos de presupuestos pendientes por cobrar
+  // Consulta por sede: Colonia Tovar
+  const tovarRes: any = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(pg.monto_usd), 0) as total_usd,
+      COALESCE(SUM(CASE WHEN pg.metodo IN ('efectivo_usd', 'divisas_efectivo') THEN pg.monto_usd ELSE 0 END), 0) as efectivo_usd,
+      COALESCE(SUM(CASE WHEN pg.metodo = 'efectivo_bs' THEN COALESCE(pg.monto_bs, pg.monto_usd * ?) ELSE 0 END), 0) as efectivo_bs,
+      COALESCE(SUM(CASE WHEN pg.metodo NOT IN ('efectivo_usd', 'divisas_efectivo', 'efectivo_bs') THEN pg.monto_usd ELSE 0 END), 0) as digital_usd
+    FROM pagos pg
+    JOIN presupuestos pr ON pg.presupuesto_id = pr.id
+    WHERE date(pg.fecha_pago) = date('now') AND pr.sede_id = 'tovar'
+  `).bind(currentTasa).first();
+
+  // Presupuestos pendientes por cobrar en general
   const pendientesRes: any = await db.prepare(`
     SELECT 
       COALESCE(SUM(monto_total_usd - monto_abonado_usd), 0) as pendientes_usd,
@@ -1005,13 +1030,71 @@ app.get('/api/presupuestos/resumen', async (c) => {
     WHERE estado IN ('en_espera', 'aprobado_parcial')
   `).first();
 
+  const vicUsd = Number(victoriaRes?.total_usd || 0);
+  const vicBs = vicUsd * currentTasa;
+  const tovUsd = Number(tovarRes?.total_usd || 0);
+  const tovBs = tovUsd * currentTasa;
+
+  const totalUsdConsolidado = vicUsd + tovUsd;
+  const totalBsConsolidado = totalUsdConsolidado * currentTasa;
+  const efecDivisasUsd = Number(victoriaRes?.efectivo_usd || 0) + Number(tovarRes?.efectivo_usd || 0);
+  const efecBs = Number(victoriaRes?.efectivo_bs || 0) + Number(tovarRes?.efectivo_bs || 0);
+  const digUsd = Number(victoriaRes?.digital_usd || 0) + Number(tovarRes?.digital_usd || 0);
+
+  // Determinar según parámetro de sede
+  let cobradoHoyUsd = totalUsdConsolidado;
+  let cobradoHoyBs = totalBsConsolidado;
+  let efectivoDivisasUsd = efecDivisasUsd;
+  let efectivoBs = efecBs;
+  let digitalUsd = digUsd;
+
+  if (sedeIdParam === 'victoria') {
+    cobradoHoyUsd = vicUsd;
+    cobradoHoyBs = vicBs;
+    efectivoDivisasUsd = Number(victoriaRes?.efectivo_usd || 0);
+    efectivoBs = Number(victoriaRes?.efectivo_bs || 0);
+    digitalUsd = Number(victoriaRes?.digital_usd || 0);
+  } else if (sedeIdParam === 'tovar') {
+    cobradoHoyUsd = tovUsd;
+    cobradoHoyBs = tovBs;
+    efectivoDivisasUsd = Number(tovarRes?.efectivo_usd || 0);
+    efectivoBs = Number(tovarRes?.efectivo_bs || 0);
+    digitalUsd = Number(tovarRes?.digital_usd || 0);
+  }
+
   return c.json({
     success: true,
-    cobradoHoyUsd: Number(cobradoHoyRes?.total_usd || 0),
-    efectivoDivisasUsd: Number(cobradoHoyRes?.efectivo_usd || 0),
-    digitalUsd: Number(cobradoHoyRes?.digital_usd || 0),
+    tasaBcv: currentTasa,
+    cobradoHoyUsd,
+    cobradoHoyBs,
+    efectivoDivisasUsd,
+    efectivoBs,
+    digitalUsd,
     presupuestosPendientesUsd: Number(pendientesRes?.pendientes_usd || 0),
     totalPresupuestosActivos: Number(pendientesRes?.total_presupuestos || 0),
+    consolidado: {
+      cobradoHoyUsd: totalUsdConsolidado,
+      cobradoHoyBs: totalBsConsolidado,
+      efectivoDivisasUsd: efecDivisasUsd,
+      efectivoBs: efecBs,
+      digitalUsd: digUsd,
+      presupuestosPendientesUsd: Number(pendientesRes?.pendientes_usd || 0),
+      totalPresupuestosActivos: Number(pendientesRes?.total_presupuestos || 0),
+    },
+    victoria: {
+      cobradoHoyUsd: vicUsd,
+      cobradoHoyBs: vicBs,
+      efectivoDivisasUsd: Number(victoriaRes?.efectivo_usd || 0),
+      efectivoBs: Number(victoriaRes?.efectivo_bs || 0),
+      digitalUsd: Number(victoriaRes?.digital_usd || 0),
+    },
+    tovar: {
+      cobradoHoyUsd: tovUsd,
+      cobradoHoyBs: tovBs,
+      efectivoDivisasUsd: Number(tovarRes?.efectivo_usd || 0),
+      efectivoBs: Number(tovarRes?.efectivo_bs || 0),
+      digitalUsd: Number(tovarRes?.digital_usd || 0),
+    },
   });
 });
 
@@ -1047,19 +1130,21 @@ app.post('/api/presupuestos', async (c) => {
   return c.json({ success: true, id, codigo });
 });
 
-// Registro de Pagos y Conciliación Multimoneda con Prevención de Doble Cobro
+// Registro de Pagos y Conciliación Multimoneda con Prevención de Doble Cobro y Soporte de Foto Comprobante
 app.post('/api/presupuestos/cobro', async (c) => {
   const db = c.env.DB;
   await ensureControlDataTables(db);
-  const { presupuestoId, montoUsd, metodo, referencia, tasaBcv } = await c.req.json();
+  const body = await c.req.json();
+  const { presupuestoId, montoUsd, metodo, referencia, tasaBcv, tipoPago, fotoComprobanteData } = body;
 
   const montoNum = Number(montoUsd);
   if (!montoNum || isNaN(montoNum) || montoNum <= 0) {
     return c.json({ success: false, error: 'El monto ingresado para el cobro debe ser mayor a 0' }, 400);
   }
 
-  // 1. Control estricto anti-duplicados por referencia bancaria (Pago Móvil, Zelle, Punto de Venta)
-  if (referencia && referencia.trim() && metodo !== 'divisas_efectivo') {
+  // 1. Control estricto anti-duplicados por referencia bancaria (Pago Móvil, Punto de Venta, Transferencia)
+  const esEfectivo = metodo === 'efectivo_usd' || metodo === 'efectivo_bs' || metodo === 'divisas_efectivo';
+  if (referencia && referencia.trim() && !esEfectivo) {
     const refClean = referencia.trim();
     const existingPago: any = await db.prepare(`
       SELECT id, monto_usd, fecha_pago FROM pagos
@@ -1084,11 +1169,22 @@ app.post('/api/presupuestos/cobro', async (c) => {
   const pagoId = `PAG-${Date.now()}`;
   const tasa = Number(tasaBcv) || 49.85;
   const montoBs = montoNum * tasa;
+  const tipo = tipoPago || 'completo';
 
   await db.prepare(`
-    INSERT INTO pagos (id, presupuesto_id, monto_usd, monto_bs, tasa_bcv, metodo, referencia)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(pagoId, presupuestoId, montoNum, montoBs, tasa, metodo, referencia ? referencia.trim() : '').run();
+    INSERT INTO pagos (id, presupuesto_id, monto_usd, monto_bs, tasa_bcv, metodo, referencia, tipo_pago, foto_comprobante_data, estado)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmado')
+  `).bind(
+    pagoId,
+    presupuestoId,
+    montoNum,
+    montoBs,
+    tasa,
+    metodo,
+    referencia ? referencia.trim() : '',
+    tipo,
+    fotoComprobanteData || null
+  ).run();
 
   const nuevoAbonado = Number(pre.monto_abonado_usd || 0) + montoNum;
   const totalUsd = Number(pre.monto_total_usd || 0);
@@ -1107,10 +1203,223 @@ app.post('/api/presupuestos/cobro', async (c) => {
     montoUsd: montoNum,
     montoBs,
     tasaBcv: tasa,
+    tipoPago: tipo,
     nuevoAbonadoUsd: nuevoAbonado,
     saldoPendienteUsd: Math.max(0, totalUsd - nuevoAbonado),
     estadoPresupuesto: nuevoEstado,
   });
+});
+
+// Endpoint de Historial de Pagos Realizados en Box
+app.get('/api/pagos', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const sedeId = c.req.query('sedeId') || c.get('sedeId');
+  const limit = parseInt(c.req.query('limit') || '60', 10);
+
+  let query = `
+    SELECT 
+      pg.id,
+      pg.presupuesto_id,
+      pg.monto_usd,
+      pg.monto_bs,
+      pg.tasa_bcv,
+      pg.metodo,
+      pg.referencia,
+      pg.tipo_pago,
+      pg.foto_comprobante_data,
+      pg.estado,
+      pg.fecha_pago,
+      pr.codigo as presupuesto_codigo,
+      pr.procedimiento,
+      pr.sede_id,
+      TRIM(pac.nombres || ' ' || COALESCE(pac.apellidos, '')) as paciente_nombre,
+      pac.cedula as paciente_cedula
+    FROM pagos pg
+    LEFT JOIN presupuestos pr ON pg.presupuesto_id = pr.id
+    LEFT JOIN pacientes pac ON pr.paciente_id = pac.id
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+  if (sedeId && sedeId !== 'ambas' && sedeId !== 'all') {
+    query += ` AND pr.sede_id = ?`;
+    params.push(sedeId);
+  }
+  query += ` ORDER BY pg.fecha_pago DESC LIMIT ?`;
+  params.push(limit);
+
+  const res = await db.prepare(query).bind(...params).all();
+  const mapped = (res?.results || []).map((row: any) => ({
+    id: row.id,
+    presupuestoId: row.presupuesto_id,
+    presupuestoCodigo: row.presupuesto_codigo || 'PRE-2026',
+    pacienteNombre: row.paciente_nombre || 'Paciente',
+    pacienteCedula: row.paciente_cedula || '',
+    procedimiento: row.procedimiento || 'Tratamiento Odontológico',
+    sedeId: row.sede_id || 'victoria',
+    montoUsd: Number(row.monto_usd || 0),
+    montoBs: Number(row.monto_bs || 0),
+    tasaBcv: Number(row.tasa_bcv || 0),
+    metodo: row.metodo || 'pago_movil',
+    referencia: row.referencia || '',
+    tipoPago: row.tipo_pago || 'completo',
+    fotoComprobanteData: row.foto_comprobante_data || null,
+    estado: row.estado || 'confirmado',
+    fechaPago: row.fecha_pago,
+  }));
+
+  return c.json(mapped);
+});
+
+// Endpoints de Cierres Diarios de Caja en Cloudflare D1
+app.get('/api/cierres-diarios', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const sedeId = c.req.query('sedeId') || c.get('sedeId');
+
+  let query = `SELECT * FROM cierres_diarios WHERE 1=1`;
+  const params: any[] = [];
+  if (sedeId && sedeId !== 'ambas' && sedeId !== 'all') {
+    query += ` AND (sede_id = ? OR sede_id = 'ambas')`;
+    params.push(sedeId);
+  }
+  query += ` ORDER BY fecha DESC, created_at DESC LIMIT 50`;
+
+  const res = await db.prepare(query).bind(...params).all();
+  const mapped = (res?.results || []).map((r: any) => ({
+    id: r.id,
+    sedeId: r.sede_id,
+    fecha: r.fecha,
+    totalUsd: Number(r.total_usd || 0),
+    totalBs: Number(r.total_bs || 0),
+    tasaBcv: Number(r.tasa_bcv || 0),
+    totalVictoriaUsd: Number(r.total_victoria_usd || 0),
+    totalVictoriaBs: Number(r.total_victoria_bs || 0),
+    totalTovarUsd: Number(r.total_tovar_usd || 0),
+    totalTovarBs: Number(r.total_tovar_bs || 0),
+    totalEfectivoUsd: Number(r.total_efectivo_usd || 0),
+    totalEfectivoBs: Number(r.total_efectivo_bs || 0),
+    totalPagoMovilBs: Number(r.total_pago_movil_bs || 0),
+    totalPuntoVentaBs: Number(r.total_punto_venta_bs || 0),
+    totalTransferenciaBs: Number(r.total_transferencia_bs || 0),
+    cantidadPagos: Number(r.cantidad_pagos || 0),
+    cerradoPor: r.cerrado_por || 'Caja Central',
+    observaciones: r.observaciones || '',
+    createdAt: r.created_at,
+  }));
+  return c.json(mapped);
+});
+
+app.post('/api/cierres-diarios', async (c) => {
+  const db = c.env.DB;
+  await ensureControlDataTables(db);
+  const body = await c.req.json();
+  const sedeId = body.sedeId || 'ambas';
+  const fecha = body.fecha || new Date().toISOString().split('T')[0];
+  const tasaBcv = Number(body.tasaBcv) || 49.85;
+  const cerradoPor = body.cerradoPor || 'Recepción / Caja';
+  const observaciones = body.observaciones || 'Cierre de caja de la jornada';
+
+  // Obtener pagos del día especificado
+  const pagosHoy: any = await db.prepare(`
+    SELECT 
+      pg.*,
+      pr.sede_id as pr_sede_id
+    FROM pagos pg
+    LEFT JOIN presupuestos pr ON pg.presupuesto_id = pr.id
+    WHERE date(pg.fecha_pago) = date(?)
+  `).bind(fecha).all();
+
+  const lista = pagosHoy?.results || [];
+  let totalUsd = 0;
+  let totalVictoriaUsd = 0;
+  let totalTovarUsd = 0;
+  let totalEfectivoUsd = 0;
+  let totalEfectivoBs = 0;
+  let totalPagoMovilBs = 0;
+  let totalPuntoVentaBs = 0;
+  let totalTransferenciaBs = 0;
+
+  for (const p of lista) {
+    const usd = Number(p.monto_usd || 0);
+    const bs = Number(p.monto_bs || usd * tasaBcv);
+    totalUsd += usd;
+    if (p.pr_sede_id === 'tovar') {
+      totalTovarUsd += usd;
+    } else {
+      totalVictoriaUsd += usd;
+    }
+
+    if (p.metodo === 'efectivo_usd' || p.metodo === 'divisas_efectivo') {
+      totalEfectivoUsd += usd;
+    } else if (p.metodo === 'efectivo_bs') {
+      totalEfectivoBs += bs;
+    } else if (p.metodo === 'pago_movil') {
+      totalPagoMovilBs += bs;
+    } else if (p.metodo === 'punto_venta') {
+      totalPuntoVentaBs += bs;
+    } else if (p.metodo === 'transferencia') {
+      totalTransferenciaBs += bs;
+    }
+  }
+
+  const totalBs = totalUsd * tasaBcv;
+  const totalVictoriaBs = totalVictoriaUsd * tasaBcv;
+  const totalTovarBs = totalTovarUsd * tasaBcv;
+
+  const cierreId = `CIE-${fecha}-${Date.now().toString().slice(-4)}`;
+
+  await db.prepare(`
+    INSERT INTO cierres_diarios (
+      id, sede_id, fecha, total_usd, total_bs, tasa_bcv,
+      total_victoria_usd, total_victoria_bs, total_tovar_usd, total_tovar_bs,
+      total_efectivo_usd, total_efectivo_bs, total_pago_movil_bs, total_punto_venta_bs, total_transferencia_bs,
+      cantidad_pagos, cerrado_por, observaciones
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    cierreId,
+    sedeId,
+    fecha,
+    totalUsd,
+    totalBs,
+    tasaBcv,
+    totalVictoriaUsd,
+    totalVictoriaBs,
+    totalTovarUsd,
+    totalTovarBs,
+    totalEfectivoUsd,
+    totalEfectivoBs,
+    totalPagoMovilBs,
+    totalPuntoVentaBs,
+    totalTransferenciaBs,
+    lista.length,
+    cerradoPor,
+    observaciones
+  ).run();
+
+  const cierre = {
+    id: cierreId,
+    sedeId,
+    fecha,
+    totalUsd,
+    totalBs,
+    tasaBcv,
+    totalVictoriaUsd,
+    totalVictoriaBs,
+    totalTovarUsd,
+    totalTovarBs,
+    totalEfectivoUsd,
+    totalEfectivoBs,
+    totalPagoMovilBs,
+    totalPuntoVentaBs,
+    totalTransferenciaBs,
+    cantidadPagos: lista.length,
+    cerradoPor,
+    observaciones,
+    createdAt: new Date().toISOString(),
+  };
+
+  return c.json({ success: true, cierre });
 });
 
 // 5. Endpoint de Consulta en Línea de Tasa Oficial BCV
@@ -1459,6 +1768,67 @@ async function ensureControlDataTables(db: D1Database) {
   // Migraciones defensivas de presupuestos y pagos
   try { await db.prepare("ALTER TABLE presupuestos ADD COLUMN procedimiento TEXT DEFAULT 'Tratamiento Odontológico General'").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE pagos ADD COLUMN tasa_bcv REAL").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pagos ADD COLUMN tipo_pago TEXT DEFAULT 'completo'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pagos ADD COLUMN foto_comprobante_data TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE pagos ADD COLUMN estado TEXT DEFAULT 'confirmado'").run(); } catch (_) {}
+
+  // Asegurar que la tabla pagos permita cualquier método de pago sin restricciones de CHECK obsoletas
+  try {
+    const tableInfo: any = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='pagos'").first();
+    if (tableInfo?.sql && tableInfo.sql.includes("CHECK(metodo IN")) {
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS pagos_v2_migration (
+          id TEXT PRIMARY KEY,
+          presupuesto_id TEXT NOT NULL,
+          monto_usd REAL NOT NULL,
+          monto_bs REAL,
+          tasa_bcv REAL,
+          metodo TEXT NOT NULL,
+          referencia TEXT,
+          tipo_pago TEXT DEFAULT 'completo',
+          foto_comprobante_data TEXT,
+          estado TEXT DEFAULT 'confirmado',
+          fecha_pago DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run();
+      await db.prepare(`
+        INSERT OR IGNORE INTO pagos_v2_migration (id, presupuesto_id, monto_usd, monto_bs, tasa_bcv, metodo, referencia, fecha_pago)
+        SELECT id, presupuesto_id, monto_usd, monto_bs, tasa_bcv, metodo, referencia, fecha_pago FROM pagos
+      `).run();
+      await db.prepare("DROP TABLE pagos").run();
+      await db.prepare("ALTER TABLE pagos_v2_migration RENAME TO pagos").run();
+      await db.prepare("CREATE INDEX IF NOT EXISTS idx_pagos_presupuesto ON pagos(presupuesto_id)").run();
+    }
+  } catch (err) {
+    console.error('Verificación de esquema pagos:', err);
+  }
+
+  // Tabla D1 de Cierres Diarios de Caja
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS cierres_diarios (
+        id TEXT PRIMARY KEY,
+        sede_id TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        total_usd REAL NOT NULL,
+        total_bs REAL NOT NULL,
+        tasa_bcv REAL NOT NULL,
+        total_victoria_usd REAL DEFAULT 0,
+        total_victoria_bs REAL DEFAULT 0,
+        total_tovar_usd REAL DEFAULT 0,
+        total_tovar_bs REAL DEFAULT 0,
+        total_efectivo_usd REAL DEFAULT 0,
+        total_efectivo_bs REAL DEFAULT 0,
+        total_pago_movil_bs REAL DEFAULT 0,
+        total_punto_venta_bs REAL DEFAULT 0,
+        total_transferencia_bs REAL DEFAULT 0,
+        cantidad_pagos INTEGER DEFAULT 0,
+        cerrado_por TEXT,
+        observaciones TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
 
   // Migraciones defensivas de odontograma y radiografías
   try { await db.prepare("ALTER TABLE odontograma_piezas ADD COLUMN diagnostico TEXT").run(); } catch (_) {}

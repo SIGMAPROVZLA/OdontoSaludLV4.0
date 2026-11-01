@@ -13,6 +13,7 @@ import {
 } from '../../types/clinical';
 import { QuadrantArchView } from './QuadrantArchView';
 import { TabId } from '../layout/BottomNavigation';
+import { compressImage } from '../../utils/imageCompression';
 
 export interface CitaAprobadaConsulta {
   id: string;
@@ -96,8 +97,11 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
   // Radiografía Digital (Sensor RVG 2.0) - Última Tarjeta
   const [radiografias, setRadiografias] = useState<RadiografiaItem[]>([]);
   const [rxVisualizada, setRxVisualizada] = useState<string | null>(null);
+  const [rxPendienteGuardar, setRxPendienteGuardar] = useState<string | null>(null);
   const [filtroAltoContraste, setFiltroAltoContraste] = useState(false);
   const [isUploadingRx, setIsUploadingRx] = useState(false);
+  const [isSavingRx, setIsSavingRx] = useState(false);
+  const [mensajeRxExito, setMensajeRxExito] = useState<string | null>(null);
   const [notaRx, setNotaRx] = useState('Inspección apical RVG 2.0 en sillón');
   const [piezaRx, setPiezaRx] = useState<string>('16');
 
@@ -381,15 +385,19 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     }
   };
 
-  // 4. Manejo de Evolución Clínica con Foto de Prescripción / Reposo
-  const handleSubirFotoPrescripcion = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 4. Manejo de Evolución Clínica con Foto de Prescripción / Reposo (Comprimida en Cliente)
+  const handleSubirFotoPrescripcion = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFotoPrescripcion(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
+      setFotoPrescripcion(compressed);
+    } catch (err) {
+      console.error('Error comprimiendo foto de prescripción:', err);
+      const reader = new FileReader();
+      reader.onload = () => setFotoPrescripcion(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleGuardarEvolucion = async (e: React.FormEvent) => {
@@ -440,48 +448,69 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     }
   };
 
-  // 5. Manejo de Radiografía y Captura con Cámara
+  // 5. Manejo de Radiografía y Captura con Cámara (Compresión + Guardado con Confirmación)
   const handleSubirRadiografia = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedCita?.pacienteId) return;
 
     setIsUploadingRx(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64Data = reader.result as string;
-      setRxVisualizada(base64Data);
+    setMensajeRxExito(null);
+    try {
+      // Compresión cliente optimizada (max 1280px, 0.75 calidad JPEG)
+      const compressed = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
+      setRxPendienteGuardar(compressed);
+      setRxVisualizada(compressed);
+    } catch (err) {
+      console.error('Error comprimiendo radiografía:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setRxPendienteGuardar(base64);
+        setRxVisualizada(base64);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingRx(false);
+    }
+  };
 
-      try {
-        const res = await ApiClient.guardarRadiografia(
-          selectedCita.pacienteId,
-          {
-            piezaFdi: piezaRx ? parseInt(piezaRx, 10) : undefined,
-            tipo: 'periapical_rvg',
-            imagenData: base64Data,
-            observaciones: notaRx,
-          },
-          sedeId
-        );
+  const handleGuardarRadiografia = async () => {
+    if (!rxPendienteGuardar || !selectedCita?.pacienteId) return;
 
-        if (res.success) {
-          const nuevaRx: RadiografiaItem = {
-            id: res.id,
-            pacienteId: selectedCita.pacienteId,
-            piezaFdi: piezaRx ? parseInt(piezaRx, 10) : undefined,
-            tipo: 'periapical_rvg',
-            imagenData: base64Data,
-            observaciones: notaRx,
-            fechaToma: new Date().toISOString(),
-          };
-          setRadiografias((prev) => [nuevaRx, ...prev]);
-        }
-      } catch (err) {
-        console.error('Error subiendo radiografía:', err);
-      } finally {
-        setIsUploadingRx(false);
+    setIsSavingRx(true);
+    setMensajeRxExito(null);
+    try {
+      const res = await ApiClient.guardarRadiografia(
+        selectedCita.pacienteId,
+        {
+          piezaFdi: piezaRx ? parseInt(piezaRx, 10) : undefined,
+          tipo: 'periapical_rvg',
+          imagenData: rxPendienteGuardar,
+          observaciones: notaRx,
+        },
+        sedeId
+      );
+
+      if (res.success) {
+        const nuevaRx: RadiografiaItem = {
+          id: res.id,
+          pacienteId: selectedCita.pacienteId,
+          piezaFdi: piezaRx ? parseInt(piezaRx, 10) : undefined,
+          tipo: 'periapical_rvg',
+          imagenData: rxPendienteGuardar,
+          observaciones: notaRx,
+          fechaToma: new Date().toISOString(),
+        };
+        setRadiografias((prev) => [nuevaRx, ...prev]);
+        setRxPendienteGuardar(null);
+        setMensajeRxExito('¡Radiografía digital RVG 2.0 guardada y comprimida exitosamente en D1!');
+        setTimeout(() => setMensajeRxExito(null), 4000);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error guardando radiografía:', err);
+    } finally {
+      setIsSavingRx(false);
+    }
   };
 
   return (
@@ -1169,7 +1198,7 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             {/* Input oculto para carga / captura de cámara */}
             <input
               type="file"
@@ -1185,10 +1214,64 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               className="px-3 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px]">photo_camera</span>
-              <span>{isUploadingRx ? 'Procesando...' : 'Tomar / Adjuntar Foto RVG'}</span>
+              <span>{isUploadingRx ? 'Comprimiendo...' : 'Tomar / Adjuntar Foto'}</span>
             </label>
+
+            {rxPendienteGuardar && (
+              <button
+                type="button"
+                onClick={handleGuardarRadiografia}
+                disabled={isSavingRx}
+                className="px-3.5 py-1.5 rounded-xl bg-status-success hover:bg-emerald-600 text-white text-xs font-extrabold transition-all active:scale-95 flex items-center gap-1.5 shadow-md cursor-pointer animate-pulse disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">save</span>
+                <span>{isSavingRx ? 'Guardando en D1...' : '💾 Guardar Cambios'}</span>
+              </button>
+            )}
+
+            {rxPendienteGuardar && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRxPendienteGuardar(null);
+                  if (radiografias.length > 0) {
+                    setRxVisualizada(radiografias[0].imagenData || radiografias[0].r2StorageUrl || null);
+                  } else {
+                    setRxVisualizada(null);
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-red-50 text-secondary hover:text-red-600 text-xs font-bold transition-all"
+                title="Descartar foto pendiente"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {mensajeRxExito && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+            <span className="material-symbols-outlined text-emerald-600 text-[18px]">verified</span>
+            <span>{mensajeRxExito}</span>
+          </div>
+        )}
+
+        {rxPendienteGuardar && (
+          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-600 text-[18px]">photo_size_select_large</span>
+              <span>Foto comprimida en cliente lista para guardar en D1.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleGuardarRadiografia}
+              disabled={isSavingRx}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shadow-xs cursor-pointer shrink-0"
+            >
+              Confirmar y Guardar
+            </button>
+          </div>
+        )}
 
         {/* Visor de Radiografía Digital con Filtros */}
         <div className="relative rounded-2xl overflow-hidden h-48 bg-dental-deep-navy flex items-center justify-center shadow-inner border border-primary">

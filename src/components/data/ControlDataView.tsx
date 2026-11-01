@@ -9,6 +9,7 @@ import {
   PacienteItem,
   CondicionMedicaItem,
   TratamientoRealizadoItem,
+  CierreDiarioItem,
   Cita,
   SedeId,
 } from '../../types/clinical';
@@ -437,7 +438,7 @@ const NIVELES_RIESGO: CondicionMedicaItem['nivelRiesgo'][] = [
   'Crítico',
 ];
 
-type DataTabKey = 'odontologos' | 'higienistas' | 'pacientes' | 'citas' | 'tratamientos' | 'condiciones';
+type DataTabKey = 'odontologos' | 'higienistas' | 'pacientes' | 'citas' | 'tratamientos' | 'condiciones' | 'cierres';
 
 // Clase utilitaria para iluminar bordes de campos cuando se están llenando o ya contienen valor
 const getIlluminatedFieldClass = (isFilled: boolean) =>
@@ -527,6 +528,21 @@ export const ControlDataView: React.FC = () => {
     }
   });
 
+  const [cierresDiarios, setCierresDiarios] = useState<CierreDiarioItem[]>([]);
+  const [isLoadingCierres, setIsLoadingCierres] = useState(false);
+
+  const cargarCierresDiarios = async () => {
+    setIsLoadingCierres(true);
+    try {
+      const data = await ApiClient.getCierresDiarios();
+      setCierresDiarios(data || []);
+    } catch (err) {
+      console.error('Error al cargar cierres diarios:', err);
+    } finally {
+      setIsLoadingCierres(false);
+    }
+  };
+
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToast(msg);
@@ -535,6 +551,7 @@ export const ControlDataView: React.FC = () => {
 
   // Sincronización con Cloudflare D1 al montar
   useEffect(() => {
+    cargarCierresDiarios();
     ApiClient.getControlData().then((remote) => {
       if (!remote) return;
       if (remote.odontologos && remote.odontologos.length > 0) {
@@ -1362,6 +1379,13 @@ export const ControlDataView: React.FC = () => {
       icon: 'health_and_safety',
       count: condicionesMedicas.length,
     },
+    {
+      key: 'cierres',
+      label: 'Cierres Diarios de Caja',
+      shortLabel: 'Cierres de Caja',
+      icon: 'point_of_sale',
+      count: cierresDiarios.length,
+    },
   ];
 
   return (
@@ -1395,8 +1419,8 @@ export const ControlDataView: React.FC = () => {
             </div>
           </div>
 
-          {/* 6 KPIs Animados de Alto Impacto Visual (Clickeables para cambiar de pestaña) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 shrink-0">
+          {/* 7 KPIs Animados de Alto Impacto Visual (Clickeables para cambiar de pestaña) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-2.5 shrink-0">
             {/* KPI 1: Pacientes en Padrón */}
             <button
               type="button"
@@ -1536,7 +1560,7 @@ export const ControlDataView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('condiciones')}
-              className={`col-span-2 sm:col-span-1 group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
+              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
                 activeTab === 'condiciones'
                   ? 'bg-dental-deep-navy ring-2 ring-status-danger border-status-danger'
                   : 'bg-dental-deep-navy/90 hover:bg-dental-deep-navy border border-border-subtle/40'
@@ -1556,6 +1580,33 @@ export const ControlDataView: React.FC = () => {
               </span>
               <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-status-danger w-full rounded-full animate-pulse" />
+              </div>
+            </button>
+
+            {/* KPI 7: Cierres Diarios de Caja */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('cierres')}
+              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
+                activeTab === 'cierres'
+                  ? 'bg-emerald-600 ring-2 ring-white border-white'
+                  : 'bg-emerald-800/80 hover:bg-emerald-800 border border-border-subtle/40'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
+                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
+                  point_of_sale
+                </span>
+              </div>
+              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
+                {cierresDiarios.length}
+              </span>
+              <span className="text-[10px] text-surface-container font-bold block mt-1">
+                Cierres Caja
+              </span>
+              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
+                <div className="h-full bg-status-success w-full rounded-full animate-pulse" />
               </div>
             </button>
           </div>
@@ -3898,6 +3949,150 @@ export const ControlDataView: React.FC = () => {
                 </button>
               </div>
             </form>
+          )}
+        </section>
+      )}
+
+      {/* =====================================================================
+          TARJETA 07: CIERRES DIARIOS DE CAJA (HISTÓRICO D1)
+         ===================================================================== */}
+      {activeTab === 'cierres' && (
+        <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 via-status-success to-dental-deep-navy" />
+
+          {/* Cabecera Tarjeta Cierres */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">point_of_sale</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-black text-base text-dental-deep-navy tracking-tight">
+                    Cierres Diarios de Caja en Box
+                  </h3>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Cloudflare D1
+                  </span>
+                </div>
+                <p className="text-xs text-secondary mt-0.5">
+                  Auditoría y conciliación histórica de ingresos por sede y por jornada
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={cargarCierresDiarios}
+              className="px-3.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-dental-deep-navy text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+            >
+              <span className={`material-symbols-outlined text-[15px] ${isLoadingCierres ? 'animate-spin' : ''}`}>
+                refresh
+              </span>
+              <span>Actualizar Cierres</span>
+            </button>
+          </div>
+
+          {/* Tabla de Cierres Diarios */}
+          {isLoadingCierres ? (
+            <div className="p-12 text-center text-secondary text-xs flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined animate-spin text-[20px]">sync</span>
+              <span>Consultando histórico de cierres en Cloudflare D1...</span>
+            </div>
+          ) : cierresDiarios.length === 0 ? (
+            <div className="p-8 text-center text-secondary text-xs bg-surface-subtle-ice rounded-2xl border border-border-subtle">
+              No hay cierres de caja registrados todavía. Realiza un cierre desde el módulo de Cobros.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border-subtle text-[11px] text-secondary font-bold">
+                    <th className="py-2.5 px-3">Fecha & Código</th>
+                    <th className="py-2.5 px-3">Sede</th>
+                    <th className="py-2.5 px-3 text-right">Total Cobrado (USD / Bs)</th>
+                    <th className="py-2.5 px-3">Desglose por Sedes</th>
+                    <th className="py-2.5 px-3">Desglose por Instrumento</th>
+                    <th className="py-2.5 px-3 text-center">Pagos</th>
+                    <th className="py-2.5 px-3">Responsable</th>
+                    <th className="py-2.5 px-3 text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle font-medium">
+                  {cierresDiarios.map((cierre) => {
+                    return (
+                      <tr key={cierre.id} className="hover:bg-surface-subtle-ice/60 transition-colors">
+                        <td className="py-3 px-3">
+                          <span className="font-mono text-[10px] bg-surface-container text-dental-deep-navy font-bold px-1.5 py-0.5 rounded block w-fit">
+                            {cierre.id}
+                          </span>
+                          <span className="text-[11px] font-bold text-dental-deep-navy block mt-0.5">
+                            📅 {cierre.fecha}
+                          </span>
+                          <span className="text-[10px] text-secondary font-mono">
+                            Tasa: {cierre.tasaBcv.toFixed(2)} Bs/$
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            cierre.sedeId === 'ambas'
+                              ? 'bg-primary text-white'
+                              : cierre.sedeId === 'victoria'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {cierre.sedeId === 'ambas' ? 'Ambas Sedes' : cierre.sedeId === 'victoria' ? 'La Victoria' : 'Colonia Tovar'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <span className="font-extrabold text-sm text-status-success block">
+                            ${cierre.totalUsd.toFixed(2)} USD
+                          </span>
+                          <span className="text-[10px] text-secondary block">
+                            ≈ {cierre.totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-[11px]">
+                          <div className="flex flex-col gap-0.5 text-secondary">
+                            <span>📍 Victoria: <strong>${(cierre.totalVictoriaUsd || 0).toFixed(2)} USD</strong></span>
+                            <span>📍 Tovar: <strong>${(cierre.totalTovarUsd || 0).toFixed(2)} USD</strong></span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-[11px]">
+                          <div className="flex flex-col gap-0.5 text-secondary">
+                            <span>💵 Efectivo USD: <strong>${(cierre.totalEfectivoUsd || 0).toFixed(2)}</strong></span>
+                            <span>🇻🇪 Efectivo Bs: <strong>{(cierre.totalEfectivoBs || 0).toLocaleString('es-VE')} Bs.</strong></span>
+                            <span>📱 Pago Móvil: <strong>{(cierre.totalPagoMovilBs || 0).toLocaleString('es-VE')} Bs.</strong></span>
+                            <span>💳 Punto Venta: <strong>{(cierre.totalPuntoVentaBs || 0).toLocaleString('es-VE')} Bs.</strong></span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-bold text-xs bg-surface-subtle-ice px-2 py-0.5 rounded-md text-dental-deep-navy">
+                            {cierre.cantidadPagos}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-bold text-dental-deep-navy block text-[11px]">
+                            {cierre.cerradoPor || 'Caja Central'}
+                          </span>
+                          {cierre.observaciones && (
+                            <span className="text-[10px] text-secondary line-clamp-1 italic">
+                              {cierre.observaciones}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] inline-flex items-center gap-1 border border-emerald-200">
+                            <span className="material-symbols-outlined text-[11px]">lock</span>
+                            <span>Cerrado D1</span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       )}

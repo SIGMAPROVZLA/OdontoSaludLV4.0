@@ -5,6 +5,9 @@ import {
   ToothRecord,
   Presupuesto,
   PagoRegistroRequest,
+  PagoItem,
+  CierreDiarioItem,
+  RegistrarCierreDiarioRequest,
   TasaCambioInfo,
   OdontologoItem,
   HigienistaItem,
@@ -248,28 +251,97 @@ export class ApiClient {
     }
   }
 
-  static async getResumenCobros(sedeId?: SedeId): Promise<{
+  static async getResumenCobros(sedeId?: string): Promise<{
     success: boolean;
     cobradoHoyUsd: number;
+    cobradoHoyBs?: number;
     efectivoDivisasUsd: number;
+    efectivoBs?: number;
     digitalUsd: number;
     presupuestosPendientesUsd: number;
     totalPresupuestosActivos: number;
+    tasaBcv?: number;
+    consolidado?: {
+      cobradoHoyUsd: number;
+      cobradoHoyBs: number;
+      efectivoDivisasUsd: number;
+      efectivoBs: number;
+      digitalUsd: number;
+      presupuestosPendientesUsd: number;
+      totalPresupuestosActivos: number;
+    };
+    victoria?: {
+      cobradoHoyUsd: number;
+      cobradoHoyBs: number;
+      efectivoDivisasUsd: number;
+      efectivoBs: number;
+      digitalUsd: number;
+    };
+    tovar?: {
+      cobradoHoyUsd: number;
+      cobradoHoyBs: number;
+      efectivoDivisasUsd: number;
+      efectivoBs: number;
+      digitalUsd: number;
+    };
   }> {
     try {
       const url = sedeId ? `${API_BASE_URL}/presupuestos/resumen?sedeId=${sedeId}` : `${API_BASE_URL}/presupuestos/resumen`;
-      const res = await fetch(url, { headers: this.getHeaders(sedeId) });
+      const res = await fetch(url, { headers: this.getHeaders(sedeId as any) });
       if (!res.ok) throw new Error('Error al cargar resumen financiero');
       return await res.json();
     } catch {
       return {
         success: true,
         cobradoHoyUsd: 0,
+        cobradoHoyBs: 0,
         efectivoDivisasUsd: 0,
+        efectivoBs: 0,
         digitalUsd: 0,
         presupuestosPendientesUsd: 455,
         totalPresupuestosActivos: 4,
       };
+    }
+  }
+
+  static async getPagos(sedeId?: string): Promise<PagoItem[]> {
+    try {
+      const url = sedeId ? `${API_BASE_URL}/pagos?sedeId=${sedeId}` : `${API_BASE_URL}/pagos`;
+      const res = await fetch(url, { headers: this.getHeaders(sedeId as any) });
+      if (!res.ok) throw new Error('Error al cargar historial de pagos');
+      return await res.json();
+    } catch (err) {
+      console.error('Error al consultar pagos:', err);
+      return [];
+    }
+  }
+
+  static async getCierresDiarios(sedeId?: string): Promise<CierreDiarioItem[]> {
+    try {
+      const url = sedeId ? `${API_BASE_URL}/cierres-diarios?sedeId=${sedeId}` : `${API_BASE_URL}/cierres-diarios`;
+      const res = await fetch(url, { headers: this.getHeaders(sedeId as any) });
+      if (!res.ok) throw new Error('Error al cargar cierres diarios');
+      return await res.json();
+    } catch (err) {
+      console.error('Error al consultar cierres diarios:', err);
+      return [];
+    }
+  }
+
+  static async registrarCierreDiario(datos: RegistrarCierreDiarioRequest): Promise<{
+    success: boolean;
+    cierre?: CierreDiarioItem;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/cierres-diarios`, {
+        method: 'POST',
+        headers: this.getHeaders(datos.sedeId === 'ambas' ? undefined : (datos.sedeId as SedeId)),
+        body: JSON.stringify(datos),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Error al registrar cierre diario' };
     }
   }
 
