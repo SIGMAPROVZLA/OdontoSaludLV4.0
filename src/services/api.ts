@@ -163,6 +163,8 @@ export class ApiClient {
       piezaFdi?: number;
       texto: string;
       indicacionesReceta?: string;
+      fotoPrescripcionData?: string;
+      tipoAdjunto?: 'receta' | 'indicaciones' | 'reposo';
     },
     sedeId?: SedeId
   ): Promise<{ success: boolean; id: string }> {

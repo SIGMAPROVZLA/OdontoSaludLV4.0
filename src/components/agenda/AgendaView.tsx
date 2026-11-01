@@ -341,17 +341,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onNavigateTab }) => {
         })}
       </div>
 
-      {/* Botón Flotante Agendar Cita Rápida (Stitch Mobile Agenda) */}
-      <div className="fixed bottom-20 inset-x-4 z-40 flex justify-center max-w-sm mx-auto pointer-events-none">
-        <button
-          type="button"
-          onClick={() => onNavigateTab?.('reserva')}
-          className="pointer-events-auto py-3 px-6 rounded-full bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-lg ring-2 ring-surface-container transition-all flex items-center gap-2 active:scale-95"
-        >
-          <span className="material-symbols-outlined text-[20px]">add</span>
-          <span>Agendar Cita Rápida</span>
-        </button>
-      </div>
     </div>
   );
 };

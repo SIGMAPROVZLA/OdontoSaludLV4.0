@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ToothRecord, ToothFace, ToothFaceStatus } from '../../types/clinical';
+import { ToothRecord, ToothFace, ToothFaceStatus, ProcedimientoGeneralOdontograma } from '../../types/clinical';
 import { COLOR_POR_ESTADO, NOMBRE_POR_ESTADO } from './AnatomicalToothSvg';
 
 interface ToothEditorModalProps {
@@ -20,7 +20,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
   const [activeFace, setActiveFace] = useState<ToothFace>('O');
   const [currentSurfaces, setCurrentSurfaces] = useState(tooth.surfaces);
   const [isAbsent, setIsAbsent] = useState(Boolean(tooth.isAbsent));
-  const [procedimientoGeneral, setProcedimientoGeneral] = useState<'ninguno' | 'endodoncia' | 'exodoncia' | 'corona'>(
+  const [procedimientoGeneral, setProcedimientoGeneral] = useState<ProcedimientoGeneralOdontograma>(
     tooth.procedimientoGeneral || 'ninguno'
   );
   const [notaClinica, setNotaClinica] = useState(
@@ -103,17 +103,17 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
           />
         </div>
 
-        {/* Selección General de Procedimiento: Endodoncia / Exodoncia */}
+        {/* Selección General de Procedimiento: Endodoncia, Exodoncia, Prótesis, Implante */}
         {!isAbsent && (
           <div className="flex flex-col gap-1.5 bg-surface-subtle-ice p-3 rounded-xl border border-border-subtle">
             <label className="text-xs font-bold text-dental-deep-navy uppercase tracking-wider">
               Procedimiento Especial en Pieza
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
               <button
                 type="button"
                 onClick={() => setProcedimientoGeneral('ninguno')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border ${
+                className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border ${
                   procedimientoGeneral === 'ninguno'
                     ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-xs'
                     : 'bg-surface-clean-white border-border-subtle text-secondary hover:bg-surface-subtle-ice'
@@ -125,7 +125,7 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
               <button
                 type="button"
                 onClick={() => setProcedimientoGeneral('endodoncia')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
                   procedimientoGeneral === 'endodoncia'
                     ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
                     : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
@@ -137,13 +137,37 @@ export const ToothEditorModal: React.FC<ToothEditorModalProps> = ({
               <button
                 type="button"
                 onClick={() => setProcedimientoGeneral('exodoncia')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
                   procedimientoGeneral === 'exodoncia'
                     ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
                     : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'
                 }`}
               >
                 <span>✕ Exo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProcedimientoGeneral('protesis')}
+                className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                  procedimientoGeneral === 'protesis'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                <span>👑 Prótesis</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProcedimientoGeneral('implante')}
+                className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 ${
+                  procedimientoGeneral === 'implante'
+                    ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
+                    : 'bg-cyan-50 text-cyan-900 border-cyan-200 hover:bg-cyan-100'
+                }`}
+              >
+                <span>🔩 Implante</span>
               </button>
             </div>
           </div>

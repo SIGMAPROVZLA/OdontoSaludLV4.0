@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ToothRecord, ToothFace } from '../../types/clinical';
+import React, { useState, useEffect } from 'react';
+import { ToothRecord, ToothFace, ProcedimientoGeneralOdontograma } from '../../types/clinical';
 import { AnatomicalToothSvg } from './AnatomicalToothSvg';
 import { ToothEditorModal } from './ToothEditorModal';
 
@@ -23,6 +23,18 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     return teeth.find((t) => t.numeroFdi === 16) || teeth[0] || null;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Sincronizar selectedTooth cuando teeth cambia externamente
+  useEffect(() => {
+    if (selectedTooth) {
+      const match = teeth.find((t) => t.numeroFdi === selectedTooth.numeroFdi);
+      if (match) {
+        setSelectedTooth(match);
+      }
+    } else if (teeth.length > 0) {
+      setSelectedTooth(teeth.find((t) => t.numeroFdi === 16) || teeth[0]);
+    }
+  }, [teeth]);
 
   const getTooth = (fdi: number): ToothRecord => {
     return (
@@ -51,7 +63,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     onUpdateTooth(updatedTooth);
   };
 
-  const toggleProcedimientoGeneral = (tipo: 'endodoncia' | 'exodoncia') => {
+  const toggleProcedimientoGeneral = (tipo: ProcedimientoGeneralOdontograma) => {
     if (!selectedTooth) return;
     const nuevo = selectedTooth.procedimientoGeneral === tipo ? 'ninguno' : tipo;
     const updated: ToothRecord = {
@@ -120,7 +132,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
           </div>
         </div>
 
-        {/* Leyenda clínica de estados enriquecida con Endodoncia y Exodoncia */}
+        {/* Leyenda clínica de estados enriquecida con Endodoncia, Exodoncia, Prótesis e Implante */}
         <div className="flex flex-wrap items-center gap-2 bg-surface-subtle-ice p-2.5 rounded-xl border border-border-subtle text-xs">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-status-success shrink-0" />
@@ -147,6 +159,16 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-rose-100 border border-rose-300 text-rose-900 shadow-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0 ring-1 ring-white" />
             <span className="text-[11px] font-bold">✕ Exodoncia (Extracción)</span>
+          </div>
+          {/* Selector Especial: Prótesis */}
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 ring-1 ring-white" />
+            <span className="text-[11px] font-bold">👑 Prótesis / Corona</span>
+          </div>
+          {/* Selector Especial: Implante */}
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-cyan-100 border border-cyan-300 text-cyan-900 shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 shrink-0 ring-1 ring-white" />
+            <span className="text-[11px] font-bold">🔩 Implante (Titanio)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
@@ -349,6 +371,32 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                 title="Marcar o desmarcar Exodoncia en esta pieza"
               >
                 <span>✕ Exo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleProcedimientoGeneral('protesis')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                  selectedTooth.procedimientoGeneral === 'protesis'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-surface-clean-white border border-amber-300 text-amber-800 hover:bg-amber-50'
+                }`}
+                title="Marcar o desmarcar Prótesis / Corona en esta pieza"
+              >
+                <span>👑 Prótesis</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleProcedimientoGeneral('implante')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                  selectedTooth.procedimientoGeneral === 'implante'
+                    ? 'bg-cyan-600 text-white shadow-xs'
+                    : 'bg-surface-clean-white border border-cyan-300 text-cyan-800 hover:bg-cyan-50'
+                }`}
+                title="Marcar o desmarcar Implante Dental en esta pieza"
+              >
+                <span>🔩 Implante</span>
               </button>
 
               <button

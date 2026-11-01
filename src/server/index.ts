@@ -741,6 +741,10 @@ app.post('/api/pacientes/:id/odontograma', async (c) => {
       ? 'endodoncia'
       : procedimientoGeneral === 'exodoncia'
       ? 'exodoncia'
+      : procedimientoGeneral === 'protesis'
+      ? 'protesis'
+      : procedimientoGeneral === 'implante'
+      ? 'implante'
       : 'presente';
 
     await db
@@ -814,6 +818,8 @@ app.get('/api/pacientes/:id/evoluciones', async (c) => {
       piezaFdi: r.pieza_fdi,
       texto: r.texto,
       indicacionesReceta: r.indicaciones_receta,
+      fotoPrescripcionData: r.foto_prescripcion_data,
+      tipoAdjunto: r.tipo_adjunto || 'receta',
       createdAt: r.created_at,
     }))
   );
@@ -830,8 +836,8 @@ app.post('/api/pacientes/:id/evoluciones', async (c) => {
     .prepare(
       `
     INSERT INTO evoluciones_clinicas (
-      id, paciente_id, cita_id, odontologo_id, odontologo_nombre, pieza_fdi, texto, indicaciones_receta, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      id, paciente_id, cita_id, odontologo_id, odontologo_nombre, pieza_fdi, texto, indicaciones_receta, foto_prescripcion_data, tipo_adjunto, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   `
     )
     .bind(
@@ -842,7 +848,9 @@ app.post('/api/pacientes/:id/evoluciones', async (c) => {
       b.odontologoNombre || 'Dra. María Alejandra Domínguez',
       b.piezaFdi || null,
       b.texto || '',
-      b.indicacionesReceta || ''
+      b.indicacionesReceta || '',
+      b.fotoPrescripcionData || b.foto_prescripcion_data || null,
+      b.tipoAdjunto || b.tipo_adjunto || 'receta'
     )
     .run();
 
@@ -1469,10 +1477,15 @@ async function ensureControlDataTables(db: D1Database) {
         pieza_fdi INTEGER,
         texto TEXT NOT NULL,
         indicaciones_receta TEXT,
+        foto_prescripcion_data TEXT,
+        tipo_adjunto TEXT DEFAULT 'receta',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     )
     .run();
+
+  try { await db.prepare("ALTER TABLE evoluciones_clinicas ADD COLUMN foto_prescripcion_data TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE evoluciones_clinicas ADD COLUMN tipo_adjunto TEXT DEFAULT 'receta'").run(); } catch (_) {}
 
   // Ejecutar saneamiento integral de pacientes, citas y presupuestos
   await sanearBaseDeDatos(db);

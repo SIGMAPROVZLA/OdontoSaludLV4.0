@@ -23,12 +23,20 @@ export interface ToothSurfaces {
   L: ToothFaceStatus;
 }
 
+export type ProcedimientoGeneralOdontograma =
+  | 'ninguno'
+  | 'endodoncia'
+  | 'exodoncia'
+  | 'protesis'
+  | 'implante'
+  | 'corona';
+
 export interface ToothRecord {
   numeroFdi: number;
   nombre: string;
   surfaces: ToothSurfaces;
   isAbsent?: boolean;
-  procedimientoGeneral?: 'ninguno' | 'endodoncia' | 'exodoncia' | 'corona';
+  procedimientoGeneral?: ProcedimientoGeneralOdontograma;
   diagnostico?: string;
   actualizadoPor?: string;
   updatedAt?: string;
@@ -267,6 +275,8 @@ export interface EvolucionClinicaItem {
   piezaFdi?: number;
   texto: string;
   indicacionesReceta?: string;
+  fotoPrescripcionData?: string;
+  tipoAdjunto?: 'receta' | 'indicaciones' | 'reposo';
   fecha?: string;
   createdAt?: string;
 }

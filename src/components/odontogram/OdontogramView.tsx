@@ -16,6 +16,7 @@ import { TabId } from '../layout/BottomNavigation';
 
 export interface CitaAprobadaConsulta {
   id: string;
+  sedeId: string;
   pacienteId: string;
   pacienteNombre: string;
   pacienteCedula: string;
@@ -52,6 +53,7 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
 
   // Estados de Citas Aprobadas y Selección de Paciente
   const [citasAprobadas, setCitasAprobadas] = useState<CitaAprobadaConsulta[]>([]);
+  const [filtroSede, setFiltroSede] = useState<string>('todas');
   const [fechaConsulta, setFechaConsulta] = useState<string>('');
   const [fechasDisponibles, setFechasDisponibles] = useState<string[]>([]);
   const [selectedCitaId, setSelectedCitaId] = useState<string>('');
@@ -79,14 +81,17 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
   const [isSavingPresupuesto, setIsSavingPresupuesto] = useState(false);
   const [mensajePresupuestoExito, setMensajePresupuestoExito] = useState<string | null>(null);
 
-  // Evolución Clínica de la Cita
+  // Evolución Clínica de la Cita con Foto de Prescripción/Reposo
   const [evoluciones, setEvoluciones] = useState<EvolucionClinicaItem[]>([]);
   const [modoNuevaEvolucion, setModoNuevaEvolucion] = useState(false);
   const [textoNuevaEvolucion, setTextoNuevaEvolucion] = useState('');
   const [indicacionesReceta, setIndicacionesReceta] = useState('');
+  const [fotoPrescripcion, setFotoPrescripcion] = useState<string | null>(null);
+  const [tipoAdjuntoEvolucion, setTipoAdjuntoEvolucion] = useState<'receta' | 'indicaciones' | 'reposo'>('receta');
   const [doctorEvolucionSeleccionado, setDoctorEvolucionSeleccionado] = useState<string>('');
   const [isSavingEvolucion, setIsSavingEvolucion] = useState(false);
   const [mensajeEvolucionExito, setMensajeEvolucionExito] = useState<string | null>(null);
+  const [modalFotoAmpliada, setModalFotoAmpliada] = useState<{ url: string; titulo: string } | null>(null);
 
   // Radiografía Digital (Sensor RVG 2.0) - Última Tarjeta
   const [radiografias, setRadiografias] = useState<RadiografiaItem[]>([]);
@@ -126,6 +131,7 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
             .filter((c: any) => c.estado === 'confirmada' || c.estado === 'en_sillon')
             .map((c: any) => ({
               id: c.id,
+              sedeId: c.sedeId || c.sede_id || 'victoria',
               pacienteId: c.pacienteId || c.paciente_id || `pac-${c.id}`,
               pacienteNombre: c.pacienteNombre || c.paciente_nombre || 'Paciente Citado',
               pacienteCedula: c.pacienteCedula || c.paciente_cedula || 'V-00.000.000',
@@ -170,16 +176,49 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     cargarDatosIniciales();
   }, [sedeId]);
 
-  // Citas aprobadas correspondientes a la fecha seleccionada
-  const citasFiltradasFecha = citasAprobadas.filter(
-    (c) => !fechaConsulta || c.fechaCita === fechaConsulta
-  );
+  // Citas aprobadas filtradas por sede (o todas)
+  const citasPorSede = React.useMemo(() => {
+    if (filtroSede === 'todas') return citasAprobadas;
+    return citasAprobadas.filter((c) => c.sedeId === filtroSede);
+  }, [citasAprobadas, filtroSede]);
+
+  // Fechas disponibles para la sede seleccionada
+  const fechasDisponiblesSede = React.useMemo(() => {
+    return Array.from(new Set(citasPorSede.map((c) => c.fechaCita)));
+  }, [citasPorSede]);
+
+  // Auto-ajustar fechaConsulta si la fecha activa no está en la sede
+  useEffect(() => {
+    if (fechasDisponiblesSede.length > 0 && (!fechaConsulta || !fechasDisponiblesSede.includes(fechaConsulta))) {
+      setFechaConsulta(fechasDisponiblesSede[0]);
+    }
+  }, [fechasDisponiblesSede, fechaConsulta]);
+
+  // Citas aprobadas finales filtradas por sede y por fecha
+  const citasFiltradas = React.useMemo(() => {
+    return citasPorSede.filter((c) => !fechaConsulta || c.fechaCita === fechaConsulta);
+  }, [citasPorSede, fechaConsulta]);
+
+  // Sincronizar selectedCitaId con la lista filtrada
+  useEffect(() => {
+    if (citasFiltradas.length > 0) {
+      const exists = citasFiltradas.some((c) => c.id === selectedCitaId);
+      if (!exists) {
+        setSelectedCitaId(citasFiltradas[0].id);
+      }
+    } else {
+      setSelectedCitaId('');
+    }
+  }, [citasFiltradas, selectedCitaId]);
 
   // Cita y Paciente actualmente seleccionado en el sillón
-  const selectedCita =
-    citasAprobadas.find((c) => c.id === selectedCitaId) ||
-    citasFiltradasFecha[0] ||
-    citasAprobadas[0];
+  const selectedCita = React.useMemo(() => {
+    return (
+      citasFiltradas.find((c) => c.id === selectedCitaId) ||
+      citasFiltradas[0] ||
+      null
+    );
+  }, [citasFiltradas, selectedCitaId]);
 
   // Cálculo de edad
   const calcularEdad = (fechaNac?: string): number => {
@@ -259,12 +298,16 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     };
   }, [selectedCita?.pacienteId, sedeId]);
 
-  // Actualización de pieza en el Odontograma FDI
+  // Actualización de pieza en el Odontograma FDI con soporte reactivo inmediato
   const handleUpdateTooth = async (updatedTooth: ToothRecord) => {
     if (!selectedCita?.pacienteId) return;
-    setTeeth((prev) =>
-      prev.map((t) => (t.numeroFdi === updatedTooth.numeroFdi ? updatedTooth : t))
-    );
+    setTeeth((prev) => {
+      const exists = prev.some((t) => t.numeroFdi === updatedTooth.numeroFdi);
+      if (exists) {
+        return prev.map((t) => (t.numeroFdi === updatedTooth.numeroFdi ? updatedTooth : t));
+      }
+      return [...prev, updatedTooth];
+    });
     await ApiClient.guardarPiezaOdontograma(selectedCita.pacienteId, updatedTooth, sedeId);
   };
 
@@ -338,7 +381,17 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     }
   };
 
-  // 4. Manejo de Evolución Clínica
+  // 4. Manejo de Evolución Clínica con Foto de Prescripción / Reposo
+  const handleSubirFotoPrescripcion = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFotoPrescripcion(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleGuardarEvolucion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCita?.pacienteId || !textoNuevaEvolucion.trim()) return;
@@ -354,6 +407,8 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           odontologoNombre: doctorEvolucionSeleccionado || doctorActivo,
           texto: textoNuevaEvolucion.trim(),
           indicacionesReceta: indicacionesReceta.trim(),
+          fotoPrescripcionData: fotoPrescripcion || undefined,
+          tipoAdjunto: tipoAdjuntoEvolucion,
         },
         sedeId
       );
@@ -366,6 +421,8 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           odontologoNombre: doctorEvolucionSeleccionado || doctorActivo,
           texto: textoNuevaEvolucion.trim(),
           indicacionesReceta: indicacionesReceta.trim(),
+          fotoPrescripcionData: fotoPrescripcion || undefined,
+          tipoAdjunto: tipoAdjuntoEvolucion,
           createdAt: new Date().toISOString(),
         };
 
@@ -373,7 +430,8 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         setModoNuevaEvolucion(false);
         setTextoNuevaEvolucion('');
         setIndicacionesReceta('');
-        setMensajeEvolucionExito('¡Evolución clínica firmada y resguardada exitosamente en D1!');
+        setFotoPrescripcion(null);
+        setMensajeEvolucionExito('¡Evolución clínica con prescripción/reposo resguardada exitosamente en D1!');
       }
     } catch (err) {
       console.error('Error guardando evolución:', err);
@@ -429,126 +487,129 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
   return (
     <div className="flex flex-col gap-4 pb-32">
       {/* =========================================================================
-          1. TARJETA SUPERIOR: CONTROL DE CITA ODONTOLÓGICA (PACIENTES CITADOS APROBADOS)
+          1. TARJETA SUPERIOR: CONTROL DE CITA ODONTOLÓGICA (FILTRO SEDE/FECHA & DROPDOWN)
          ========================================================================= */}
-      <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3 relative">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3.5 relative">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border-subtle pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-xs">
+            <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-xs shrink-0">
               <span className="material-symbols-outlined text-[24px]">event_available</span>
             </div>
             <div>
-              <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy">
+              <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy leading-tight">
                 Control de Cita Odontológica
               </h2>
               <p className="text-xs text-secondary">
-                Pacientes citados y aprobados para consulta activa en sillón
+                Atención clínica activa en sillón por sede y fecha de consulta
               </p>
             </div>
           </div>
 
-          {/* Selector / Indicador de Fecha de Consulta */}
-          <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
-            <span className="text-[11px] font-bold text-secondary">Fecha:</span>
-            {fechasDisponibles.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => {
-                  setFechaConsulta(f);
-                  const primera = citasAprobadas.find((c) => c.fechaCita === f);
-                  if (primera) setSelectedCitaId(primera.id);
-                }}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer ${
-                  fechaConsulta === f
-                    ? 'bg-dental-deep-navy text-white shadow-xs'
-                    : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy border border-border-subtle'
-                }`}
+          {/* Filtros Superiores: Sede y Fecha */}
+          <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+            {/* Filtro por Sede */}
+            <div className="flex items-center gap-1.5 bg-surface-subtle-ice px-2.5 py-1 rounded-xl border border-border-subtle">
+              <span className="text-[11px] font-bold text-secondary">Sede:</span>
+              <select
+                value={filtroSede}
+                onChange={(e) => setFiltroSede(e.target.value)}
+                className="bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
               >
-                {f} ({citasAprobadas.filter((c) => c.fechaCita === f).length})
-              </button>
-            ))}
+                <option value="todas">🌐 Todas las Sedes</option>
+                <option value="victoria">📍 Sede La Victoria</option>
+                <option value="tovar">📍 Sede La Colonia Tovar</option>
+              </select>
+            </div>
+
+            {/* Filtro por Fecha de Consulta */}
+            <div className="flex items-center gap-1.5 bg-surface-subtle-ice px-2.5 py-1 rounded-xl border border-border-subtle">
+              <span className="text-[11px] font-bold text-secondary">Fecha:</span>
+              <select
+                value={fechaConsulta}
+                onChange={(e) => setFechaConsulta(e.target.value)}
+                className="bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
+              >
+                {fechasDisponiblesSede.length === 0 ? (
+                  <option value="">Sin citas</option>
+                ) : (
+                  fechasDisponiblesSede.map((f) => {
+                    const cant = citasPorSede.filter((c) => c.fechaCita === f).length;
+                    return (
+                      <option key={f} value={f}>
+                        {f} ({cant} {cant === 1 ? 'cita' : 'citas'})
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Carrusel / Barra de Pacientes Citados y Aprobados en la Fecha */}
-        {loadingCitas ? (
-          <div className="p-4 text-center text-xs text-secondary flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
-            <span>Cargando citas aprobadas desde Cloudflare D1...</span>
-          </div>
-        ) : citasFiltradasFecha.length === 0 ? (
-          <div className="p-4 text-center text-xs text-secondary bg-surface-subtle-ice rounded-xl border border-border-subtle">
-            No se registran citas aprobadas para esta fecha en {sedeActiva.nombre}.
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {citasFiltradasFecha.map((cita) => {
-              const isSelected = selectedCita?.id === cita.id;
-              const isEnSillon = cita.estado === 'en_sillon';
+        {/* Lista Desplegable de Pacientes Citados para Comodidad Visual */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[17px] text-primary">person_search</span>
+              <span>Paciente en Consulta (Lista de Pacientes Citados)</span>
+            </span>
+            <span className="text-[11px] font-semibold text-secondary">
+              {citasFiltradas.length} {citasFiltradas.length === 1 ? 'paciente con cita aprobada' : 'pacientes con cita aprobada'}
+            </span>
+          </label>
 
-              return (
-                <button
-                  key={cita.id}
-                  type="button"
-                  onClick={() => setSelectedCitaId(cita.id)}
-                  className={`p-2.5 rounded-2xl border transition-all flex items-center gap-2.5 shrink-0 text-left cursor-pointer active:scale-95 ${
-                    isSelected
-                      ? 'bg-primary/10 border-primary ring-2 ring-primary/20 shadow-xs'
-                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
-                  }`}
-                >
-                  <div className="relative">
-                    <img
-                      src={cita.avatarUrl}
-                      alt={cita.pacienteNombre}
-                      className="w-10 h-10 rounded-xl object-cover ring-1 ring-border-subtle"
-                    />
-                    {isEnSillon && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-status-success rounded-full ring-2 ring-white animate-pulse" />
-                    )}
-                  </div>
+          {loadingCitas ? (
+            <div className="p-3 text-center text-xs text-secondary flex items-center justify-center gap-2 bg-surface-subtle-ice rounded-xl border border-border-subtle">
+              <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+              <span>Cargando citas aprobadas desde D1...</span>
+            </div>
+          ) : citasFiltradas.length === 0 ? (
+            <div className="p-3.5 text-center text-xs text-secondary bg-surface-subtle-ice rounded-xl border border-border-subtle">
+              No se registran pacientes con cita aprobada para la sede y fecha seleccionadas.
+            </div>
+          ) : (
+            <div className="relative">
+              <select
+                value={selectedCita?.id || ''}
+                onChange={(e) => setSelectedCitaId(e.target.value)}
+                className="w-full h-11 px-3.5 pr-10 rounded-2xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary shadow-xs cursor-pointer transition-all"
+              >
+                {citasFiltradas.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.pacienteNombre} — {c.pacienteCedula} • {c.horaInicio} (Box {c.boxNumero || 1}) [{c.estado === 'en_sillon' ? '🟢 En Sillón' : 'Confirmada'}] — {c.sedeId === 'tovar' ? 'La Colonia Tovar' : 'La Victoria'}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-secondary">
+                <span className="material-symbols-outlined text-[20px]">unfold_more</span>
+              </div>
+            </div>
+          )}
+        </div>
 
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-dental-deep-navy truncate max-w-[130px]">
-                        {cita.pacienteNombre}
-                      </span>
-                      {cita.boxNumero && (
-                        <span className="text-[9px] font-black bg-surface-container px-1 rounded text-primary">
-                          B{cita.boxNumero}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-secondary">
-                      <span className="font-mono">{cita.horaInicio}</span>
-                      <span>•</span>
-                      <span className="font-mono">{cita.pacienteCedula}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Ficha Principal del Paciente Activo en el Sillón */}
+        {/* Sección de Datos del Paciente Seleccionado: Despliegue con Animación Responsiva */}
         {selectedCita && (
-          <div className="pt-2 border-t border-border-subtle flex flex-col gap-3">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div
+            key={selectedCita.id}
+            className="pt-2 border-t border-border-subtle flex flex-col gap-3 animate-in fade-in slide-in-from-top-3 duration-300"
+          >
+            {/* Ficha de Identidad & Acciones */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 bg-surface-subtle-ice/60 p-3 rounded-2xl border border-border-subtle">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="relative shrink-0">
                   <img
                     src={selectedCita.avatarUrl}
                     alt={selectedCita.pacienteNombre}
-                    className="w-14 h-14 rounded-2xl object-cover shadow-sm ring-2 ring-primary/20"
+                    className="w-13 h-13 rounded-2xl object-cover shadow-sm ring-2 ring-primary/20"
                   />
-                  <span
-                    className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-status-success text-white shadow-xs"
-                    title="Paciente en Sillón"
-                  >
-                    Activo
-                  </span>
+                  {selectedCita.estado === 'en_sillon' && (
+                    <span
+                      className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-status-success text-white shadow-xs animate-pulse"
+                      title="Paciente en Sillón"
+                    >
+                      En Sillón
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col min-w-0">
@@ -556,45 +617,63 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
                     <h3 className="font-display font-extrabold text-base text-dental-deep-navy">
                       {selectedCita.pacienteNombre}
                     </h3>
-                    <span className="font-mono font-bold text-xs bg-surface-container px-2 py-0.5 rounded-lg text-primary">
+                    <span className="font-mono font-bold text-xs bg-surface-container px-2.5 py-0.5 rounded-lg text-primary">
                       {selectedCita.pacienteCedula}
                     </span>
                     <span className="text-xs text-secondary font-semibold">
                       {calcularEdad(selectedCita.pacienteFechaNacimiento)} años • {selectedCita.pacienteSexo || 'Femenino'}
                     </span>
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        selectedCita.estado === 'en_sillon'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-primary/10 text-primary border border-primary/20'
+                      }`}
+                    >
+                      {selectedCita.estado === 'en_sillon' ? '🟢 En Sillón' : '✓ Confirmada'}
+                    </span>
                   </div>
 
-                  {/* Motivo de la Cita / Reserva */}
-                  <div className="mt-1 text-xs text-dental-deep-navy bg-primary/5 px-2.5 py-1.5 rounded-xl border border-primary/15 font-medium">
-                    <span className="font-bold text-primary">Tratamiento en Reserva:</span> {selectedCita.motivoConsulta}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-secondary mt-1">
-                    <span>👨‍⚕️ Atendido por: <strong>{selectedCita.doctorNombre || doctorActivo}</strong></span>
+                  {/* Datos Logísticos y Especialista */}
+                  <div className="flex items-center gap-2 text-xs text-secondary mt-1 flex-wrap">
+                    <span>👨‍⚕️ Facultativo: <strong className="text-dental-deep-navy">{selectedCita.doctorNombre || doctorActivo}</strong></span>
                     <span>•</span>
-                    <span>Box 0{selectedCita.boxNumero || 1} ({sedeActiva.nombre})</span>
+                    <span>Box 0{selectedCita.boxNumero || 1} ({selectedCita.sedeId === 'tovar' ? 'La Colonia Tovar' : 'La Victoria'})</span>
+                    <span>•</span>
+                    <span className="font-mono font-bold text-dental-deep-navy">⏰ {selectedCita.horaInicio}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Botones de Comunicación Rápida */}
-              <div className="flex items-center gap-1.5 self-end sm:self-start">
+              {/* Botones de Comunicación Inmediata */}
+              <div className="flex items-center gap-1.5 self-end sm:self-start shrink-0">
                 <a
                   href={`tel:${selectedCita.pacienteTelefono}`}
                   aria-label="Llamar al paciente"
-                  className="w-8 h-8 rounded-xl bg-surface-subtle-ice border border-border-subtle text-primary flex items-center justify-center active:scale-95 transition-all shadow-xs"
+                  className="w-9 h-9 rounded-xl bg-surface-clean-white border border-border-subtle text-primary flex items-center justify-center active:scale-95 transition-all shadow-xs hover:bg-surface-container"
+                  title="Llamar al paciente"
                 >
-                  <span className="material-symbols-outlined text-[17px]">phone</span>
+                  <span className="material-symbols-outlined text-[18px]">phone</span>
                 </a>
                 <a
                   href={`https://wa.me/${selectedCita.pacienteTelefono.replace(/[^0-9]/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Enviar WhatsApp"
-                  className="w-8 h-8 rounded-xl bg-status-success/15 border border-status-success/20 text-status-success flex items-center justify-center active:scale-95 transition-all shadow-xs"
+                  className="w-9 h-9 rounded-xl bg-status-success/15 border border-status-success/20 text-status-success flex items-center justify-center active:scale-95 transition-all shadow-xs hover:bg-status-success/25"
+                  title="Escribir por WhatsApp"
                 >
-                  <span className="material-symbols-outlined text-[17px]">chat</span>
+                  <span className="material-symbols-outlined text-[18px]">chat</span>
                 </a>
+              </div>
+            </div>
+
+            {/* Motivo de la Cita / Tratamiento en Reserva */}
+            <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs text-dental-deep-navy flex items-start gap-2">
+              <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">assignment</span>
+              <div className="flex-1">
+                <span className="font-bold text-primary">Tratamiento Reportado en Reserva:</span>{' '}
+                <span className="font-medium">{selectedCita.motivoConsulta}</span>
               </div>
             </div>
 
@@ -891,6 +970,105 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               />
             </div>
 
+            {/* Adjuntar Foto de Prescripción, Indicaciones o Reposo Médico */}
+            <div className="flex flex-col gap-2 p-3 rounded-xl bg-surface-subtle-ice border border-border-subtle">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-bold text-dental-deep-navy flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-primary text-[17px]">receipt_long</span>
+                  <span>Adjuntar Foto de Prescripción, Indicaciones o Reposo Médico</span>
+                </label>
+
+                {/* Selector de Tipo de Documento Adjunto */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setTipoAdjuntoEvolucion('receta')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      tipoAdjuntoEvolucion === 'receta'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-white border border-border-subtle text-secondary'
+                    }`}
+                  >
+                    💊 Receta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoAdjuntoEvolucion('indicaciones')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      tipoAdjuntoEvolucion === 'indicaciones'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-white border border-border-subtle text-secondary'
+                    }`}
+                  >
+                    📋 Indicaciones
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoAdjuntoEvolucion('reposo')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      tipoAdjuntoEvolucion === 'reposo'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-white border border-border-subtle text-secondary'
+                    }`}
+                  >
+                    🏥 Reposo
+                  </button>
+                </div>
+              </div>
+
+              {/* Botón e Input de Cámara / Archivo */}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                id="foto-prescripcion-upload"
+                className="hidden"
+                onChange={handleSubirFotoPrescripcion}
+              />
+
+              {fotoPrescripcion ? (
+                <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-primary/20">
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={fotoPrescripcion}
+                      alt="Foto Adjunta"
+                      className="w-12 h-12 rounded-lg object-cover ring-2 ring-primary cursor-pointer hover:opacity-90"
+                      onClick={() => setModalFotoAmpliada({
+                        url: fotoPrescripcion,
+                        titulo: `Vista Previa: ${tipoAdjuntoEvolucion === 'reposo' ? 'Reposo Médico' : tipoAdjuntoEvolucion === 'indicaciones' ? 'Indicaciones Clínicas' : 'Receta Médica'}`
+                      })}
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-dental-deep-navy block">
+                        Foto de {tipoAdjuntoEvolucion === 'reposo' ? 'Reposo Médico' : tipoAdjuntoEvolucion === 'indicaciones' ? 'Indicaciones' : 'Prescripción'} lista
+                      </span>
+                      <span className="text-[10px] text-status-success font-semibold flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        <span>Se adjuntará al firmar la evolución</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setFotoPrescripcion(null)}
+                    className="p-1.5 rounded-lg text-secondary hover:text-status-danger hover:bg-rose-50 transition-all cursor-pointer"
+                    title="Quitar foto"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor="foto-prescripcion-upload"
+                  className="py-2 px-3 rounded-xl border border-dashed border-primary/40 bg-white/70 hover:bg-white text-primary text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_a_photo</span>
+                  <span>📸 Tomar Foto con Cámara o Cargar Documento</span>
+                </label>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={isSavingEvolucion}
@@ -921,6 +1099,44 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               {evoluciones[0].indicacionesReceta && (
                 <div className="text-[11px] text-dental-deep-navy bg-primary/5 p-2 rounded-xl border border-primary/10">
                   <strong>Indicaciones / Receta:</strong> {evoluciones[0].indicacionesReceta}
+                </div>
+              )}
+
+              {/* Foto de Prescripción / Reposo Adjunto si Existe */}
+              {evoluciones[0].fotoPrescripcionData && (
+                <div className="mt-1 p-2.5 rounded-xl bg-white border border-border-subtle flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={evoluciones[0].fotoPrescripcionData}
+                      alt="Foto de Receta / Reposo"
+                      className="w-12 h-12 rounded-lg object-cover ring-1 ring-border-subtle cursor-pointer hover:opacity-90"
+                      onClick={() => setModalFotoAmpliada({
+                        url: evoluciones[0].fotoPrescripcionData!,
+                        titulo: `Adjunto Clínico: ${evoluciones[0].tipoAdjunto === 'reposo' ? 'Reposo Médico' : evoluciones[0].tipoAdjunto === 'indicaciones' ? 'Indicaciones' : 'Receta Médica'}`
+                      })}
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-dental-deep-navy block">
+                        {evoluciones[0].tipoAdjunto === 'reposo'
+                          ? '🏥 Reposo Médico Adjunto'
+                          : evoluciones[0].tipoAdjunto === 'indicaciones'
+                          ? '📋 Indicaciones Postoperatorias Adjuntas'
+                          : '💊 Receta Médica Adjunta'}
+                      </span>
+                      <span className="text-[10px] text-secondary">Pulsa la foto para verla ampliada en pantalla completa</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalFotoAmpliada({
+                      url: evoluciones[0].fotoPrescripcionData!,
+                      titulo: `Adjunto Clínico: ${evoluciones[0].tipoAdjunto === 'reposo' ? 'Reposo Médico' : evoluciones[0].tipoAdjunto === 'indicaciones' ? 'Indicaciones' : 'Receta Médica'}`
+                    })}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all cursor-pointer"
+                  >
+                    Ver Foto
+                  </button>
                 </div>
               )}
 
@@ -1230,17 +1446,52 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         </div>
       )}
 
-      {/* Botón Flotante Agendar Cita */}
-      <div className="fixed bottom-20 right-4 z-40">
-        <button
-          type="button"
-          onClick={() => onNavigateTab?.('reserva')}
-          className="py-3 px-5 rounded-full bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95 ring-2 ring-surface-container cursor-pointer"
+      {/* Modal para Visualizar Foto de Prescripción / Reposo Ampliada */}
+      {modalFotoAmpliada && (
+        <div
+          className="fixed inset-0 z-50 bg-dental-deep-navy/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setModalFotoAmpliada(null)}
         >
-          <span className="material-symbols-outlined text-[20px]">add_alarm</span>
-          <span>Agendar Cita</span>
-        </button>
-      </div>
+          <div
+            className="bg-surface-clean-white rounded-3xl max-w-2xl w-full p-4 flex flex-col gap-3 shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[20px]">receipt_long</span>
+                <h4 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                  {modalFotoAmpliada.titulo}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalFotoAmpliada(null)}
+                className="w-8 h-8 rounded-full bg-surface-subtle-ice flex items-center justify-center text-secondary hover:text-dental-deep-navy cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-dental-ambient-bg rounded-2xl p-2">
+              <img
+                src={modalFotoAmpliada.url}
+                alt={modalFotoAmpliada.titulo}
+                className="max-h-[70vh] w-auto rounded-xl object-contain shadow-lg"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalFotoAmpliada(null)}
+                className="py-2 px-4 rounded-xl bg-dental-deep-navy text-white font-bold text-xs hover:bg-primary transition-all cursor-pointer"
+              >
+                Cerrar Visor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
