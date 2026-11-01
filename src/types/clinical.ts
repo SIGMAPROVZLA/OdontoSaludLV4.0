@@ -138,6 +138,8 @@ export interface PagoRegistroRequest {
   tasaBcv?: number;
   tipoPago?: 'completo' | 'abono';
   fotoComprobanteData?: string;
+  sha256Hash?: string;
+  selladoUtc?: string;
   sedeId?: SedeId;
 }
 
@@ -156,6 +158,8 @@ export interface PagoItem {
   referencia?: string;
   tipoPago?: 'completo' | 'abono';
   fotoComprobanteData?: string;
+  sha256Hash?: string;
+  selladoUtc?: string;
   estado?: 'confirmado' | 'pendiente_ocr' | 'conciliado';
   fechaPago: string;
 }
@@ -338,6 +342,10 @@ export interface EvolucionClinicaItem {
   indicacionesReceta?: string;
   fotoPrescripcionData?: string;
   tipoAdjunto?: 'receta' | 'indicaciones' | 'reposo';
+  sha256Hash?: string;
+  selladoUtc?: string;
+  esNotaComplementaria?: boolean;
+  evolucionPadreId?: string;
   fecha?: string;
   createdAt?: string;
 }
@@ -350,6 +358,74 @@ export interface RadiografiaItem {
   r2StorageUrl?: string;
   imagenData?: string;
   observaciones?: string;
+  sha256Hash?: string;
+  selladoUtc?: string;
+  doctorFirmante?: string;
   fechaToma: string;
 }
+
+export type CorporatePaletteId =
+  | 'palette-14-luxury-plum'
+  | 'palette-13-deep-teal'
+  | 'palette-12-trust-navy'
+  | 'palette-15-enterprise-navy';
+
+export interface CorporatePaletteConfig {
+  id: CorporatePaletteId;
+  numeroCatalogo: string;
+  nombre: string;
+  subtitulo: string;
+  colors: {
+    obsidian: string;
+    aubergine: string;
+    royalPlum: string;
+    mauve: string;
+    lilac: string;
+    silk: string;
+    surfaceBg: string;
+  };
+}
+
+export interface AuditoriaAccionItem {
+  id: string;
+  modulo: 'odontograma' | 'presupuesto' | 'cobros' | 'cierre_caja' | 'paleta_corporativa' | 'seguridad_forense';
+  accion: string;
+  actor: string;
+  sedeId: SedeId | 'ambas';
+  entidadId?: string;
+  detalle: string;
+  sha256Hash?: string;
+  ipCliente?: string;
+  createdAt: string;
+}
+
+export interface EdgeHealthMetrics {
+  status: 'healthy' | 'degraded';
+  anycastLatencyMs: number;
+  slaTargetMs: number;
+  slaCompliant: boolean;
+  d1Stats: {
+    connected: boolean;
+    totalPacientes: number;
+    totalCitas: number;
+    totalPresupuestos: number;
+    totalPagos: number;
+    totalCierresDiarios: number;
+    totalAuditorias: number;
+    totalSellosForenses: number;
+  };
+  kvStats: {
+    available: boolean;
+    activePalette: CorporatePaletteId;
+    bcvCached: boolean;
+    rateLimiterActive: boolean;
+  };
+  r2Stats: {
+    available: boolean;
+    streamingMode: 'ReadableStream Zero-RAM' | 'D1 Hybrid Fallback';
+    totalRadiografias: number;
+  };
+  timestamp: string;
+}
+
 

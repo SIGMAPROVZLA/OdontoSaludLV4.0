@@ -23,6 +23,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     return teeth.find((t) => t.numeroFdi === 16) || teeth[0] || null;
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [denticionModo, setDenticionModo] = useState<'adulto' | 'pediatrico'>('adulto');
 
   // Sincronizar selectedTooth cuando teeth cambia externamente
   useEffect(() => {
@@ -86,11 +87,12 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     onUpdateTooth(updated);
   };
 
-  // Cuadrantes FDI
-  const q1 = [18, 17, 16, 15, 14, 13, 12, 11];
-  const q2 = [21, 22, 23, 24, 25, 26, 27, 28];
-  const q4 = [48, 47, 46, 45, 44, 43, 42, 41];
-  const q3 = [31, 32, 33, 34, 35, 36, 37, 38];
+  // Cuadrantes FDI: Adulto (11-48) y Pediátrico/Temporal (51-85) según AGENTS.md §7.1
+  const q1 = denticionModo === 'adulto' ? [18, 17, 16, 15, 14, 13, 12, 11] : [55, 54, 53, 52, 51];
+  const q2 = denticionModo === 'adulto' ? [21, 22, 23, 24, 25, 26, 27, 28] : [61, 62, 63, 64, 65];
+  const q4 = denticionModo === 'adulto' ? [48, 47, 46, 45, 44, 43, 42, 41] : [85, 84, 83, 82, 81];
+  const q3 = denticionModo === 'adulto' ? [31, 32, 33, 34, 35, 36, 37, 38] : [71, 72, 73, 74, 75];
+  const gridColsClass = denticionModo === 'adulto' ? 'grid-cols-8' : 'grid-cols-5 max-w-md mx-auto';
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-300">
@@ -98,14 +100,45 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
       <div className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="material-symbols-outlined text-primary text-[22px]">dentistry</span>
               <h3 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy">
                 Odontograma FDI Activo
               </h3>
+              {/* Conmutador Dentición Adulto (11-48) / Pediátrico (51-85) */}
+              <div className="inline-flex items-center bg-surface-subtle-ice p-0.5 rounded-xl border border-border-subtle ml-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDenticionModo('adulto');
+                    handleSelectTooth(16);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all active:scale-95 ${
+                    denticionModo === 'adulto'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-dental-deep-navy hover:bg-white/60'
+                  }`}
+                >
+                  Adulto (11–48)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDenticionModo('pediatrico');
+                    handleSelectTooth(55);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all active:scale-95 ${
+                    denticionModo === 'pediatrico'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-dental-deep-navy hover:bg-white/60'
+                  }`}
+                >
+                  Pediátrico (51–85)
+                </button>
+              </div>
             </div>
             <p className="text-xs text-secondary mt-0.5">
-              Inspección clínica dental de 5 caras con indicación de Endodoncia y Exodoncia
+              Inspección vectorial SVG de 5 caras con Endodoncia, Exodoncia, Prótesis e Implante ({denticionModo === 'adulto' ? '32 piezas permanentes' : '20 piezas temporales FDI 51–85'})
             </p>
           </div>
 
@@ -198,18 +231,18 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
           <div className="relative z-10">
             <div className="flex items-center justify-between pb-1 px-1">
               <span className="text-[10px] font-bold text-secondary-fixed-dim uppercase tracking-wider">
-                Q1 (Sup. Der.)
+                {denticionModo === 'adulto' ? 'Q1 (Sup. Der. 18–11)' : 'Q5 (Temp. Sup. Der. 55–51)'}
               </span>
               <span className="text-xs font-bold text-tertiary-fixed tracking-wider">
-                ARCADA SUPERIOR
+                ARCADA SUPERIOR {denticionModo === 'pediatrico' ? '• INFANTIL' : ''}
               </span>
               <span className="text-[10px] font-bold text-secondary-fixed-dim uppercase tracking-wider">
-                Q2 (Sup. Izq.)
+                {denticionModo === 'adulto' ? 'Q2 (Sup. Izq. 21–28)' : 'Q6 (Temp. Sup. Izq. 61–65)'}
               </span>
             </div>
 
-            {/* Q1 y Q2 */}
-            <div className="grid grid-cols-8 gap-1 pt-1">
+            {/* Q1/Q5 y Q2/Q6 */}
+            <div className={`grid ${gridColsClass} gap-1 pt-1`}>
               {q1.map((fdi) => {
                 const tooth = getTooth(fdi);
                 return (
@@ -226,7 +259,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                 );
               })}
             </div>
-            <div className="grid grid-cols-8 gap-1 pt-1.5">
+            <div className={`grid ${gridColsClass} gap-1 pt-1.5`}>
               {q2.map((fdi) => {
                 const tooth = getTooth(fdi);
                 return (
@@ -251,17 +284,17 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
           <div className="relative z-10">
             <div className="flex items-center justify-between pb-1 px-1">
               <span className="text-[10px] font-bold text-secondary-fixed-dim uppercase tracking-wider">
-                Q4 (Inf. Der.)
+                {denticionModo === 'adulto' ? 'Q4 (Inf. Der. 48–41)' : 'Q8 (Temp. Inf. Der. 85–81)'}
               </span>
               <span className="text-xs font-bold text-tertiary-fixed tracking-wider">
-                ARCADA INFERIOR
+                ARCADA INFERIOR {denticionModo === 'pediatrico' ? '• INFANTIL' : ''}
               </span>
               <span className="text-[10px] font-bold text-secondary-fixed-dim uppercase tracking-wider">
-                Q3 (Inf. Izq.)
+                {denticionModo === 'adulto' ? 'Q3 (Inf. Izq. 31–38)' : 'Q7 (Temp. Inf. Izq. 71–75)'}
               </span>
             </div>
 
-            <div className="grid grid-cols-8 gap-1">
+            <div className={`grid ${gridColsClass} gap-1`}>
               {q4.map((fdi) => {
                 const tooth = getTooth(fdi);
                 return (
@@ -278,7 +311,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
                 );
               })}
             </div>
-            <div className="grid grid-cols-8 gap-1 pt-1.5">
+            <div className={`grid ${gridColsClass} gap-1 pt-1.5`}>
               {q3.map((fdi) => {
                 const tooth = getTooth(fdi);
                 return (

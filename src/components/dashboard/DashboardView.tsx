@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useSede } from '../../context/SedeContext';
+import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
 import { DashboardPulse } from '../../types/clinical';
 
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { DesktopDashboardView } from './DesktopDashboardView';
 import { TabId } from '../layout/BottomNavigation';
+import { PulsoDetailModal, PulsoKpiType } from './PulsoDetailModal';
+import { OdontologaPerformanceCard } from './OdontologaPerformanceCard';
+import { PulsoPerformanceMotionDial } from './PulsoPerformanceMotionDial';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: TabId) => void;
@@ -13,9 +17,11 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) => {
   const { sedeActiva, sedeId, doctorActivo } = useSede();
+  const { tasaBcv } = useTasaCambio();
   const { isDesktop } = useDeviceLayout();
   const [pulse, setPulse] = useState<DashboardPulse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [modalKpi, setModalKpi] = useState<PulsoKpiType | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -92,101 +98,134 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
       </section>
 
-      {/* Pulso del Día: Métricas Horizontales con Scroll Táctil */}
-      <section className="flex flex-col gap-2">
+      {/* Pulso del Día: Métricas 100% Responsivas & Animadas (Clickeables para Ver Resumen) */}
+      <section className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-electric-blue text-[18px]">
+            <span className="material-symbols-outlined text-primary text-[20px] animate-pulse">
               query_stats
             </span>
-            <h2 className="font-display font-bold text-base text-dental-deep-navy">
+            <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy">
               Pulso del Día
             </h2>
           </div>
-          <span className="text-[11px] text-secondary">
-            {loading ? 'Cargando...' : 'En tiempo real'}
+          <span className="text-[11px] text-secondary font-semibold flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
+            {loading ? 'Sincronizando...' : 'En vivo • Toca para ver resumen'}
           </span>
         </div>
 
-        <div className="flex overflow-x-auto gap-2.5 no-scrollbar pb-1">
+        {/* Cuadrícula 100% Responsiva: 2 columnas en móvil, 4 en tablet y desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
           {/* Citas Hoy */}
-          <div className="shrink-0 w-36 bg-surface-clean-white rounded-2xl p-3 shadow-sm border border-border-subtle flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => setModalKpi('citas')}
+            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-primary/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+          >
             <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-surface-container-low flex items-center justify-center text-electric-blue">
+              <span className="w-8 h-8 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:scale-105 transition-transform shadow-2xs">
                 <span className="material-symbols-outlined text-[18px]">event_available</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-container text-primary font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-container text-primary font-black flex items-center gap-1">
                 Hoy
+                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
               </span>
             </div>
-            <div className="mt-2">
-              <span className="font-display font-bold text-2xl text-dental-deep-navy leading-none">
+            <div className="mt-2.5">
+              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
                 {pulse?.metricas.citasTotal || 12}
               </span>
-              <span className="text-xs text-secondary block mt-1">
+              <span className="text-xs text-secondary block mt-1 truncate font-medium">
                 {pulse?.metricas.enEspera || 3} en espera
               </span>
             </div>
-          </div>
+          </button>
 
           {/* Ocupación Sillones */}
-          <div className="shrink-0 w-36 bg-surface-clean-white rounded-2xl p-3 shadow-sm border border-border-subtle flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => setModalKpi('ocupacion')}
+            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-sky-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+          >
             <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-secondary-fixed flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-[18px]">
-                  airline_seat_recline_extra
-                </span>
+              <span className="w-8 h-8 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 group-hover:scale-105 transition-transform shadow-2xs">
+                <span className="material-symbols-outlined text-[18px]">airline_seat_recline_extra</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-subtle-ice text-status-success font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black flex items-center gap-1 border border-emerald-200/60">
                 Óptimo
+                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
               </span>
             </div>
-            <div className="mt-2">
-              <span className="font-display font-bold text-2xl text-dental-deep-navy leading-none">
+            <div className="mt-2.5">
+              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
                 {pulse?.metricas.ocupacionPorcentaje || 85}%
               </span>
-              <span className="text-xs text-secondary block mt-1">
+              <span className="text-xs text-secondary block mt-1 truncate font-medium">
                 {sedeActiva.totalBoxes} sillones
               </span>
             </div>
-          </div>
+          </button>
 
           {/* Presupuestos */}
-          <div className="shrink-0 w-36 bg-surface-clean-white rounded-2xl p-3 shadow-sm border border-border-subtle flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => setModalKpi('presupuestos')}
+            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-amber-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+          >
             <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-surface-container-high flex items-center justify-center text-tertiary">
+              <span className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 group-hover:scale-105 transition-transform shadow-2xs">
                 <span className="material-symbols-outlined text-[18px]">request_quote</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-container text-tertiary font-bold">
-                Por aprobar
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black flex items-center gap-1 border border-amber-200/60">
+                Activos
+                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
               </span>
             </div>
-            <div className="mt-2">
-              <span className="font-display font-bold text-2xl text-dental-deep-navy leading-none">
+            <div className="mt-2.5">
+              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
                 ${pulse?.metricas.presupuestosPendientesUsd || 1420}
               </span>
-              <span className="text-xs text-secondary block mt-1">5 pacientes</span>
+              <span className="text-xs text-secondary block mt-1 truncate font-medium">
+                5 pacientes
+              </span>
             </div>
-          </div>
+          </button>
 
           {/* Ingresos Cobrados */}
-          <div className="shrink-0 w-36 bg-surface-clean-white rounded-2xl p-3 shadow-sm border border-border-subtle flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => setModalKpi('cobrado')}
+            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-emerald-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+          >
             <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-status-success/10 flex items-center justify-center text-status-success">
+              <span className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 group-hover:scale-105 transition-transform shadow-2xs">
                 <span className="material-symbols-outlined text-[18px]">payments</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-status-success/15 text-status-success font-bold">
-                +18%
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center gap-1 border border-emerald-200/60">
+                Cobrado
+                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
               </span>
             </div>
-            <div className="mt-2">
-              <span className="font-display font-bold text-2xl text-dental-deep-navy leading-none">
+            <div className="mt-2.5">
+              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
                 ${pulse?.metricas.cobradoHoyUsd || 680}
               </span>
-              <span className="text-xs text-secondary block mt-1">Cobrado hoy</span>
+              <span className="text-xs text-secondary block mt-1 truncate font-medium">
+                ≈ Bs. {((pulse?.metricas.cobradoHoyUsd || 680) * (tasaBcv || 49.85)).toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+              </span>
             </div>
-          </div>
+          </button>
         </div>
+
+        {/* Dial de Rendimiento Clínico de Odontólogas en Vivo (Resumen del Rendimiento Facultativo) */}
+        <PulsoPerformanceMotionDial
+          tasaBcv={tasaBcv}
+          onOpenPerformance={() => {
+            const el = document.getElementById('seccion-rendimiento-facultativo');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
       </section>
 
       {/* Acciones Rápidas Táctiles (1-toque) */}
@@ -296,58 +335,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
       </section>
 
-      {/* Banner de Acceso Rápido a Triaje & Citas Previas Web */}
-      <section className="bg-dental-deep-navy rounded-2xl p-3.5 text-surface-clean-white shadow-md flex items-center justify-between gap-3 relative overflow-hidden border border-primary">
-        <div className="flex items-center gap-3 min-w-0 relative z-10">
-          <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 border border-border-subtle/30">
-            <span className="material-symbols-outlined text-[22px]">assignment_turned_in</span>
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display font-bold text-xs text-white">
-                Recepción & Triaje Digital
-              </span>
-              <span className="px-1.5 py-0.5 rounded-full bg-status-danger text-white text-[10px] font-extrabold animate-pulse">
-                4 por aprobar
-              </span>
-            </div>
-            <p className="text-[11px] text-surface-container truncate mt-0.5">
-              Citas solicitadas desde Web Móvil y WhatsApp
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onNavigateTab('coordinacion')}
-          className="px-3 py-1.5 rounded-xl bg-primary hover:bg-white hover:text-dental-deep-navy text-white text-xs font-bold transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-1 relative z-10"
-        >
-          <span>Revisar</span>
-          <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-        </button>
-      </section>
-
-      {/* Citas Inmediatas de Hoy */}
+      {/* Listado de Citas de Hoy */}
       <section className="flex flex-col gap-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-electric-blue text-[18px]">
-              timelapse
-            </span>
-            <h2 className="font-display font-bold text-base text-dental-deep-navy">
-              Citas Inmediatas
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigateTab('agenda')}
-            className="text-xs text-electric-blue font-bold flex items-center gap-0.5 hover:underline"
-          >
-            Ver agenda
-            <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-          </button>
-        </div>
-
         <div className="space-y-2.5">
           {(pulse?.citasHoy || []).map((cita) => (
             <div
@@ -438,6 +427,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
         </div>
       </section>
 
+      {/* Tarjeta Resumen de Rendimiento con KPIs Animados en Filas por Odontóloga */}
+      <OdontologaPerformanceCard
+        sedeActualId={sedeId}
+        tasaBcv={tasaBcv}
+      />
+
+      {/* Modal Resumen Interactivo al Presionar los KPIs del Pulso */}
+      <PulsoDetailModal
+        kpiType={modalKpi}
+        onClose={() => setModalKpi(null)}
+        pulse={pulse}
+        sedeId={sedeId}
+        sedeNombre={sedeActiva.nombre}
+        tasaBcv={tasaBcv}
+        onNavigateTab={onNavigateTab}
+      />
     </div>
   );
 };

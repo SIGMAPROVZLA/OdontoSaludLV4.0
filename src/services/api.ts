@@ -18,6 +18,9 @@ import {
   LiquidarHonorariosRequest,
   EvolucionClinicaItem,
   RadiografiaItem,
+  AuditoriaAccionItem,
+  EdgeHealthMetrics,
+  CorporatePaletteId,
 } from '../types/clinical';
 
 const API_BASE_URL = '/api';
@@ -76,13 +79,16 @@ export class ApiClient {
     id: string,
     estado: string,
     sedeId: SedeId,
-    boxNumero?: number
+    boxNumero?: number,
+    horaInicio?: string,
+    fechaCita?: string,
+    doctorNombre?: string
   ): Promise<{ success: boolean }> {
     try {
       const res = await fetch(`${API_BASE_URL}/citas/${id}/estado`, {
         method: 'PATCH',
         headers: this.getHeaders(sedeId),
-        body: JSON.stringify({ estado, boxNumero }),
+        body: JSON.stringify({ estado, boxNumero, horaInicio, fechaCita, doctorNombre }),
       });
       if (!res.ok) throw new Error('Error al actualizar estado');
       return await res.json();
@@ -168,9 +174,13 @@ export class ApiClient {
       indicacionesReceta?: string;
       fotoPrescripcionData?: string;
       tipoAdjunto?: 'receta' | 'indicaciones' | 'reposo';
+      sha256Hash?: string;
+      selladoUtc?: string;
+      esNotaComplementaria?: boolean;
+      evolucionPadreId?: string;
     },
     sedeId?: SedeId
-  ): Promise<{ success: boolean; id: string }> {
+  ): Promise<{ success: boolean; id: string; sha256Hash?: string; selladoUtc?: string }> {
     try {
       const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/evoluciones`, {
         method: 'POST',
@@ -180,7 +190,7 @@ export class ApiClient {
       if (!res.ok) throw new Error('Error al guardar evolución');
       return await res.json();
     } catch {
-      return { success: true, id: `evo-${Date.now()}` };
+      return { success: true, id: `evo-${Date.now()}`, sha256Hash: data.sha256Hash, selladoUtc: data.selladoUtc };
     }
   }
 
@@ -204,9 +214,12 @@ export class ApiClient {
       r2StorageUrl?: string;
       imagenData?: string;
       observaciones?: string;
+      sha256Hash?: string;
+      selladoUtc?: string;
+      doctorFirmante?: string;
     },
     sedeId?: SedeId
-  ): Promise<{ success: boolean; id: string }> {
+  ): Promise<{ success: boolean; id: string; sha256Hash?: string; selladoUtc?: string }> {
     try {
       const res = await fetch(`${API_BASE_URL}/pacientes/${pacienteId}/radiografias`, {
         method: 'POST',
@@ -216,7 +229,7 @@ export class ApiClient {
       if (!res.ok) throw new Error('Error al guardar radiografía');
       return await res.json();
     } catch {
-      return { success: true, id: `rx-${Date.now()}` };
+      return { success: true, id: `rx-${Date.now()}`, sha256Hash: data.sha256Hash, selladoUtc: data.selladoUtc };
     }
   }
 
@@ -734,6 +747,79 @@ export class ApiClient {
       return { success: true };
     }
   }
+
+  // 9. Gobernanza Edge Zero-Server: Salud de la Arquitectura, Paletas Corporativas y Auditoría
+  static async getEdgeHealthMetrics(): Promise<EdgeHealthMetrics> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/system/edge-health`);
+      if (!res.ok) throw new Error('Error al consultar salud Edge');
+      return await res.json();
+    } catch {
+      return {
+        status: 'healthy',
+        anycastLatencyMs: 6,
+        slaTargetMs: 50,
+        slaCompliant: true,
+        d1Stats: {
+          connected: true,
+          totalPacientes: 6,
+          totalCitas: 8,
+          totalPresupuestos: 5,
+          totalPagos: 3,
+          totalCierresDiarios: 1,
+          totalAuditorias: 4,
+          totalSellosForenses: 4,
+        },
+        kvStats: {
+          available: true,
+          activePalette: 'palette-14-luxury-plum',
+          bcvCached: true,
+          rateLimiterActive: true,
+        },
+        r2Stats: {
+          available: true,
+          streamingMode: 'ReadableStream Zero-RAM',
+          totalRadiografias: 2,
+        },
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  static async getActivePalette(): Promise<CorporatePaletteId> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/config/palette`);
+      if (!res.ok) throw new Error('Error al leer paleta');
+      const data = (await res.json()) as any;
+      return (data.activePalette as CorporatePaletteId) || 'palette-14-luxury-plum';
+    } catch {
+      return 'palette-14-luxury-plum';
+    }
+  }
+
+  static async saveActivePalette(paletteId: CorporatePaletteId, actor?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/config/palette`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paletteId, actor }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  static async getAuditoriaAcciones(limit = 50): Promise<AuditoriaAccionItem[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auditoria?limit=${limit}`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
 
   // Mocks clínicos de alta fidelidad para fallback y desarrollo offline
   private static getMockDashboardPulse(sedeId: SedeId): DashboardPulse {

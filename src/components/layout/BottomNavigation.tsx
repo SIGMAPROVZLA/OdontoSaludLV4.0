@@ -1,6 +1,14 @@
 import React from 'react';
 
-export type TabId = 'dashboard' | 'agenda' | 'coordinacion' | 'odontograma' | 'cobros' | 'reserva' | 'data';
+export type TabId =
+  | 'dashboard'
+  | 'agenda'
+  | 'coordinacion'
+  | 'odontograma'
+  | 'cobros'
+  | 'reserva'
+  | 'data'
+  | 'superadmin';
 
 interface BottomNavigationProps {
   activeTab: TabId;
@@ -19,7 +27,8 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     { id: 'coordinacion' as TabId, label: 'Triaje', icon: 'fact_check', badge: pendingCount },
     { id: 'odontograma' as TabId, label: 'Ficha', icon: 'dentistry' },
     { id: 'cobros' as TabId, label: 'Cobros', icon: 'payments' },
-    { id: 'data' as TabId, label: 'Control Data', icon: 'database' },
+    { id: 'data' as TabId, label: 'Data', icon: 'database' },
+    { id: 'superadmin' as TabId, label: 'Admin', icon: 'shield_lock' },
   ];
 
   return (

@@ -10,6 +10,8 @@ import {
   MetodoPago,
 } from '../../types/clinical';
 import { compressImage } from '../../utils/imageCompression';
+import { generateForensicSeal } from '../../utils/forensicHash';
+import { triggerClinicalConfetti } from '../../utils/confetti';
 
 export const BillingView: React.FC = () => {
   const { sedeActiva, sedeId } = useSede();
@@ -253,6 +255,15 @@ export const BillingView: React.FC = () => {
     setIsProcessing(true);
 
     try {
+      const seal = await generateForensicSeal(
+        `${selectedPresupuestoId}|${montoUsd}|${metodo}|${referencia.trim()}|${fotoComprobante || ''}`,
+        {
+          pacienteId: presupuestoSeleccionado?.pacienteId || selectedPresupuestoId,
+          doctorNombre: 'Caja Clínico-Financiera',
+          tipoDocumento: 'comprobante_pago',
+        }
+      );
+
       const res = await ApiClient.registrarCobro(
         {
           presupuestoId: selectedPresupuestoId,
@@ -262,6 +273,8 @@ export const BillingView: React.FC = () => {
           tasaBcv,
           tipoPago,
           fotoComprobanteData: fotoComprobante || undefined,
+          sha256Hash: seal.sha256Hash,
+          selladoUtc: seal.selladoUtc,
           sedeId: presupuestoSeleccionado?.sedeId || (sedeId as any),
         },
         presupuestoSeleccionado?.sedeId || (sedeId as any)
@@ -270,6 +283,10 @@ export const BillingView: React.FC = () => {
       if (!res.success) {
         setErrorCobro(res.error || 'Error al procesar el cobro.');
         return;
+      }
+
+      if ((res.saldoPendienteUsd ?? 0) <= 0 || tipoPago === 'completo') {
+        triggerClinicalConfetti();
       }
 
       // Preparar datos del voucher/recibo emitido

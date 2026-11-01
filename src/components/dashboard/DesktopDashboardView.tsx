@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSede } from '../../context/SedeContext';
+import { useTasaCambio } from '../../context/TasaCambioContext';
 import { DashboardPulse } from '../../types/clinical';
 import { TabId } from '../layout/BottomNavigation';
+import { PulsoDetailModal, PulsoKpiType } from './PulsoDetailModal';
+import { OdontologaPerformanceCard } from './OdontologaPerformanceCard';
+import { PulsoPerformanceMotionDial } from './PulsoPerformanceMotionDial';
 
 interface DesktopDashboardViewProps {
   pulse: DashboardPulse | null;
@@ -14,7 +18,9 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
   loading,
   onNavigateTab,
 }) => {
-  const { sedeActiva, doctorActivo } = useSede();
+  const { sedeActiva, sedeId, doctorActivo } = useSede();
+  const { tasaBcv } = useTasaCambio();
+  const [modalKpi, setModalKpi] = useState<PulsoKpiType | null>(null);
 
   const citas = pulse?.citasHoy || [];
   const boxes = pulse?.boxes || [];
@@ -38,15 +44,19 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
         </p>
       </div>
 
-      {/* 2. Cuatro Tarjetas Métricas Superiores (Fiel a Stitch Desktop) */}
+      {/* 2. Cuatro Tarjetas Métricas Superiores Animadas (Clickeables para Ver Resumen) */}
       <div className="grid grid-cols-4 gap-4">
         {/* Card 1: Pacientes Hoy */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between">
+        <button
+          type="button"
+          onClick={() => setModalKpi('citas')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-primary/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">
               Pacientes Hoy
             </span>
-            <span className="w-7 h-7 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+            <span className="w-7 h-7 rounded-lg bg-surface-container-low flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-[18px]">group</span>
             </span>
           </div>
@@ -55,8 +65,9 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 {metricas.citasTotal}
               </span>
-              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                 +12% vs ayer
+                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
             </div>
             <div className="flex items-center justify-between text-[11px] text-secondary mt-3 pt-2 border-t border-border-subtle/60">
@@ -65,15 +76,19 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span><strong>{citas.filter((c) => c.estado === 'pendiente').length || 4}</strong> Pendientes</span>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Card 2: Ingresos del Día / Recaudación */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between">
+        <button
+          type="button"
+          onClick={() => setModalKpi('cobrado')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-emerald-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">
               Cobrado Hoy (USD)
             </span>
-            <span className="w-7 h-7 rounded-lg bg-status-success/10 flex items-center justify-center text-status-success">
+            <span className="w-7 h-7 rounded-lg bg-status-success/10 flex items-center justify-center text-status-success group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-[18px]">payments</span>
             </span>
           </div>
@@ -82,8 +97,9 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 ${metricas.cobradoHoyUsd}
               </span>
-              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                 Tasa: {(pulse?.tasaBcv ?? 49.85).toFixed(2)}
+                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
             </div>
             <div className="flex items-center justify-between text-[11px] text-secondary mt-3 pt-2 border-t border-border-subtle/60">
@@ -91,25 +107,30 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-primary font-semibold">Meta 82%</span>
             </div>
           </div>
-        </div>
+        </button>
 
-        {/* Card 3: Tratamientos Activos */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between">
+        {/* Card 3: Presupuestos & Tratamientos Activos */}
+        <button
+          type="button"
+          onClick={() => setModalKpi('presupuestos')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-amber-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">
-              Tratamientos Activos
+              Presupuestos Activos
             </span>
-            <span className="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary">
-              <span className="material-symbols-outlined text-[18px]">dentistry</span>
+            <span className="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary group-hover:scale-105 transition-transform">
+              <span className="material-symbols-outlined text-[18px]">request_quote</span>
             </span>
           </div>
           <div className="mt-3">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-display font-black text-dental-deep-navy">
-                46
+                ${metricas.presupuestosPendientesUsd}
               </span>
-              <span className="text-[10px] text-secondary">
-                En seguimiento
+              <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                Por aprobar
+                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-secondary mt-3 pt-2 border-t border-border-subtle/60">
@@ -118,15 +139,19 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-tertiary" /> Endo</span>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Card 4: Ocupación de Boxes */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between">
+        <button
+          type="button"
+          onClick={() => setModalKpi('ocupacion')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-sky-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">
               Ocupación Boxes
             </span>
-            <span className="w-7 h-7 rounded-lg bg-surface-subtle-ice flex items-center justify-center text-electric-blue">
+            <span className="w-7 h-7 rounded-lg bg-surface-subtle-ice flex items-center justify-center text-electric-blue group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-[18px]">airline_seat_recline_extra</span>
             </span>
           </div>
@@ -135,8 +160,9 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 {metricas.ocupacionPorcentaje}%
               </span>
-              <span className="text-[10px] font-semibold text-secondary">
+              <span className="text-[10px] font-semibold text-secondary flex items-center gap-0.5">
                 {sedeActiva.totalBoxes} sillones
+                <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
             </div>
             <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-border-subtle/60">
@@ -157,8 +183,23 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               ))}
             </div>
           </div>
-        </div>
+        </button>
       </div>
+
+      {/* 2A. Pulso del Día Motion Dial - Resumen Cinemático del Rendimiento Facultativo */}
+      <PulsoPerformanceMotionDial
+        tasaBcv={tasaBcv}
+        onOpenPerformance={() => {
+          const el = document.getElementById('seccion-rendimiento-facultativo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
+
+      {/* 2B. Tarjeta Resumen de Rendimiento con KPIs Animados en Filas por Odontóloga */}
+      <OdontologaPerformanceCard
+        sedeActualId={sedeId}
+        tasaBcv={tasaBcv}
+      />
 
       {/* 3. Estructura Principal en 2 Columnas (8 cols + 4 cols) */}
       <div className="grid grid-cols-12 gap-6">
@@ -390,6 +431,17 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal Resumen Interactivo al Presionar los KPIs del Pulso */}
+      <PulsoDetailModal
+        kpiType={modalKpi}
+        onClose={() => setModalKpi(null)}
+        pulse={pulse}
+        sedeId={sedeId}
+        sedeNombre={sedeActiva.nombre}
+        tasaBcv={tasaBcv}
+        onNavigateTab={onNavigateTab}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
 import { normalizarFechaInput } from '../booking/BookingFlow';
@@ -1333,33 +1333,37 @@ export const ControlDataView: React.FC = () => {
     }
   };
 
-  // Configuración de las pestañas del selector animado
-  // Configuración de las 6 pestañas del selector animado
+  // Métricas calculadas para la cabecera ejecutiva y badges
+  const condicionesCriticasCount = useMemo(() => {
+    return condicionesMedicas.filter((c) => c.nivelRiesgo === 'Crítico' || c.nivelRiesgo === 'Alto').length;
+  }, [condicionesMedicas]);
+
+  // Configuración estandarizada de los 7 módulos de segmentación de datos
   const tabs: { key: DataTabKey; label: string; shortLabel: string; icon: string; count: number; badgeExtra?: string }[] = [
     {
       key: 'odontologos',
-      label: 'Ingesta • Odontólogos',
+      label: 'Módulo 01 • Odontólogos',
       shortLabel: 'Odontólogos',
       icon: 'clinical_notes',
       count: odontologos.length,
     },
     {
       key: 'higienistas',
-      label: 'Ingesta • Higienistas',
+      label: 'Módulo 02 • Higienistas',
       shortLabel: 'Higienistas',
       icon: 'clean_hands',
       count: higienistas.length,
     },
     {
       key: 'pacientes',
-      label: 'Padrón de Pacientes',
+      label: 'Módulo 03 • Padrón Pacientes',
       shortLabel: 'Pacientes',
       icon: 'groups',
       count: pacientes.length,
     },
     {
       key: 'citas',
-      label: 'Control Citas Programadas',
+      label: 'Módulo 04 • Agenda de Citas',
       shortLabel: 'Citas',
       icon: 'event_available',
       count: citas.length,
@@ -1367,21 +1371,21 @@ export const ControlDataView: React.FC = () => {
     },
     {
       key: 'tratamientos',
-      label: 'Catálogo Tratamientos & Costos',
+      label: 'Módulo 05 • Tratamientos & Aranceles',
       shortLabel: 'Tratamientos',
       icon: 'table_chart',
       count: tratamientos.length,
     },
     {
       key: 'condiciones',
-      label: 'Enfermedades & Condiciones CIE',
+      label: 'Módulo 06 • Condiciones Médicas CIE',
       shortLabel: 'Condiciones CIE',
       icon: 'health_and_safety',
       count: condicionesMedicas.length,
     },
     {
       key: 'cierres',
-      label: 'Cierres Diarios de Caja',
+      label: 'Módulo 07 • Cierres Diarios de Caja',
       shortLabel: 'Cierres de Caja',
       icon: 'point_of_sale',
       count: cierresDiarios.length,
@@ -1399,240 +1403,259 @@ export const ControlDataView: React.FC = () => {
       )}
 
       {/* =====================================================================
-          CABECERA HERO DE CONTROL DE DATA (6 KPIs Animados y Clickeables)
+          CABECERA HERO • CONTROL DE DATA & GOBERNANZA MAESTRA
          ===================================================================== */}
-      <section className="bg-dental-deep-navy bg-gradient-to-r from-dental-ambient-bg via-dental-deep-navy to-primary rounded-3xl p-5 text-white shadow-[0_10px_30px_rgba(23,18,29,0.22)] border border-primary relative overflow-hidden">
-        <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <section className="bg-gradient-to-r from-dental-deep-navy via-primary to-dental-deep-navy rounded-3xl p-5 sm:p-6 text-white shadow-soft-elevated border border-primary/40 relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-primary border border-border-subtle/40 flex items-center justify-center text-white shrink-0 shadow-md">
-              <span className="material-symbols-outlined text-[26px] animate-pulse">database</span>
+            <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shrink-0 shadow-md">
+              <span className="material-symbols-outlined text-[28px] text-vibrant-cyan">database</span>
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-primary text-surface-container border border-border-subtle/40">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-white/10 text-white border border-white/20">
                   Administración & Maestros D1
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Cloudflare Edge Activo
                 </span>
               </div>
               <h1 className="font-display font-extrabold text-xl sm:text-2xl text-white mt-1 tracking-tight">
                 Control de Data Clínica
               </h1>
+              <p className="text-xs text-white/80 mt-0.5">
+                Gestión centralizada de expedientes, staff médico, aranceles y auditoría de cierres en Edge
+              </p>
             </div>
           </div>
 
-          {/* 7 KPIs Animados de Alto Impacto Visual (Clickeables para cambiar de pestaña) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-2.5 shrink-0">
-            {/* KPI 1: Pacientes en Padrón */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('pacientes')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'pacientes'
-                  ? 'bg-primary ring-2 ring-surface-container border-surface-container'
-                  : 'bg-primary/80 hover:bg-primary border border-border-subtle/30'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:rotate-12 transition-transform">
-                  groups
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {pacientes.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Padrón Pacientes
-              </span>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-status-success w-full rounded-full animate-pulse" />
-              </div>
-            </button>
-
-            {/* KPI 2: Citas Programadas */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('citas')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'citas'
-                  ? 'bg-dental-deep-navy ring-2 ring-vibrant-cyan border-vibrant-cyan'
-                  : 'bg-dental-deep-navy/80 hover:bg-dental-deep-navy border border-border-subtle/30'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className={`w-2 h-2 rounded-full ${citasPendientesCount > 0 ? 'bg-status-warning animate-ping' : 'bg-status-success animate-ping'}`} />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
-                  event_available
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {citas.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                {citasPendientesCount > 0 ? `Citas (${citasPendientesCount} pend)` : 'Citas en Control'}
-              </span>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
-                <div className={`h-full ${citasPendientesCount > 0 ? 'bg-status-warning' : 'bg-status-success'} w-full rounded-full animate-pulse`} />
-              </div>
-            </button>
-
-            {/* KPI 3: Odontólogos */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('odontologos')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'odontologos'
-                  ? 'bg-dental-ambient-bg ring-2 ring-surface-container border-surface-container'
-                  : 'bg-dental-ambient-bg/80 hover:bg-dental-ambient-bg border border-border-subtle/30'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:rotate-12 transition-transform">
-                  clinical_notes
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {odontologos.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Odontólogos
-              </span>
-              <div className="w-full h-1 bg-white/15 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-status-success w-4/5 rounded-full animate-pulse" />
-              </div>
-            </button>
-
-            {/* KPI 4: Higienistas */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('higienistas')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'higienistas'
-                  ? 'bg-dental-ambient-bg ring-2 ring-surface-container border-surface-container'
-                  : 'bg-dental-ambient-bg/80 hover:bg-dental-ambient-bg border border-border-subtle/30'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-vibrant-cyan animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:rotate-12 transition-transform">
-                  clean_hands
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {higienistas.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Higienistas
-              </span>
-              <div className="w-full h-1 bg-white/15 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-surface-container w-3/4 rounded-full animate-pulse" />
-              </div>
-            </button>
-
-            {/* KPI 5: Tratamientos */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('tratamientos')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'tratamientos'
-                  ? 'bg-primary ring-2 ring-surface-container border-surface-container'
-                  : 'bg-primary/80 hover:bg-primary border border-border-subtle/30'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
-                  table_chart
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {tratamientos.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Tratamientos
-              </span>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-white w-full rounded-full animate-pulse" />
-              </div>
-            </button>
-
-            {/* KPI 6: Condiciones Médicas Especiales */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('condiciones')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'condiciones'
-                  ? 'bg-dental-deep-navy ring-2 ring-status-danger border-status-danger'
-                  : 'bg-dental-deep-navy/90 hover:bg-dental-deep-navy border border-border-subtle/40'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-status-danger animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:rotate-12 transition-transform">
-                  health_and_safety
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {condicionesMedicas.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Condiciones CIE
-              </span>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-status-danger w-full rounded-full animate-pulse" />
-              </div>
-            </button>
-
-            {/* KPI 7: Cierres Diarios de Caja */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('cierres')}
-              className={`group p-2.5 rounded-2xl text-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-105 cursor-pointer relative overflow-hidden ${
-                activeTab === 'cierres'
-                  ? 'bg-emerald-600 ring-2 ring-white border-white'
-                  : 'bg-emerald-800/80 hover:bg-emerald-800 border border-border-subtle/40'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-status-success animate-ping" />
-                <span className="material-symbols-outlined text-[15px] text-surface-container group-hover:scale-110 transition-transform">
-                  point_of_sale
-                </span>
-              </div>
-              <span className="text-xl sm:text-2xl font-display font-black text-white block leading-none tracking-tight">
-                {cierresDiarios.length}
-              </span>
-              <span className="text-[10px] text-surface-container font-bold block mt-1">
-                Cierres Caja
-              </span>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-status-success w-full rounded-full animate-pulse" />
-              </div>
-            </button>
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <div className="px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-xs text-white font-bold flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">layers</span>
+              <span>7 Módulos Sincronizados</span>
+            </div>
           </div>
         </div>
       </section>
 
       {/* =====================================================================
-          TARJETA SELECTOR ANIMADO DE PESTAÑAS (UNIFICADO, RESPONSIVO Y LEGIBLE EN MÓVIL)
+          PANEL DE KPIS EJECUTIVOS • MÁXIMA LEGIBILIDAD Y ALTO CONTRASTE
          ===================================================================== */}
-      <section className="bg-surface-clean-white rounded-3xl p-3 sm:p-3.5 shadow-soft-elevated border border-border-subtle relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-dental-deep-navy to-primary" />
-        
-        <div className="flex items-center justify-between gap-3 mb-2.5 px-1">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
+        {/* KPI 1: Padrón de Pacientes */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('pacientes')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'pacientes'
+              ? 'bg-surface-clean-white border-primary ring-2 ring-primary/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-primary/50 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Pacientes
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">groups</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {pacientes.length}
+          </span>
+          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
+            Expedientes en padrón
+          </span>
+        </button>
+
+        {/* KPI 2: Citas Programadas */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('citas')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'citas'
+              ? 'bg-surface-clean-white border-sky-600 ring-2 ring-sky-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-sky-400 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Agenda Citas
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">event_available</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {citas.length}
+          </span>
+          <div className="flex items-center gap-1 mt-1">
+            {citasPendientesCount > 0 ? (
+              <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                {citasPendientesCount} por confirmar
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-emerald-600 truncate">
+                Todas confirmadas
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* KPI 3: Odontólogos */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('odontologos')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'odontologos'
+              ? 'bg-surface-clean-white border-emerald-600 ring-2 ring-emerald-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-emerald-500/50 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Odontólogos
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">clinical_notes</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {odontologos.length}
+          </span>
+          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
+            Especialistas en staff
+          </span>
+        </button>
+
+        {/* KPI 4: Higienistas */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('higienistas')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'higienistas'
+              ? 'bg-surface-clean-white border-indigo-600 ring-2 ring-indigo-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-indigo-400 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Higienistas
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">clean_hands</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {higienistas.length}
+          </span>
+          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
+            Soporte clínico activo
+          </span>
+        </button>
+
+        {/* KPI 5: Catálogo Tratamientos */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('tratamientos')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'tratamientos'
+              ? 'bg-surface-clean-white border-amber-600 ring-2 ring-amber-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-amber-400 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Tratamientos
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">table_chart</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {tratamientos.length}
+          </span>
+          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
+            Promedio: ${promedioArancelUsd.toFixed(0)} USD
+          </span>
+        </button>
+
+        {/* KPI 6: Condiciones Médicas */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('condiciones')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'condiciones'
+              ? 'bg-surface-clean-white border-rose-600 ring-2 ring-rose-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-rose-400 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Condiciones CIE
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">health_and_safety</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {condicionesMedicas.length}
+          </span>
+          <span className="text-[11px] font-semibold text-rose-700 block mt-1 truncate">
+            {condicionesCriticasCount} alertas de riesgo
+          </span>
+        </button>
+
+        {/* KPI 7: Cierres Diarios */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('cierres')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'cierres'
+              ? 'bg-surface-clean-white border-emerald-600 ring-2 ring-emerald-500/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-emerald-400 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Cierres Caja
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px]">point_of_sale</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            {cierresDiarios.length}
+          </span>
+          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
+            Arqueos D1 guardados
+          </span>
+        </button>
+      </div>
+
+      {/* =====================================================================
+          TARJETA SELECTOR ANIMADO DE PESTAÑAS (COMPACTA Y DE ALTA VISIBILIDAD)
+         ===================================================================== */}
+      <section className="bg-surface-clean-white rounded-2xl p-2.5 sm:p-3 shadow-soft-elevated border border-border-subtle relative overflow-hidden">
+        <div className="flex items-center justify-between gap-3 mb-2 px-1">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[18px]">view_carousel</span>
+            <span className="material-symbols-outlined text-primary text-[18px]">view_quilt</span>
             <span className="text-xs font-black uppercase tracking-wider text-dental-deep-navy">
               Módulos de Segmentación de Datos
             </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy">
+              7 Módulos
+            </span>
           </div>
-          <span className="text-[11px] font-semibold text-secondary hidden sm:inline">
+          <span className="text-[11px] font-medium text-secondary hidden md:inline">
             Selecciona un módulo para visualizar y gestionar
           </span>
         </div>
 
-        {/* Selector unificado de 6 pestañas en grid responsivo: 2 cols en móvil, 3 en tablet, 6 en desktop */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {/* Selector unificado de 7 pestañas en grid responsivo: 2 en móvil, 4 en tablet, 7 en desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 sm:gap-2">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -1640,25 +1663,25 @@ export const ControlDataView: React.FC = () => {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-2.5 sm:px-3 py-2.5 rounded-2xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer border text-left min-w-0 ${
+                className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer border text-left min-w-0 ${
                   isActive
-                    ? 'bg-dental-deep-navy text-white shadow-lg border-dental-deep-navy ring-2 ring-primary/40'
+                    ? 'bg-dental-deep-navy text-white shadow-md border-dental-deep-navy ring-2 ring-primary/40'
                     : 'bg-surface-subtle-ice text-dental-deep-navy hover:bg-surface-container border-border-subtle'
                 }`}
               >
                 <div
-                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                  className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                     isActive ? 'bg-primary text-white' : 'bg-surface-container text-dental-deep-navy'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
+                  <span className="material-symbols-outlined text-[15px]">{tab.icon}</span>
                 </div>
                 <div className="min-w-0 flex-1 truncate">
-                  <span className="block text-[11px] font-bold truncate leading-tight">
+                  <span className="block text-[11px] font-extrabold truncate leading-tight">
                     {tab.shortLabel}
                   </span>
                   {tab.badgeExtra ? (
-                    <span className="block text-[9px] font-extrabold text-status-warning truncate">
+                    <span className="block text-[9px] font-extrabold text-amber-500 truncate">
                       {tab.badgeExtra}
                     </span>
                   ) : (
@@ -1668,10 +1691,10 @@ export const ControlDataView: React.FC = () => {
                   )}
                 </div>
                 <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black shrink-0 transition-colors ${
+                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-black shrink-0 transition-colors ${
                     isActive
                       ? 'bg-surface-container text-dental-deep-navy shadow-inner'
-                      : 'bg-border-subtle/50 text-secondary'
+                      : 'bg-white text-secondary border border-border-subtle'
                   }`}
                 >
                   {tab.count}
@@ -1693,39 +1716,57 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
 
-          {/* Header Tarjeta 01 */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-[22px]">clinical_notes</span>
+          {/* Header Módulo 01 • Odontólogos */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">clinical_notes</span>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 01
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 01
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • Staff Facultativo
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                    Staff Facultativo
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {odontologos.length} especialistas registrados
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Ingesta de Datos • Odontólogos
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Directorio Facultativo • Odontólogos & Especialistas
                 </h2>
               </div>
             </div>
 
-            {showOdoForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarFormOdontologo();
-                  setShowOdoForm(false);
-                }}
-                className="px-2.5 py-1 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all"
-              >
-                Ocultar formulario
-              </button>
-            )}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {showOdoForm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormOdontologo();
+                    setShowOdoForm(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                  <span>Ocultar formulario</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormOdontologo();
+                    setShowOdoForm(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">person_add</span>
+                  <span>Registrar Odontólogo</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 1. Directorio Activo de Odontólogos Registrados (Arriba) */}
@@ -2025,39 +2066,57 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
 
-          {/* Header Tarjeta 02 */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-[22px]">clean_hands</span>
+          {/* Header Módulo 02 • Higienistas */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">clean_hands</span>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 02
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 02
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • Soporte Clínico
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    Asistencia Clínica
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {higienistas.length} higienistas en plantilla
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Ingesta de Datos • Higienistas Dentales
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Directorio Clínico • Higienistas Dentales
                 </h2>
               </div>
             </div>
 
-            {showHigForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarFormHigienista();
-                  setShowHigForm(false);
-                }}
-                className="px-2.5 py-1 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all"
-              >
-                Ocultar formulario
-              </button>
-            )}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {showHigForm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormHigienista();
+                    setShowHigForm(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                  <span>Ocultar formulario</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormHigienista();
+                    setShowHigForm(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-dental-deep-navy hover:bg-primary text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">group_add</span>
+                  <span>Registrar Higienista</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 1. Lista de Higienistas Registradas (Arriba) */}
@@ -2358,40 +2417,43 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
 
-          {/* Header Tarjeta Padrón de Pacientes */}
+          {/* Header Módulo 03 • Pacientes */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[22px]">groups</span>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">groups</span>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 03 • Maestro Clínico
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 03
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • Total Padrón ({pacientes.length})
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                    Maestro Clínico
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {pacientes.length} expedientes en padrón
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Padrón de Pacientes Registrados
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Padrón General de Pacientes & Expedientes
                 </h2>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormPaciente();
                   setShowPacForm(!showPacForm);
                 }}
-                className="px-3.5 py-2 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  {showPacForm ? 'close' : 'person_add'}
+                <span className="material-symbols-outlined text-[16px]">
+                  {showPacForm ? 'visibility_off' : 'person_add'}
                 </span>
-                <span>{showPacForm ? 'Cerrar Formulario' : 'Nuevo Paciente'}</span>
+                <span>{showPacForm ? 'Ocultar Formulario' : 'Nuevo Paciente'}</span>
               </button>
             </div>
           </div>
@@ -2735,23 +2797,26 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-vibrant-cyan" />
 
-          {/* Header Tarjeta Control de Citas */}
+          {/* Header Módulo 04 • Citas */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[22px]">event_available</span>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[24px]">event_available</span>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 04 • Control Clínico
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 04
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • {citas.length} Programadas ({citasPendientesCount} por aprobar)
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
+                    Control de Agenda
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {citas.length} citas ({citasPendientesCount} por confirmar)
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Control de Citas Programadas
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Agenda Operativa & Control de Citas
                 </h2>
               </div>
             </div>
@@ -2761,9 +2826,9 @@ export const ControlDataView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleAprobarTodasPendientes}
-                className="px-3.5 py-2 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-lg shadow-status-success/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer animate-bounce"
+                className="px-3.5 py-1.5 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
               >
-                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span className="material-symbols-outlined text-[16px]">done_all</span>
                 <span>Aprobar {citasPendientesCount} Pendientes</span>
               </button>
             )}
@@ -3052,39 +3117,57 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
 
-          {/* Cabecera de la Tarjeta Tabla */}
+          {/* Header Módulo 05 • Tratamientos */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-sm shrink-0">
                 <span className="material-symbols-outlined text-[24px]">table_chart</span>
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                    Tarjeta 04
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 05
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • Arancel Promedio: ${promedioArancelUsd.toFixed(0)} USD
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                    Catálogo de Procedimientos
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {tratamientos.length} tratamientos • Arancel prom: ${promedioArancelUsd.toFixed(0)} USD
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Catálogo de Tratamientos, Datos Clínicos y Costos
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Catálogo Maestro de Tratamientos & Aranceles
                 </h2>
               </div>
             </div>
 
-            {showTratForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarFormTratamiento();
-                  setShowTratForm(false);
-                }}
-                className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white font-bold text-xs border border-border-subtle transition-all active:scale-95"
-              >
-                Ocultar formulario
-              </button>
-            )}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {showTratForm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormTratamiento();
+                    setShowTratForm(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                  <span>Ocultar formulario</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormTratamiento();
+                    setShowTratForm(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                  <span>Nuevo Tratamiento</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Controles de Filtro y Búsqueda de la Tabla */}
@@ -3525,39 +3608,57 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-status-danger via-primary to-dental-deep-navy" />
 
-          {/* Cabecera Tarjeta 05 */}
+          {/* Header Módulo 06 • Condiciones Médicas CIE */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-sm shrink-0">
                 <span className="material-symbols-outlined text-[24px]">health_and_safety</span>
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-status-danger/10 text-status-danger border border-status-danger/20">
-                    Tarjeta 05 • Bioseguridad & Anamnesis
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 06
                   </span>
-                  <span className="text-[11px] text-secondary font-semibold">
-                    • Catálogo Activo: {condicionesMedicas.length} condiciones registradas
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                    Bioseguridad & Anamnesis
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {condicionesMedicas.length} condiciones registradas ({condicionesCriticasCount} alertas de riesgo)
                   </span>
                 </div>
-                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-0.5">
-                  Ingesta de Enfermedades y Condiciones Médicas Especiales
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Catálogo de Condiciones Médicas Especiales (CIE)
                 </h2>
               </div>
             </div>
 
-            {showMedForm && (
-              <button
-                type="button"
-                onClick={() => {
-                  limpiarFormCondicionMedica();
-                  setShowMedForm(false);
-                }}
-                className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white font-bold text-xs border border-border-subtle transition-all active:scale-95"
-              >
-                Ocultar formulario
-              </button>
-            )}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {showMedForm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormCondicionMedica();
+                    setShowMedForm(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                  <span>Ocultar formulario</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormCondicionMedica();
+                    setShowMedForm(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add_moderator</span>
+                  <span>Nueva Condición</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Controles de Búsqueda y Filtros de Riesgo */}
@@ -3960,37 +4061,42 @@ export const ControlDataView: React.FC = () => {
         <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 via-status-success to-dental-deep-navy" />
 
-          {/* Cabecera Tarjeta Cierres */}
+          {/* Header Módulo 07 • Cierres Diarios */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
                 <span className="material-symbols-outlined text-[24px]">point_of_sale</span>
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-display font-black text-base text-dental-deep-navy tracking-tight">
-                    Cierres Diarios de Caja en Box
-                  </h3>
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    Cloudflare D1
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                    Módulo 07
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Auditoría Financiera D1
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • {cierresDiarios.length} arqueos históricos en Cloudflare D1
                   </span>
                 </div>
-                <p className="text-xs text-secondary mt-0.5">
-                  Auditoría y conciliación histórica de ingresos por sede y por jornada
-                </p>
+                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                  Arqueo y Cierres Diarios de Caja
+                </h2>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={cargarCierresDiarios}
-              className="px-3.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-dental-deep-navy text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[15px] ${isLoadingCierres ? 'animate-spin' : ''}`}>
-                refresh
-              </span>
-              <span>Actualizar Cierres</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={cargarCierresDiarios}
+                className="px-3.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-dental-deep-navy text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className={`material-symbols-outlined text-[15px] ${isLoadingCierres ? 'animate-spin' : ''}`}>
+                  refresh
+                </span>
+                <span>Actualizar Cierres</span>
+              </button>
+            </div>
           </div>
 
           {/* Tabla de Cierres Diarios */}

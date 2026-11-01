@@ -72,7 +72,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
         })}
 
         <div className="pt-4 px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-outline-variant">
-          Administración
+          Administración & Gobernanza
         </div>
 
         <button
@@ -92,6 +92,30 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ activeTab, onTab
             database
           </span>
           <span>Control de Data</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onTabChange('superadmin')}
+          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
+            activeTab === 'superadmin'
+              ? 'bg-emerald-700 text-white shadow-[0_4px_16px_rgba(16,185,129,0.4)] border border-emerald-400/40'
+              : 'text-secondary-fixed hover:bg-dental-ambient-bg hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className={`material-symbols-outlined text-[20px] ${
+                activeTab === 'superadmin' ? 'text-emerald-300' : 'text-emerald-400'
+              }`}
+            >
+              shield_lock
+            </span>
+            <span>SuperAdmin & Edge</span>
+          </div>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            Live
+          </span>
         </button>
       </nav>
 

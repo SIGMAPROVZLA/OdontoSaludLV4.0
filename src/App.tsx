@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SedeProvider } from './context/SedeContext';
 import { TasaCambioProvider } from './context/TasaCambioContext';
+import { ThemePaletteProvider } from './context/ThemePaletteContext';
 import { ClinicalHeader } from './components/layout/ClinicalHeader';
 import { BottomNavigation, TabId } from './components/layout/BottomNavigation';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -11,6 +12,7 @@ import { BillingView } from './components/billing/BillingView';
 import { AppointmentCoordinationView } from './components/booking/AppointmentCoordinationView';
 import { VictoriaAssistantModal } from './components/booking/VictoriaAssistantModal';
 import { ControlDataView } from './components/data/ControlDataView';
+import { SuperAdminView } from './components/superadmin/SuperAdminView';
 
 import { useDeviceLayout } from './hooks/useDeviceLayout';
 import { DesktopSidebar } from './components/layout/DesktopSidebar';
@@ -25,6 +27,7 @@ const parseTabFromLocation = (): TabId => {
   if (hash === 'odontograma' || hash === 'ficha') return 'odontograma';
   if (hash === 'cobros') return 'cobros';
   if (hash === 'data' || hash === 'control-data' || hash === 'controldata') return 'data';
+  if (hash === 'superadmin' || hash === 'gobernanza' || hash === 'citadel' || hash === 'telemetria') return 'superadmin';
   if (hash === 'dashboard' || hash === 'inicio') return 'dashboard';
 
   const params = new URLSearchParams(window.location.search);
@@ -35,6 +38,7 @@ const parseTabFromLocation = (): TabId => {
   if (tabParam === 'odontograma') return 'odontograma';
   if (tabParam === 'cobros') return 'cobros';
   if (tabParam === 'data' || tabParam === 'control-data') return 'data';
+  if (tabParam === 'superadmin' || tabParam === 'gobernanza') return 'superadmin';
 
   return 'dashboard';
 };
@@ -65,7 +69,7 @@ export const AppContent: React.FC = () => {
         <DesktopSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Contenedor Principal de Escritorio */}
-        <div className="flex-1 flex flex-col min-h-screen overflow-y-auto relative z-10 bg-surface">
+        <div id="desktop-main-scroll" className="flex-1 flex flex-col min-h-screen overflow-y-auto relative z-10 bg-surface">
           {activeTab !== 'reserva' && <DesktopTopBar onNavigateTab={setActiveTab} />}
           
           <main className="flex-1 w-full max-w-7xl mx-auto p-6">
@@ -76,6 +80,7 @@ export const AppContent: React.FC = () => {
             {activeTab === 'agenda' && <AgendaView onNavigateTab={setActiveTab} />}
             {activeTab === 'cobros' && <BillingView />}
             {activeTab === 'data' && <ControlDataView />}
+            {activeTab === 'superadmin' && <SuperAdminView onNavigateTab={setActiveTab} />}
           </main>
         </div>
 
@@ -103,6 +108,7 @@ export const AppContent: React.FC = () => {
         {activeTab === 'agenda' && <AgendaView onNavigateTab={setActiveTab} />}
         {activeTab === 'cobros' && <BillingView />}
         {activeTab === 'data' && <ControlDataView />}
+        {activeTab === 'superadmin' && <SuperAdminView onNavigateTab={setActiveTab} />}
       </main>
 
       {/* Asistente Flotante Inteligente VictorIA */}
@@ -118,11 +124,13 @@ export const AppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <SedeProvider>
-      <TasaCambioProvider>
-        <AppContent />
-      </TasaCambioProvider>
-    </SedeProvider>
+    <ThemePaletteProvider>
+      <SedeProvider>
+        <TasaCambioProvider>
+          <AppContent />
+        </TasaCambioProvider>
+      </SedeProvider>
+    </ThemePaletteProvider>
   );
 };
 

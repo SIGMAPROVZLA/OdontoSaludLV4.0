@@ -3,12 +3,36 @@
 @tailwind utilities;
 
 :root {
+  /* Variables del Catálogo Maestro Corporativo (AGENTS.md §3.2) */
   --palette-obsidian: #17121D;
   --palette-aubergine: #302538;
   --palette-royal-plum: #51405F;
   --palette-mauve: #796487;
   --palette-lilac: #B09BB8;
   --palette-silk: #E8DDEB;
+
+  /* Variables Semánticas Nativas Reactivas (:root) */
+  --color-bg: #F4EEF7;
+  --color-surface: #E8DDEB;
+  --color-primary: #51405F;
+  --color-secondary: #796487;
+  --color-border: #B09BB8;
+  --color-text: #17121D;
+
+  /* Canales RGB para soporte completo de opacidades (/10, /20, /40...) y gradientes en Tailwind CSS */
+  --palette-obsidian-rgb: 23 18 29;
+  --palette-aubergine-rgb: 48 37 56;
+  --palette-royal-plum-rgb: 81 64 95;
+  --palette-mauve-rgb: 121 100 135;
+  --palette-lilac-rgb: 176 155 184;
+  --palette-silk-rgb: 232 221 235;
+
+  --color-bg-rgb: 244 238 247;
+  --color-surface-rgb: 232 221 235;
+  --color-primary-rgb: 81 64 95;
+  --color-secondary-rgb: 121 100 135;
+  --color-border-rgb: 176 155 184;
+  --color-text-rgb: 23 18 29;
 }
 
 @layer base {
@@ -18,10 +42,11 @@
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background-color: #F4EEF7;
-    color: #17121D;
+    background-color: var(--color-bg, #F4EEF7);
+    color: var(--color-text, #17121D);
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   .pb-safe {
@@ -60,4 +85,16 @@
 
 .animate-marquee:hover {
   animation-play-state: paused;
+}
+
+/* Cumplimiento estricto de Accesibilidad Cinética (AGENTS.md §2 Capa 4 y §4) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

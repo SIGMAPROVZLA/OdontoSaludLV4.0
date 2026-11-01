@@ -14,6 +14,10 @@ import {
 import { QuadrantArchView } from './QuadrantArchView';
 import { TabId } from '../layout/BottomNavigation';
 import { compressImage } from '../../utils/imageCompression';
+import { generateForensicSeal } from '../../utils/forensicHash';
+import { DeterministicIdenticon } from '../../utils/identicon';
+import { triggerClinicalConfetti } from '../../utils/confetti';
+import { exportClinicalEvolutionVideo } from '../../utils/clinicalVideoExporter';
 
 export interface CitaAprobadaConsulta {
   id: string;
@@ -374,6 +378,7 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
       });
 
       if (res.success) {
+        triggerClinicalConfetti();
         setMensajePresupuestoExito(
           `¡Presupuesto ${res.codigo || 'definitivo'} ($${totalPresupuestoUsd.toFixed(2)} USD) fijado y guardado en D1! Quedó habilitado para cobro en recepción.`
         );
@@ -408,15 +413,29 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     setMensajeEvolucionExito(null);
 
     try {
+      const doctorFirmante = doctorEvolucionSeleccionado || doctorActivo;
+      const seal = await generateForensicSeal(
+        `${textoNuevaEvolucion.trim()}|${indicacionesReceta.trim()}|${fotoPrescripcion || ''}`,
+        {
+          pacienteId: selectedCita.pacienteId,
+          doctorNombre: doctorFirmante,
+          tipoDocumento: 'evolucion_clinica',
+        }
+      );
+
       const res = await ApiClient.guardarEvolucion(
         selectedCita.pacienteId,
         {
           citaId: selectedCita.id,
-          odontologoNombre: doctorEvolucionSeleccionado || doctorActivo,
+          odontologoNombre: doctorFirmante,
           texto: textoNuevaEvolucion.trim(),
           indicacionesReceta: indicacionesReceta.trim(),
           fotoPrescripcionData: fotoPrescripcion || undefined,
           tipoAdjunto: tipoAdjuntoEvolucion,
+          sha256Hash: seal.sha256Hash,
+          selladoUtc: seal.selladoUtc,
+          esNotaComplementaria: evoluciones.length > 0,
+          evolucionPadreId: evoluciones[0]?.id,
         },
         sedeId
       );
@@ -426,12 +445,15 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           id: res.id,
           pacienteId: selectedCita.pacienteId,
           citaId: selectedCita.id,
-          odontologoNombre: doctorEvolucionSeleccionado || doctorActivo,
+          odontologoNombre: doctorFirmante,
           texto: textoNuevaEvolucion.trim(),
           indicacionesReceta: indicacionesReceta.trim(),
           fotoPrescripcionData: fotoPrescripcion || undefined,
           tipoAdjunto: tipoAdjuntoEvolucion,
-          createdAt: new Date().toISOString(),
+          sha256Hash: res.sha256Hash || seal.sha256Hash,
+          selladoUtc: res.selladoUtc || seal.selladoUtc,
+          esNotaComplementaria: evoluciones.length > 0,
+          createdAt: seal.selladoUtc,
         };
 
         setEvoluciones((prev) => [nueva, ...prev]);
@@ -439,7 +461,9 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         setTextoNuevaEvolucion('');
         setIndicacionesReceta('');
         setFotoPrescripcion(null);
-        setMensajeEvolucionExito('¡Evolución clínica con prescripción/reposo resguardada exitosamente en D1!');
+        setMensajeEvolucionExito(
+          `¡Evolución clínica sellada con SHA-256 (${seal.shortHash}) y resguardada inmutablemente en D1!`
+        );
       }
     } catch (err) {
       console.error('Error guardando evolución:', err);
@@ -480,6 +504,13 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     setIsSavingRx(true);
     setMensajeRxExito(null);
     try {
+      const doctorFirmante = selectedCita.doctorNombre || doctorActivo;
+      const seal = await generateForensicSeal(rxPendienteGuardar, {
+        pacienteId: selectedCita.pacienteId,
+        doctorNombre: doctorFirmante,
+        tipoDocumento: 'radiografia_rvg',
+      });
+
       const res = await ApiClient.guardarRadiografia(
         selectedCita.pacienteId,
         {
@@ -487,6 +518,9 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           tipo: 'periapical_rvg',
           imagenData: rxPendienteGuardar,
           observaciones: notaRx,
+          sha256Hash: seal.sha256Hash,
+          selladoUtc: seal.selladoUtc,
+          doctorFirmante,
         },
         sedeId
       );
@@ -499,12 +533,17 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           tipo: 'periapical_rvg',
           imagenData: rxPendienteGuardar,
           observaciones: notaRx,
-          fechaToma: new Date().toISOString(),
+          sha256Hash: res.sha256Hash || seal.sha256Hash,
+          selladoUtc: res.selladoUtc || seal.selladoUtc,
+          doctorFirmante,
+          fechaToma: seal.selladoUtc,
         };
         setRadiografias((prev) => [nuevaRx, ...prev]);
         setRxPendienteGuardar(null);
-        setMensajeRxExito('¡Radiografía digital RVG 2.0 guardada y comprimida exitosamente en D1!');
-        setTimeout(() => setMensajeRxExito(null), 4000);
+        setMensajeRxExito(
+          `¡Radiografía RVG 2.0 sellada con SHA-256 (${seal.shortHash}) y transmitida a R2/D1!`
+        );
+        setTimeout(() => setMensajeRxExito(null), 5000);
       }
     } catch (err) {
       console.error('Error guardando radiografía:', err);
@@ -626,10 +665,10 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 bg-surface-subtle-ice/60 p-3 rounded-2xl border border-border-subtle">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="relative shrink-0">
-                  <img
-                    src={selectedCita.avatarUrl}
-                    alt={selectedCita.pacienteNombre}
-                    className="w-13 h-13 rounded-2xl object-cover shadow-sm ring-2 ring-primary/20"
+                  <DeterministicIdenticon
+                    seed={selectedCita.pacienteCedula || selectedCita.pacienteId}
+                    name={selectedCita.pacienteNombre}
+                    size={52}
                   />
                   {selectedCita.estado === 'en_sillon' && (
                     <span
@@ -762,8 +801,34 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               )}
             </div>
 
-            {/* Botón de Historial Clínico en la Esquina Inferior Derecha */}
-            <div className="flex justify-end pt-1">
+            {/* Botones de Exportación de Video Clínico en Cliente e Historial Clínico */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const seal = await generateForensicSeal(JSON.stringify(teeth), {
+                    pacienteId: selectedCita.pacienteId,
+                    doctorNombre: selectedCita.doctorNombre || doctorActivo,
+                    tipoDocumento: 'evolucion_clinica',
+                  });
+                  await exportClinicalEvolutionVideo({
+                    pacienteNombre: selectedCita.pacienteNombre,
+                    pacienteCedula: selectedCita.pacienteCedula,
+                    doctorNombre: selectedCita.doctorNombre || doctorActivo,
+                    sedeNombre: selectedCita.sedeId === 'tovar' ? 'La Colonia Tovar' : 'La Victoria',
+                    fechaConsulta: selectedCita.fechaCita,
+                    teeth,
+                    presupuestoTotalUsd: totalPresupuestoUsd,
+                    sha256Seal: seal.shortHash,
+                  });
+                }}
+                className="px-3.5 py-2 rounded-xl bg-surface-subtle-ice hover:bg-primary hover:text-white border border-border-subtle text-primary text-xs font-extrabold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Exportar clip MP4/HD de evolución dental generado 100% en navegador (WebCodecs/Canvas)"
+              >
+                <span className="material-symbols-outlined text-[17px]">movie_edit</span>
+                <span>🎬 Exportar Resumen / Video Clínico</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setShowHistorialModal(true)}
@@ -1111,14 +1176,22 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           /* Visualización de la Última Evolución Registrada */
           <div className="space-y-2">
             <div className="p-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle flex flex-col gap-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-1.5">
                 <span className="text-[11px] font-bold text-secondary">
                   📅 {evoluciones[0].createdAt ? evoluciones[0].createdAt.split('T')[0] : 'Última consulta'}
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-status-success">
-                  <span className="material-symbols-outlined text-[14px]">verified</span>
-                  <span>Firma Digital</span>
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {evoluciones[0].sha256Hash && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-emerald-300 font-mono text-[10px] font-bold">
+                      <span className="material-symbols-outlined text-[12px]">gpp_good</span>
+                      <span>SHA-256: {evoluciones[0].sha256Hash.slice(0, 8).toUpperCase()}…</span>
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-status-success">
+                    <span className="material-symbols-outlined text-[14px]">verified</span>
+                    <span>Inmutable (Append-Only)</span>
+                  </span>
+                </div>
               </div>
 
               <p className="text-xs text-secondary leading-relaxed bg-white/80 p-3 rounded-xl border border-border-subtle/50">
