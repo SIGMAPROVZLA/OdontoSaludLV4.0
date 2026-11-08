@@ -4,7 +4,14 @@ import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { normalizarFechaInput } from '../booking/BookingFlow';
 import {
+  DIAS_SEMANA_CLINICOS,
+  normalizarDisponibilidadOdontologo,
+  normalizarListaOdontologos,
+  INITIAL_ODONTOLOGOS as INITIAL_ODONTOLOGOS_MASTER,
+} from '../../hooks/useOdontologos';
+import {
   OdontologoItem,
+  DiaSemanaClinico,
   HigienistaItem,
   TratamientoItem,
   PacienteItem,
@@ -231,50 +238,7 @@ const INITIAL_LABORATORIOS: LaboratorioItem[] = [
   },
 ];
 
-const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
-  {
-    id: 'odo-1',
-    nombres: 'Dra. María Alejandra Domínguez',
-    cedula: 'V-16.482.910',
-    cov: 'C.O.V. 24.891',
-    especialidad: 'Directora Clínica • Odontología General & Estética',
-    telefono: '+58 414-5550101',
-    email: 'dra.dominguez@odontosalud.ve',
-    sedeId: 'ambas',
-    boxAsignado: 1,
-    turno: 'Completo',
-    porcentajeHonorarios: 50,
-    estado: 'activo',
-  },
-  {
-    id: 'odo-2',
-    nombres: 'Dr. Carlos Mendoza Rivas',
-    cedula: 'V-17.902.311',
-    cov: 'C.O.V. 26.104',
-    especialidad: 'Ortodoncia & Ortopedia Dentofacial',
-    telefono: '+58 412-8891234',
-    email: 'c.mendoza@odontosalud.ve',
-    sedeId: 'victoria',
-    boxAsignado: 2,
-    turno: 'Mañana',
-    porcentajeHonorarios: 45,
-    estado: 'activo',
-  },
-  {
-    id: 'odo-3',
-    nombres: 'Dra. Valentina Páez Gómez',
-    cedula: 'V-20.331.488',
-    cov: 'C.O.V. 29.512',
-    especialidad: 'Endodoncia Microscópica & Odontopediatría',
-    telefono: '+58 424-3349011',
-    email: 'v.paez@odontosalud.ve',
-    sedeId: 'victoria',
-    boxAsignado: 1,
-    turno: 'Tarde',
-    porcentajeHonorarios: 45,
-    estado: 'en_guardia',
-  },
-];
+const INITIAL_ODONTOLOGOS: OdontologoItem[] = INITIAL_ODONTOLOGOS_MASTER;
 
 const INITIAL_HIGIENISTAS: HigienistaItem[] = [
   {
@@ -768,7 +732,7 @@ export const ControlDataView: React.FC = () => {
   const [odontologos, setOdontologos] = useState<OdontologoItem[]>(() => {
     try {
       const saved = localStorage.getItem('odontosalud_data_odontologos');
-      return saved ? JSON.parse(saved) : INITIAL_ODONTOLOGOS;
+      return saved ? normalizarListaOdontologos(JSON.parse(saved)) : INITIAL_ODONTOLOGOS;
     } catch {
       return INITIAL_ODONTOLOGOS;
     }
@@ -865,7 +829,7 @@ export const ControlDataView: React.FC = () => {
     ApiClient.getControlData().then((remote) => {
       if (!remote) return;
       if (remote.odontologos && remote.odontologos.length > 0) {
-        setOdontologos(remote.odontologos);
+        setOdontologos(normalizarListaOdontologos(remote.odontologos));
       }
       if (remote.higienistas && remote.higienistas.length > 0) {
         setHigienistas(remote.higienistas);
@@ -976,6 +940,105 @@ export const ControlDataView: React.FC = () => {
   const [odoTurno, setOdoTurno] = useState<'Mañana' | 'Tarde' | 'Completo'>('Completo');
   const [odoHonorarios, setOdoHonorarios] = useState<number>(45);
   const [odoEstado, setOdoEstado] = useState<'activo' | 'en_guardia' | 'descanso'>('activo');
+  const [odoDiasVictoria, setOdoDiasVictoria] = useState<DiaSemanaClinico[]>([
+    'LUN',
+    'MAR',
+    'MIÉ',
+    'JUE',
+    'VIE',
+    'SÁB',
+  ]);
+  const [odoDiasTovar, setOdoDiasTovar] = useState<DiaSemanaClinico[]>([]);
+
+  const toggleDiaFormSede = (sede: 'victoria' | 'tovar', dia: DiaSemanaClinico) => {
+    if (sede === 'victoria') {
+      setOdoDiasVictoria((prev) =>
+        prev.includes(dia)
+          ? prev.filter((d) => d !== dia)
+          : DIAS_SEMANA_CLINICOS.filter((d) => [...prev, dia].includes(d))
+      );
+    } else {
+      setOdoDiasTovar((prev) =>
+        prev.includes(dia)
+          ? prev.filter((d) => d !== dia)
+          : DIAS_SEMANA_CLINICOS.filter((d) => [...prev, dia].includes(d))
+      );
+    }
+  };
+
+  const handleCambioSedeForm = (nuevaSede: SedeId | 'ambas') => {
+    setOdoSede(nuevaSede);
+    if (nuevaSede === 'victoria') {
+      if (odoDiasVictoria.length === 0) {
+        setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']);
+      }
+      setOdoDiasTovar([]);
+    } else if (nuevaSede === 'tovar') {
+      if (odoDiasTovar.length === 0) {
+        setOdoDiasTovar(['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']);
+      }
+      setOdoDiasVictoria([]);
+    } else {
+      // 'ambas'
+      if (odoDiasVictoria.length === 0 || odoDiasVictoria.length === 6) {
+        setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE']);
+      }
+      if (odoDiasTovar.length === 0) {
+        setOdoDiasTovar(['VIE', 'SÁB']);
+      }
+    }
+  };
+
+  const handleQuickToggleDiaDoctor = async (
+    o: OdontologoItem,
+    sedeTarget: 'victoria' | 'tovar',
+    dia: DiaSemanaClinico
+  ) => {
+    const norm = normalizarDisponibilidadOdontologo(o);
+    const actualVic = norm.diasVictoria || [];
+    const actualTov = norm.diasTovar || [];
+
+    const nuevosVic =
+      sedeTarget === 'victoria'
+        ? actualVic.includes(dia)
+          ? actualVic.filter((d) => d !== dia)
+          : DIAS_SEMANA_CLINICOS.filter((d) => [...actualVic, dia].includes(d))
+        : actualVic;
+
+    const nuevosTov =
+      sedeTarget === 'tovar'
+        ? actualTov.includes(dia)
+          ? actualTov.filter((d) => d !== dia)
+          : DIAS_SEMANA_CLINICOS.filter((d) => [...actualTov, dia].includes(d))
+        : actualTov;
+
+    const nuevaSedeId: SedeId | 'ambas' =
+      nuevosVic.length > 0 && nuevosTov.length > 0
+        ? 'ambas'
+        : nuevosTov.length > 0
+        ? 'tovar'
+        : 'victoria';
+
+    const actualizado: OdontologoItem = {
+      ...norm,
+      sedeId: nuevaSedeId,
+      diasVictoria: nuevosVic,
+      diasTovar: nuevosTov,
+    };
+
+    setOdontologos((prev) => prev.map((item) => (item.id === o.id ? actualizado : item)));
+    if (editOdoId === o.id) {
+      setOdoSede(nuevaSedeId);
+      setOdoDiasVictoria(nuevosVic);
+      setOdoDiasTovar(nuevosTov);
+    }
+    await ApiClient.guardarOdontologo(actualizado);
+    showToast(
+      `📅 Disponibilidad actualizada: ${o.nombres} (${
+        sedeTarget === 'victoria' ? 'La Victoria' : 'Colonia Tovar'
+      })`
+    );
+  };
 
   const isOdoFormComplete =
     odoNombres.trim().length > 0 &&
@@ -984,7 +1047,10 @@ export const ControlDataView: React.FC = () => {
     odoEspecialidad.trim().length > 0 &&
     odoTelefono.trim().length > 0 &&
     odoEmail.trim().length > 0 &&
-    odoHonorarios > 0;
+    odoHonorarios > 0 &&
+    ((odoSede === 'victoria' && odoDiasVictoria.length > 0) ||
+      (odoSede === 'tovar' && odoDiasTovar.length > 0) ||
+      (odoSede === 'ambas' && (odoDiasVictoria.length > 0 || odoDiasTovar.length > 0)));
 
   const limpiarFormOdontologo = () => {
     setEditOdoId(null);
@@ -999,21 +1065,26 @@ export const ControlDataView: React.FC = () => {
     setOdoTurno('Completo');
     setOdoHonorarios(45);
     setOdoEstado('activo');
+    setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']);
+    setOdoDiasTovar([]);
   };
 
   const handleEditarOdontologo = (o: OdontologoItem) => {
-    setEditOdoId(o.id);
-    setOdoNombres(o.nombres);
-    setOdoCedula(o.cedula);
-    setOdoCov(o.cov);
-    setOdoEspecialidad(o.especialidad);
-    setOdoTelefono(o.telefono);
-    setOdoEmail(o.email);
-    setOdoSede(o.sedeId);
-    setOdoBox(o.boxAsignado);
-    setOdoTurno(o.turno);
-    setOdoHonorarios(o.porcentajeHonorarios);
-    setOdoEstado(o.estado);
+    const norm = normalizarDisponibilidadOdontologo(o);
+    setEditOdoId(norm.id);
+    setOdoNombres(norm.nombres);
+    setOdoCedula(norm.cedula);
+    setOdoCov(norm.cov);
+    setOdoEspecialidad(norm.especialidad);
+    setOdoTelefono(norm.telefono);
+    setOdoEmail(norm.email);
+    setOdoSede(norm.sedeId);
+    setOdoBox(norm.boxAsignado);
+    setOdoTurno(norm.turno);
+    setOdoHonorarios(norm.porcentajeHonorarios);
+    setOdoEstado(norm.estado);
+    setOdoDiasVictoria(norm.diasVictoria || []);
+    setOdoDiasTovar(norm.diasTovar || []);
     setShowOdoForm(true);
   };
 
@@ -1044,6 +1115,19 @@ export const ControlDataView: React.FC = () => {
     e.preventDefault();
     if (!odoNombres.trim() || !odoCedula.trim()) return;
 
+    const finalDiasVictoria: DiaSemanaClinico[] =
+      odoSede === 'tovar'
+        ? []
+        : odoDiasVictoria.length > 0
+        ? odoDiasVictoria
+        : ['LUN', 'MAR', 'MIÉ', 'JUE'];
+    const finalDiasTovar: DiaSemanaClinico[] =
+      odoSede === 'victoria'
+        ? []
+        : odoDiasTovar.length > 0
+        ? odoDiasTovar
+        : ['VIE', 'SÁB'];
+
     const nuevo: OdontologoItem = {
       id: editOdoId || `odo-${Date.now()}`,
       nombres: odoNombres.trim(),
@@ -1057,11 +1141,13 @@ export const ControlDataView: React.FC = () => {
       turno: odoTurno,
       porcentajeHonorarios: Number(odoHonorarios),
       estado: odoEstado,
+      diasVictoria: finalDiasVictoria,
+      diasTovar: finalDiasTovar,
     };
 
     if (editOdoId) {
       setOdontologos((prev) => prev.map((item) => (item.id === editOdoId ? nuevo : item)));
-      showToast(`✅ Datos de ${nuevo.nombres} confirmados y actualizados.`);
+      showToast(`✅ Datos y disponibilidad por sede de ${nuevo.nombres} actualizados.`);
     } else {
       setOdontologos((prev) => [nuevo, ...prev]);
       showToast(`🦷 Odontólogo(a) ${nuevo.nombres} confirmado(a) en plantilla.`);
@@ -2727,97 +2813,181 @@ export const ControlDataView: React.FC = () => {
               <span>Toque para editar o eliminar</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
-              {odontologos.map((o) => (
-                <div
-                  key={o.id}
-                  className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                    editOdoId === o.id
-                      ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-bold text-sm flex items-center justify-center shrink-0">
-                      {o.nombres
-                        .replace(/Dra?\.?\s*/i, '')
-                        .slice(0, 2)
-                        .toUpperCase()}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[34rem] overflow-y-auto pr-1">
+              {odontologos.map((o) => {
+                const norm = normalizarDisponibilidadOdontologo(o);
+                const diasVic = norm.diasVictoria || [];
+                const diasTov = norm.diasTovar || [];
+                return (
+                  <div
+                    key={o.id}
+                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2.5 ${
+                      editOdoId === o.id
+                        ? 'bg-surface-container border-primary ring-2 ring-primary/30'
+                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-bold text-sm flex items-center justify-center shrink-0">
+                        {o.nombres
+                          .replace(/Dra?\.?\s*/i, '')
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-xs text-dental-deep-navy truncate">
+                            {o.nombres}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                              o.estado === 'activo'
+                                ? 'bg-status-success/15 text-status-success'
+                                : o.estado === 'en_guardia'
+                                ? 'bg-primary/20 text-dental-deep-navy'
+                                : 'bg-secondary/15 text-secondary'
+                            }`}
+                          >
+                            {o.estado === 'activo'
+                              ? 'Activo'
+                              : o.estado === 'en_guardia'
+                              ? 'En Guardia'
+                              : 'Descanso'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-secondary truncate mt-0.5">{o.especialidad}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
+                          <span className="font-mono font-bold text-dental-deep-navy">{o.cedula}</span>
+                          <span>•</span>
+                          <span>{o.cov}</span>
+                          <span>•</span>
+                          <span>Box {o.boxAsignado} ({o.turno})</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-xs text-dental-deep-navy truncate">
-                          {o.nombres}
+
+                    {/* Disponibilidad de Días por Sede (Interactiva en vivo con #Reserva) */}
+                    <div className="bg-white/80 rounded-xl p-2 border border-border-subtle/70 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-[9.5px] font-extrabold uppercase tracking-wider text-dental-deep-navy">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px] text-primary">calendar_month</span>
+                          Disponibilidad Semanal por Sede
                         </span>
                         <span
-                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                            o.estado === 'activo'
-                              ? 'bg-status-success/15 text-status-success'
-                              : o.estado === 'en_guardia'
-                              ? 'bg-primary/20 text-dental-deep-navy'
-                              : 'bg-secondary/15 text-secondary'
+                          className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-black ${
+                            norm.sedeId === 'ambas'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : norm.sedeId === 'tovar'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-primary/10 text-primary border border-primary/20'
                           }`}
                         >
-                          {o.estado === 'activo'
-                            ? 'Activo'
-                            : o.estado === 'en_guardia'
-                            ? 'En Guardia'
-                            : 'Descanso'}
+                          {norm.sedeId === 'ambas'
+                            ? '🏢🌲 Ambas Sedes'
+                            : norm.sedeId === 'tovar'
+                            ? '🌲 Colonia Tovar'
+                            : '🏢 La Victoria'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-secondary truncate mt-0.5">{o.especialidad}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
-                        <span className="font-mono font-bold text-dental-deep-navy">{o.cedula}</span>
-                        <span>•</span>
-                        <span>{o.cov}</span>
-                        <span>•</span>
-                        <span>Box {o.boxAsignado} ({o.turno})</span>
+
+                      {/* Fila Sede La Victoria */}
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[9.5px] font-bold text-primary shrink-0 w-20 truncate">
+                          🏢 La Victoria:
+                        </span>
+                        <div className="flex items-center gap-1 flex-wrap justify-end">
+                          {DIAS_SEMANA_CLINICOS.map((dia) => {
+                            const activo = diasVic.includes(dia);
+                            return (
+                              <button
+                                key={`vic-${o.id}-${dia}`}
+                                type="button"
+                                onClick={() => handleQuickToggleDiaDoctor(o, 'victoria', dia)}
+                                title={`Alternar ${dia} en Sede La Victoria para ${o.nombres}`}
+                                className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
+                                  activo
+                                    ? 'bg-primary text-white border-primary shadow-2xs'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
+                                }`}
+                              >
+                                {dia}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Fila Sede Colonia Tovar */}
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[9.5px] font-bold text-emerald-700 shrink-0 w-20 truncate">
+                          🌲 Col. Tovar:
+                        </span>
+                        <div className="flex items-center gap-1 flex-wrap justify-end">
+                          {DIAS_SEMANA_CLINICOS.map((dia) => {
+                            const activo = diasTov.includes(dia);
+                            return (
+                              <button
+                                key={`tov-${o.id}-${dia}`}
+                                type="button"
+                                onClick={() => handleQuickToggleDiaDoctor(o, 'tovar', dia)}
+                                title={`Alternar ${dia} en Sede Colonia Tovar para ${o.nombres}`}
+                                className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
+                                  activo
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
+                                }`}
+                              >
+                                {dia}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
+                      <span className="text-[10px] font-bold text-secondary">
+                        Honorarios: <strong className="text-dental-deep-navy">{o.porcentajeHonorarios}%</strong>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => abrirHistorialHonorariosDoctor(o)}
+                          title="Ver Procedimientos y Honorarios en D1"
+                          className="h-7 px-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-1 text-[11px] font-bold text-primary hover:bg-primary hover:text-white active:scale-90 transition-all cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">receipt_long</span>
+                          <span>Honorarios</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleOdontologoEstado(o)}
+                          title="Cambiar estado"
+                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEditarOdontologo(o)}
+                          title="Editar datos y disponibilidad"
+                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarOdontologo(o.id, o.nombres)}
+                          title="Eliminar de plantilla"
+                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">delete</span>
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
-                    <span className="text-[10px] font-bold text-secondary">
-                      Honorarios: <strong className="text-dental-deep-navy">{o.porcentajeHonorarios}%</strong>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => abrirHistorialHonorariosDoctor(o)}
-                        title="Ver Procedimientos y Honorarios en D1"
-                        className="h-7 px-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-1 text-[11px] font-bold text-primary hover:bg-primary hover:text-white active:scale-90 transition-all cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">receipt_long</span>
-                        <span>Honorarios</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleOdontologoEstado(o)}
-                        title="Cambiar estado"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">sync_alt</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEditarOdontologo(o)}
-                        title="Editar datos"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarOdontologo(o.id, o.nombres)}
-                        title="Eliminar de plantilla"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">delete</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Botón para Desplegar Formulario */}
@@ -2944,7 +3114,7 @@ export const ControlDataView: React.FC = () => {
                   <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
                   <select
                     value={odoSede}
-                    onChange={(e) => setOdoSede(e.target.value as any)}
+                    onChange={(e) => handleCambioSedeForm(e.target.value as any)}
                     className={`h-9 ${getIlluminatedFieldClass(Boolean(odoSede))}`}
                   >
                     <option value="victoria">La Victoria</option>
@@ -2987,6 +3157,136 @@ export const ControlDataView: React.FC = () => {
                     onChange={(e) => setOdoHonorarios(Number(e.target.value))}
                     className={`h-9 ${getIlluminatedFieldClass(Number(odoHonorarios) > 0)}`}
                   />
+                </div>
+              </div>
+
+              {/* Panel de Disponibilidad de Días por Sede (Filtra Calendario en #Reserva) */}
+              <div className="p-3.5 rounded-2xl bg-white border border-border-subtle flex flex-col gap-3 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle/70 pb-2">
+                  <div>
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[16px] text-primary">event_available</span>
+                      Disponibilidad de Días por Sede (Filtra #Reserva)
+                    </span>
+                    <p className="text-[10px] text-secondary mt-0.5">
+                      Fija qué días de la semana atiende el especialista en cada sede para filtrar fechas en Selecciona Fecha y Turno.
+                    </p>
+                  </div>
+
+                  {odoSede === 'ambas' && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE']);
+                          setOdoDiasTovar(['VIE', 'SÁB']);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white text-primary text-[9.5px] font-bold border border-primary/20 transition-all cursor-pointer"
+                      >
+                        Lun-Jue LV / Vie-Sáb CT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOdoDiasVictoria(['MAR', 'JUE', 'SÁB']);
+                          setOdoDiasTovar(['LUN', 'MIÉ', 'VIE']);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 text-[9.5px] font-bold border border-emerald-200 transition-all cursor-pointer"
+                      >
+                        Mar-Jue-Sáb LV / Lun-Mié-Vie CT
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`grid grid-cols-1 ${odoSede === 'ambas' ? 'sm:grid-cols-2' : ''} gap-3`}>
+                  {/* Selector Sede La Victoria */}
+                  {(odoSede === 'victoria' || odoSede === 'ambas') && (
+                    <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
+                          <span>🏢 Sede La Victoria</span>
+                          <span className="text-[9.5px] font-bold text-primary">
+                            ({odoDiasVictoria.length} {odoDiasVictoria.length === 1 ? 'día' : 'días'})
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOdoDiasVictoria(
+                              odoDiasVictoria.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
+                            )
+                          }
+                          className="text-[9.5px] font-bold text-primary hover:underline cursor-pointer"
+                        >
+                          {odoDiasVictoria.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {DIAS_SEMANA_CLINICOS.map((dia) => {
+                          const active = odoDiasVictoria.includes(dia);
+                          return (
+                            <button
+                              key={`form-vic-${dia}`}
+                              type="button"
+                              onClick={() => toggleDiaFormSede('victoria', dia)}
+                              className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
+                                active
+                                  ? 'bg-primary text-white border-primary shadow-xs'
+                                  : 'bg-white text-secondary border-border-subtle hover:border-primary/40'
+                              }`}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selector Sede Colonia Tovar */}
+                  {(odoSede === 'tovar' || odoSede === 'ambas') && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
+                          <span>🌲 Sede Colonia Tovar</span>
+                          <span className="text-[9.5px] font-bold text-emerald-700">
+                            ({odoDiasTovar.length} {odoDiasTovar.length === 1 ? 'día' : 'días'})
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOdoDiasTovar(
+                              odoDiasTovar.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
+                            )
+                          }
+                          className="text-[9.5px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                        >
+                          {odoDiasTovar.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {DIAS_SEMANA_CLINICOS.map((dia) => {
+                          const active = odoDiasTovar.includes(dia);
+                          return (
+                            <button
+                              key={`form-tov-${dia}`}
+                              type="button"
+                              onClick={() => toggleDiaFormSede('tovar', dia)}
+                              className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
+                                active
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white text-secondary border-border-subtle hover:border-emerald-400'
+                              }`}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

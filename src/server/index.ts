@@ -2026,10 +2026,15 @@ async function _initControlDataTablesInternal(db: D1Database) {
         turno TEXT DEFAULT 'Completo',
         porcentaje_honorarios REAL DEFAULT 40,
         estado TEXT DEFAULT 'activo',
+        dias_victoria TEXT,
+        dias_tovar TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     )
     .run();
+
+  try { await db.prepare("ALTER TABLE staff_odontologos ADD COLUMN dias_victoria TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE staff_odontologos ADD COLUMN dias_tovar TEXT").run(); } catch (_) {}
 
   await db
     .prepare(
@@ -2257,22 +2262,52 @@ async function _initControlDataTablesInternal(db: D1Database) {
     )
     .run();
 
-  // Semilla de staff_odontologos si está vacío
+  // Semilla de staff_odontologos si está vacío y normalización de disponibilidad multisede
   try {
     const oCount = (await db.prepare(`SELECT COUNT(*) as count FROM staff_odontologos`).first()) as any;
     if (!oCount || oCount.count === 0) {
       const initialOdo = [
-        ['odo-1', 'Dra. María Alejandra Domínguez', 'V-16.482.910', 'C.O.V. 24.891', 'Directora Clínica • Odontología General & Estética', '+58 414-5550101', 'dra.dominguez@odontosalud.ve', 'ambas', 1, 'Completo', 50, 'activo'],
-        ['odo-2', 'Dra. Carmen Elena Silva', 'V-18.329.110', 'C.O.V. 19.450', 'Ortodoncia & Ortopedia Dentofacial', '+58 412-8891234', 'c.silva@odontosalud.ve', 'victoria', 2, 'Mañana', 45, 'activo'],
-        ['odo-3', 'Dra. Valeria Hernández', 'V-21.054.672', 'C.O.V. 22.108', 'Endodoncia Avanzada & Microcirugía Apical', '+58 424-3349011', 'v.hernandez@odontosalud.ve', 'ambas', 1, 'Tarde', 45, 'en_guardia'],
-        ['odo-4', 'Dra. Andrea Morales', 'V-23.891.405', 'C.O.V. 25.334', 'Periodoncia, Prótesis & Cirugía Bucal', '+58 414-9988112', 'a.morales@odontosalud.ve', 'ambas', 2, 'Completo', 40, 'activo'],
+        ['odo-1', 'Dra. María Alejandra Domínguez', 'V-16.482.910', 'C.O.V. 24.891', 'Directora Clínica • Odontología General & Estética', '+58 414-5550101', 'dra.dominguez@odontosalud.ve', 'ambas', 1, 'Completo', 50, 'activo', JSON.stringify(['LUN', 'MAR', 'MIÉ', 'JUE']), JSON.stringify(['VIE', 'SÁB'])],
+        ['odo-julianny', 'Dra. Julianny Ramos', 'V-20.418.920', 'C.O.V. 27.310', 'Odontología Integral, Estética & Rehabilitación Oral', '+58 414-7782310', 'j.ramos@odontosalud.ve', 'ambas', 2, 'Completo', 45, 'activo', JSON.stringify(['MAR', 'JUE', 'SÁB']), JSON.stringify(['LUN', 'MIÉ', 'VIE'])],
+        ['odo-2', 'Dra. Carmen Elena Silva', 'V-18.329.110', 'C.O.V. 19.450', 'Ortodoncia & Ortopedia Dentofacial', '+58 412-8891234', 'c.silva@odontosalud.ve', 'victoria', 2, 'Mañana', 45, 'activo', JSON.stringify(['LUN', 'MIÉ', 'VIE']), JSON.stringify([])],
+        ['odo-3', 'Dra. Valeria Hernández', 'V-21.054.672', 'C.O.V. 22.108', 'Endodoncia Avanzada & Microcirugía Apical', '+58 424-3349011', 'v.hernandez@odontosalud.ve', 'victoria', 1, 'Tarde', 45, 'en_guardia', JSON.stringify(['MAR', 'JUE', 'SÁB']), JSON.stringify([])],
       ];
       for (const o of initialOdo) {
         await db.prepare(`
           INSERT OR IGNORE INTO staff_odontologos (
-            id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(...o).run();
+      }
+    } else {
+      // Asegurar que la Dra. Julianny Ramos esté registrada en la plantilla multisede
+      const juliannyCheck = await db
+        .prepare(`SELECT id FROM staff_odontologos WHERE LOWER(nombres) LIKE '%julianny%'`)
+        .first();
+      if (!juliannyCheck) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO staff_odontologos (
+              id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            'odo-julianny',
+            'Dra. Julianny Ramos',
+            'V-20.418.920',
+            'C.O.V. 27.310',
+            'Odontología Integral, Estética & Rehabilitación Oral',
+            '+58 414-7782310',
+            'j.ramos@odontosalud.ve',
+            'ambas',
+            2,
+            'Completo',
+            45,
+            'activo',
+            JSON.stringify(['MAR', 'JUE', 'SÁB']),
+            JSON.stringify(['LUN', 'MIÉ', 'VIE'])
+          )
+          .run();
       }
     }
   } catch (err) {
@@ -2672,20 +2707,56 @@ app.get('/api/control-data', async (c) => {
   ]);
 
   return c.json({
-    odontologos: (odontologosRes.results || []).map((r: any) => ({
-      id: r.id,
-      nombres: r.nombres,
-      cedula: r.cedula,
-      cov: r.cov,
-      especialidad: r.especialidad,
-      telefono: r.telefono,
-      email: r.email,
-      sedeId: r.sede_id,
-      boxAsignado: Number(r.box_asignado),
-      turno: r.turno,
-      porcentajeHonorarios: Number(r.porcentaje_honorarios),
-      estado: r.estado,
-    })),
+    odontologos: (odontologosRes.results || []).map((r: any) => {
+      let diasVictoria: string[] | undefined;
+      let diasTovar: string[] | undefined;
+      try {
+        if (r.dias_victoria) diasVictoria = JSON.parse(r.dias_victoria);
+      } catch (_) {}
+      try {
+        if (r.dias_tovar) diasTovar = JSON.parse(r.dias_tovar);
+      } catch (_) {}
+
+      const nombreLower = (r.nombres || '').toLowerCase();
+      const esMaria = nombreLower.includes('maría') || nombreLower.includes('maria') || nombreLower.includes('domínguez');
+      const esJulianny = nombreLower.includes('julianny');
+
+      if (!Array.isArray(diasVictoria) && !Array.isArray(diasTovar)) {
+        if (esMaria) {
+          diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE'];
+          diasTovar = ['VIE', 'SÁB'];
+        } else if (esJulianny) {
+          diasVictoria = ['MAR', 'JUE', 'SÁB'];
+          diasTovar = ['LUN', 'MIÉ', 'VIE'];
+        } else if (r.sede_id === 'victoria') {
+          diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+          diasTovar = [];
+        } else if (r.sede_id === 'tovar') {
+          diasVictoria = [];
+          diasTovar = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+        } else {
+          diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE'];
+          diasTovar = ['VIE', 'SÁB'];
+        }
+      }
+
+      return {
+        id: r.id,
+        nombres: r.nombres,
+        cedula: r.cedula,
+        cov: r.cov,
+        especialidad: r.especialidad,
+        telefono: r.telefono,
+        email: r.email,
+        sedeId: r.sede_id,
+        boxAsignado: Number(r.box_asignado),
+        turno: r.turno,
+        porcentajeHonorarios: Number(r.porcentaje_honorarios),
+        estado: r.estado,
+        diasVictoria: diasVictoria || [],
+        diasTovar: diasTovar || [],
+      };
+    }),
     higienistas: (higienistasRes.results || []).map((r: any) => ({
       id: r.id,
       nombres: r.nombres,
@@ -2773,11 +2844,14 @@ app.post('/api/control-data/odontologos', async (c) => {
 
   const finalId = docExistente ? docExistente.id : id;
 
+  const diasVictoriaJson = JSON.stringify(Array.isArray(b.diasVictoria) ? b.diasVictoria : []);
+  const diasTovarJson = JSON.stringify(Array.isArray(b.diasTovar) ? b.diasTovar : []);
+
   await db
     .prepare(
       `INSERT INTO staff_odontologos (
-        id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         nombres = excluded.nombres,
         cedula = excluded.cedula,
@@ -2790,6 +2864,8 @@ app.post('/api/control-data/odontologos', async (c) => {
         turno = excluded.turno,
         porcentaje_honorarios = excluded.porcentaje_honorarios,
         estado = excluded.estado,
+        dias_victoria = excluded.dias_victoria,
+        dias_tovar = excluded.dias_tovar,
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
@@ -2804,7 +2880,9 @@ app.post('/api/control-data/odontologos', async (c) => {
       b.boxAsignado || 1,
       b.turno || 'Completo',
       b.porcentajeHonorarios ?? 40,
-      b.estado || 'activo'
+      b.estado || 'activo',
+      diasVictoriaJson,
+      diasTovarJson
     )
     .run();
 

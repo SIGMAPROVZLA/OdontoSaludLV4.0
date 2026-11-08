@@ -3,10 +3,12 @@ import { useOdontologos } from '../../hooks/useOdontologos';
 import { useSede } from '../../context/SedeContext';
 
 interface OdontologaRankingItem {
+  id: string;
   rank: number;
   nombreCorto: string;
   nombreCompleto: string;
   especialidad: string;
+  sedeTexto: string;
   pacientes: number;
   meta: number;
   barClass: string;
@@ -24,38 +26,41 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
   const { sedeActiva } = useSede();
   const { odontologos: staffOdontologos } = useOdontologos();
 
-  // Ranking dinámico generado en tiempo real a partir de la tabla oficial de Odontólogos
+  // Ranking dinámico generado en tiempo real con TODAS las odontólogas del staff facultativo
   const rankingOdontologos: OdontologaRankingItem[] = useMemo(() => {
     const rankStyles = [
       { barClass: 'from-primary to-dental-deep-navy', badgeClass: 'bg-amber-400/25 text-amber-900 border-amber-400/60' },
       { barClass: 'from-sky-500 to-sky-700', badgeClass: 'bg-slate-200 text-slate-800 border-slate-300' },
       { barClass: 'from-emerald-500 to-emerald-700', badgeClass: 'bg-orange-100 text-orange-900 border-orange-300' },
       { barClass: 'from-secondary to-primary', badgeClass: 'bg-surface-container text-dental-deep-navy border-border-subtle' },
+      { barClass: 'from-indigo-500 to-purple-600', badgeClass: 'bg-purple-100 text-purple-900 border-purple-300' },
     ];
 
-    // Filtrar doctores asignados a esta sede o disponibles en ambas
-    const sedeIdActual = sedeActiva.id === 'tovar' ? 'tovar' : 'victoria';
-    const doctoresSede = staffOdontologos.filter(
-      (d) => d.sedeId === 'ambas' || d.sedeId === sedeIdActual
-    );
-    const lista = doctoresSede.length > 0 ? doctoresSede : staffOdontologos;
-
-    return lista.map((doc, idx) => {
+    // Incluir la nómina completa de odontólogos para reflejar la totalidad de facultativas
+    return staffOdontologos.map((doc, idx) => {
       const partes = doc.nombres.split(' ');
       const prefijo = doc.nombres.startsWith('Dra.') ? 'Dra.' : doc.nombres.startsWith('Dr.') ? 'Dr.' : 'Od.';
       const apellido = partes.length >= 3 ? partes[2] : partes[partes.length - 1];
       const nombreCorto = `${prefijo} ${apellido}`;
 
-      // Carga asistencial diaria acorde a su turno
-      const pacientes = doc.turno === 'Completo' ? Math.max(4, 7 - (idx % 3)) : doc.turno === 'Mañana' ? 5 : 4;
+      // Carga asistencial proporcional basada en su turno y asignación
+      const pacientes = doc.turno === 'Completo' ? Math.max(5, 8 - (idx % 3)) : doc.turno === 'Mañana' ? 5 : 4;
       const meta = doc.turno === 'Completo' ? 8 : 5;
       const style = rankStyles[idx % rankStyles.length];
 
+      const sedeTexto = doc.sedeId === 'ambas'
+        ? 'Multisede'
+        : doc.sedeId === 'tovar'
+        ? 'Colonia Tovar'
+        : 'La Victoria';
+
       return {
+        id: doc.id,
         rank: idx + 1,
         nombreCorto,
         nombreCompleto: doc.nombres,
         especialidad: (doc.especialidad || '').split('•')[0].trim(),
+        sedeTexto,
         pacientes,
         meta,
         barClass: style.barClass,
@@ -65,7 +70,7 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
       ...item,
       rank: index + 1,
     }));
-  }, [staffOdontologos, sedeActiva.id]);
+  }, [staffOdontologos]);
 
   const maxPacientes = Math.max(...rankingOdontologos.map((o) => o.pacientes), 1);
   const totalPacientes = rankingOdontologos.reduce((acc, o) => acc + o.pacientes, 0);
@@ -87,7 +92,7 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
               Ranking de Pacientes por Odontólogo
             </h3>
             <span className="text-[10px] text-secondary font-medium block truncate">
-              {sedeActiva.nombre} • Atención acumulada del día
+              Directorio Staff Clínico • {rankingOdontologos.length} Odontólogas en Ranking
             </span>
           </div>
         </div>
@@ -110,7 +115,7 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
 
           return (
             <div
-              key={item.nombreCorto}
+              key={item.id}
               className="flex items-center gap-2.5 py-1 px-2 rounded-xl bg-surface-subtle-ice/60 hover:bg-surface-container/40 border border-border-subtle/40 transition-colors"
             >
               {/* Posición en el Ranking */}
@@ -128,7 +133,7 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
                       {item.nombreCorto}
                     </span>
                     <span className="text-[10px] text-secondary hidden md:inline truncate">
-                      • {item.especialidad}
+                      • {item.especialidad} ({item.sedeTexto})
                     </span>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

@@ -2,7 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSede, SEDES_DISPONIBLES } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { TabId } from '../layout/BottomNavigation';
-import { CondicionMedicaItem, OdontologoItem, PacienteItem, SedeId } from '../../types/clinical';
+import {
+  Cita,
+  CondicionMedicaItem,
+  DiaSemanaClinico,
+  OdontologoItem,
+  PacienteItem,
+  SedeId,
+} from '../../types/clinical';
+import {
+  DIAS_SEMANA_CLINICOS,
+  INITIAL_ODONTOLOGOS as INITIAL_ODONTOLOGOS_MASTER,
+  normalizarDisponibilidadOdontologo,
+  normalizarListaOdontologos,
+} from '../../hooks/useOdontologos';
 
 interface DoctorOption {
   id: string;
@@ -11,9 +24,12 @@ interface DoctorOption {
   especialidad: string;
   box: number;
   avatar: string;
-  turno?: string;
+  turno?: 'Mañana' | 'Tarde' | 'Completo' | string;
   estado?: string;
   esTitular?: boolean;
+  sedeId?: SedeId | 'ambas';
+  diasVictoria?: DiaSemanaClinico[];
+  diasTovar?: DiaSemanaClinico[];
 }
 
 interface BookingFlowProps {
@@ -44,50 +60,7 @@ export function normalizarFechaInput(val?: string): string {
   return trimmed;
 }
 
-const INITIAL_ODONTOLOGOS_FALLBACK: OdontologoItem[] = [
-  {
-    id: 'odo-1',
-    nombres: 'Dra. María Alejandra Domínguez',
-    cedula: 'V-16.482.910',
-    cov: 'C.O.V. 24.891',
-    especialidad: 'Directora Clínica • Odontología General & Estética',
-    telefono: '+58 414-5550101',
-    email: 'dra.dominguez@odontosalud.ve',
-    sedeId: 'ambas',
-    boxAsignado: 1,
-    turno: 'Completo',
-    porcentajeHonorarios: 50,
-    estado: 'activo',
-  },
-  {
-    id: 'odo-2',
-    nombres: 'Dr. Carlos Mendoza Rivas',
-    cedula: 'V-17.902.311',
-    cov: 'C.O.V. 26.104',
-    especialidad: 'Ortodoncia & Ortopedia Dentofacial',
-    telefono: '+58 412-8891234',
-    email: 'c.mendoza@odontosalud.ve',
-    sedeId: 'victoria',
-    boxAsignado: 2,
-    turno: 'Mañana',
-    porcentajeHonorarios: 45,
-    estado: 'activo',
-  },
-  {
-    id: 'odo-3',
-    nombres: 'Dra. Valentina Páez Gómez',
-    cedula: 'V-20.331.488',
-    cov: 'C.O.V. 29.512',
-    especialidad: 'Endodoncia Microscópica & Odontopediatría',
-    telefono: '+58 424-3349011',
-    email: 'v.paez@odontosalud.ve',
-    sedeId: 'victoria',
-    boxAsignado: 1,
-    turno: 'Tarde',
-    porcentajeHonorarios: 45,
-    estado: 'en_guardia',
-  },
-];
+const INITIAL_ODONTOLOGOS_FALLBACK: OdontologoItem[] = INITIAL_ODONTOLOGOS_MASTER;
 
 const INITIAL_PACIENTES_FALLBACK: PacienteItem[] = [
   {
@@ -310,7 +283,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const [dataOdontologos, setDataOdontologos] = useState<OdontologoItem[]>(() => {
     try {
       const saved = localStorage.getItem('odontosalud_data_odontologos');
-      return saved ? JSON.parse(saved) : INITIAL_ODONTOLOGOS_FALLBACK;
+      return saved ? normalizarListaOdontologos(JSON.parse(saved)) : INITIAL_ODONTOLOGOS_FALLBACK;
     } catch {
       return INITIAL_ODONTOLOGOS_FALLBACK;
     }
@@ -353,11 +326,23 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     }
   });
 
+  const [dataCitas, setDataCitas] = useState<Cita[]>(() => {
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
     ApiClient.getControlData().then((remote) => {
       if (!remote) return;
       if (remote.odontologos && remote.odontologos.length > 0) {
-        setDataOdontologos(remote.odontologos);
+        setDataOdontologos(normalizarListaOdontologos(remote.odontologos));
+      }
+      if (remote.citas && Array.isArray(remote.citas)) {
+        setDataCitas(remote.citas);
       }
       if (remote.pacientes && remote.pacientes.length > 0) {
         const sanitized = remote.pacientes.map((p) => {
@@ -385,19 +370,33 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         setCondicionesMedicas(remote.condicionesMedicas);
       }
     });
-  }, []);
 
-  const doctoresEmpadronados: DoctorOption[] = dataOdontologos.map((odo) => ({
-    id: odo.id,
-    nombre: odo.nombres,
-    titulo: odo.nombres.toLowerCase().includes('domínguez') ? 'Directora Clínica' : 'Especialista',
-    especialidad: odo.especialidad,
-    box: odo.boxAsignado || 1,
-    avatar: getDoctorAvatar(odo.nombres, odo.boxAsignado || 1),
-    turno: odo.turno,
-    estado: odo.estado,
-    esTitular: odo.nombres.toLowerCase().includes('domínguez'),
-  }));
+    const handleDataUpdated = (e: any) => {
+      if (e?.detail?.tipo === 'citas' && Array.isArray(e.detail.data)) {
+        setDataCitas(e.detail.data);
+      } else if (e?.detail?.tipo === 'odontologos' && Array.isArray(e.detail.data)) {
+        setDataOdontologos(e.detail.data.map(normalizarDisponibilidadOdontologo));
+      } else {
+        try {
+          const savedO = localStorage.getItem('odontosalud_data_odontologos');
+          if (savedO) {
+            setDataOdontologos(JSON.parse(savedO).map(normalizarDisponibilidadOdontologo));
+          }
+          const savedC = localStorage.getItem('odontosalud_data_citas');
+          if (savedC) {
+            setDataCitas(JSON.parse(savedC));
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('odontosalud_data_updated', handleDataUpdated);
+    window.addEventListener('storage', handleDataUpdated);
+    return () => {
+      window.removeEventListener('odontosalud_data_updated', handleDataUpdated);
+      window.removeEventListener('storage', handleDataUpdated);
+    };
+  }, []);
 
   // 2. Estado Inicial Cero (Campos Vacíos en Posición Inicial Cero)
   const [selectedSedeId, setSelectedSedeId] = useState<SedeId | null>(null);
@@ -406,6 +405,35 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const [treatmentDesc, setTreatmentDesc] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<string>('');
+
+  const sedeEfectiva: SedeId = selectedSedeId || sedeId;
+
+  const todosDoctoresData: DoctorOption[] = dataOdontologos.map((raw) => {
+    const odo = normalizarDisponibilidadOdontologo(raw);
+    return {
+      id: odo.id,
+      nombre: odo.nombres,
+      titulo: odo.nombres.toLowerCase().includes('domínguez') ? 'Directora Clínica' : 'Especialista',
+      especialidad: odo.especialidad,
+      box: odo.boxAsignado || 1,
+      avatar: odo.avatar || getDoctorAvatar(odo.nombres, odo.boxAsignado || 1),
+      turno: odo.turno,
+      estado: odo.estado,
+      esTitular: odo.nombres.toLowerCase().includes('domínguez'),
+      sedeId: odo.sedeId,
+      diasVictoria: odo.diasVictoria || [],
+      diasTovar: odo.diasTovar || [],
+    };
+  });
+
+  // Filtrar odontólogos disponibles para la sede seleccionada según #Data
+  const doctoresEmpadronados: DoctorOption[] = todosDoctoresData.filter((doc) => {
+    if (sedeEfectiva === 'victoria') {
+      return (doc.sedeId === 'victoria' || doc.sedeId === 'ambas') && (doc.diasVictoria?.length || 0) > 0;
+    } else {
+      return (doc.sedeId === 'tovar' || doc.sedeId === 'ambas') && (doc.diasTovar?.length || 0) > 0;
+    }
+  });
 
   const [cedulaTipo, setCedulaTipo] = useState<'V' | 'E' | 'J' | 'G' | 'P'>('V');
   const [cedulaNumero, setCedulaNumero] = useState<string>('');
@@ -836,14 +864,48 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     { hora: '03:45 PM', sub: 'Cierre vespertino' },
   ];
 
-  const DIAS_SEMANA_6 = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+  const DIAS_SEMANA_6: DiaSemanaClinico[] = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
   const MESES_NOMBRES = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
   const MESES_ABR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-  // Obtiene los 6 días hábiles de la semana activa (LUN a SÁB) con cálculo visual de completitud
+  // Resolver disponibilidad en vivo desde #Data para el doctor y sede seleccionados
+  const doctorVivoEnData: DoctorOption | null = selectedDoctor
+    ? todosDoctoresData.find(
+        (d) =>
+          d.id === selectedDoctor.id ||
+          d.nombre.trim().toLowerCase() === selectedDoctor.nombre.trim().toLowerCase()
+      ) || selectedDoctor
+    : null;
+
+  const diasPermitidosEnSede: DiaSemanaClinico[] = (() => {
+    if (doctorVivoEnData) {
+      return sedeEfectiva === 'tovar'
+        ? doctorVivoEnData.diasTovar || []
+        : doctorVivoEnData.diasVictoria || [];
+    }
+    const union = new Set<DiaSemanaClinico>();
+    doctoresEmpadronados.forEach((doc) => {
+      const lista = sedeEfectiva === 'tovar' ? doc.diasTovar || [] : doc.diasVictoria || [];
+      lista.forEach((d) => union.add(d));
+    });
+    return union.size > 0 ? DIAS_SEMANA_CLINICOS.filter((d) => union.has(d)) : DIAS_SEMANA_CLINICOS;
+  })();
+
+  const diasDoctorEnOtraSede: DiaSemanaClinico[] = (() => {
+    if (!doctorVivoEnData) return [];
+    return sedeEfectiva === 'tovar'
+      ? doctorVivoEnData.diasVictoria || []
+      : doctorVivoEnData.diasTovar || [];
+  })();
+
+  const turnoDoctorEnData = doctorVivoEnData?.turno || 'Completo';
+  const mananaHabilitado = turnoDoctorEnData === 'Completo' || turnoDoctorEnData === 'Mañana';
+  const tardeHabilitado = turnoDoctorEnData === 'Completo' || turnoDoctorEnData === 'Tarde';
+
+  // Obtiene los 6 días hábiles de la semana activa (LUN a SÁB) filtrados por disponibilidad en #Data
   const getSemana6Dias = () => {
     const base = new Date(currentMonthDate);
     base.setDate(base.getDate() + weekOffset * 7);
@@ -857,31 +919,38 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       const d = new Date(lunes);
       d.setDate(lunes.getDate() + i);
 
+      const diaSemana = DIAS_SEMANA_6[i];
+      const disponibleEnSede = diasPermitidosEnSede.includes(diaSemana);
+      const atiendeEnOtraSede = !disponibleEnSede && diasDoctorEnOtraSede.includes(diaSemana);
+
       const diaNum = d.getDate();
       const cuposOcupados = [5, 3, 7, 2, 6, 4][(diaNum + i) % 6];
-      const cuposLibres = Math.max(1, 8 - cuposOcupados);
-      const porcentajeOcupacion = Math.round((cuposOcupados / 8) * 100);
+      const cuposLibres = disponibleEnSede ? Math.max(1, 8 - cuposOcupados) : 0;
+      const porcentajeOcupacion = disponibleEnSede ? Math.round((cuposOcupados / 8) * 100) : 100;
 
-      let estado: 'disponible' | 'moderado' | 'critico' = 'disponible';
-      if (cuposLibres === 1) estado = 'critico';
+      let estado: 'disponible' | 'moderado' | 'critico' | 'cerrado' = 'disponible';
+      if (!disponibleEnSede) estado = 'cerrado';
+      else if (cuposLibres === 1) estado = 'critico';
       else if (cuposLibres <= 3) estado = 'moderado';
 
       semana.push({
         dateObj: d,
-        diaSemana: DIAS_SEMANA_6[i],
+        diaSemana,
         numero: diaNum < 10 ? `0${diaNum}` : `${diaNum}`,
         mesCorto: MESES_ABR[d.getMonth()],
-        fullString: `${DIAS_SEMANA_6[i]} ${diaNum} ${MESES_ABR[d.getMonth()]}`,
+        fullString: `${diaSemana} ${diaNum} ${MESES_ABR[d.getMonth()]}`,
         cuposLibres,
         cuposOcupados,
         porcentajeOcupacion,
         estado,
+        noDisponibleEnSede: !disponibleEnSede,
+        atiendeEnOtraSede,
       });
     }
     return semana;
   };
 
-  // Obtiene la matriz completa del mes con indicador de cupos
+  // Obtiene la matriz completa del mes con indicador de cupos filtrada por disponibilidad en #Data
   const getDiasDelMes = () => {
     const year = currentMonthDate.getFullYear();
     const month = currentMonthDate.getMonth();
@@ -904,15 +973,22 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       const esDomingo = dayOfWeek === 0;
 
       const diaSemanaStr = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'][dayOfWeek];
+      const disponibleEnSede =
+        !esDomingo && diasPermitidosEnSede.includes(diaSemanaStr as DiaSemanaClinico);
+      const atiendeEnOtraSede =
+        !esDomingo &&
+        !disponibleEnSede &&
+        diasDoctorEnOtraSede.includes(diaSemanaStr as DiaSemanaClinico);
+
       const mesCorto = MESES_ABR[month];
       const fullString = `${diaSemanaStr} ${d} ${mesCorto}`;
 
       const cuposOcupados = [5, 3, 7, 2, 6, 4][(d + dayOfWeek) % 6];
-      const cuposLibres = esDomingo ? 0 : Math.max(1, 8 - cuposOcupados);
-      const porcentajeOcupacion = esDomingo ? 100 : Math.round((cuposOcupados / 8) * 100);
+      const cuposLibres = disponibleEnSede ? Math.max(1, 8 - cuposOcupados) : 0;
+      const porcentajeOcupacion = disponibleEnSede ? Math.round((cuposOcupados / 8) * 100) : 100;
 
       let estado: 'disponible' | 'moderado' | 'critico' | 'cerrado' = 'disponible';
-      if (esDomingo) estado = 'cerrado';
+      if (esDomingo || !disponibleEnSede) estado = 'cerrado';
       else if (cuposLibres === 1) estado = 'critico';
       else if (cuposLibres <= 3) estado = 'moderado';
 
@@ -924,6 +1000,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         mesCorto,
         fullString,
         esDomingo,
+        noDisponibleEnSede: !esDomingo && !disponibleEnSede,
+        atiendeEnOtraSede,
         cuposLibres,
         cuposOcupados,
         porcentajeOcupacion,
@@ -942,50 +1020,53 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  // Escala de afluencia y completitud por horario en virtud del día elegido
-  // Verde fino (baja demanda): Menos solicitado | Amarillo medio (demanda moderada): Moderado | Rojo grueso (alta demanda): Más ocupado/solicitado
+  // Escala de afluencia proporcional a las citas y solicitudes reales registradas
+  // Orientación positiva para guiar al paciente a horarios más ágiles sin alarmismos ni bloqueos
+  // Nivel 1 (0 citas): Atención Ágil (Mayor holgura) -> Esmeralda
+  // Nivel 2 (1 cita): Demanda Habitual (Espacio regular) -> Azul médico (Sky)
+  // Nivel 3 (2+ citas): Franja Popular (Mayor preferencia) -> Ámbar cálido
   const getDemandaTurno = (hora: string, fechaElegida: string) => {
-    const cleanNum = parseInt(fechaElegida.replace(/[^0-9]/g, '') || '24', 10);
-    const horasMenosSolicitadas = ['08:30 AM', '02:00 PM'];
-    const horasModeradas = ['09:15 AM', '03:45 PM'];
+    const horaNorm = (hora || '').trim().toUpperCase();
 
-    const esDiaPar = cleanNum % 2 === 0;
+    // Contar citas reales activas en esa hora y sede
+    const citasEnHora = dataCitas.filter((c) => {
+      if (c.estado === 'cancelada') return false;
+      if (c.sedeId && c.sedeId !== sedeEfectiva) return false;
+      const hInicio = (c.horaInicio || '').trim().toUpperCase();
+      return hInicio === horaNorm || hInicio.startsWith(horaNorm.slice(0, 5));
+    });
 
-    let nivel: 'baja' | 'media' | 'alta' = 'baja';
-    if (horasMenosSolicitadas.includes(hora)) {
-      nivel = esDiaPar ? 'baja' : 'media';
-    } else if (horasModeradas.includes(hora)) {
-      nivel = esDiaPar ? 'media' : 'baja';
-    } else {
-      nivel = 'alta';
-    }
+    const solicitudes = citasEnHora.length;
 
-    if (nivel === 'baja') {
+    if (solicitudes === 0) {
       return {
         nivel: 'baja',
-        etiqueta: 'Menos solicitado',
-        grosorClase: 'border-t-2',
+        etiqueta: 'Atención Ágil',
+        subtitulo: 'Mayor holgura',
+        grosorClase: 'border-t-[3px]',
         bordeColor: 'border-t-emerald-500',
-        badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        badgeBg: 'bg-emerald-50 text-emerald-900 border-emerald-300',
         dotColor: 'bg-emerald-500',
       };
-    } else if (nivel === 'media') {
+    } else if (solicitudes === 1) {
       return {
         nivel: 'media',
-        etiqueta: 'Demanda moderada',
-        grosorClase: 'border-t-4',
-        bordeColor: 'border-t-amber-500',
-        badgeBg: 'bg-amber-50 text-amber-800 border-amber-200',
-        dotColor: 'bg-amber-500',
+        etiqueta: 'Demanda Habitual',
+        subtitulo: 'Espacio regular',
+        grosorClase: 'border-t-[3px]',
+        bordeColor: 'border-t-sky-500',
+        badgeBg: 'bg-sky-50 text-sky-900 border-sky-300',
+        dotColor: 'bg-sky-500',
       };
     } else {
       return {
         nivel: 'alta',
-        etiqueta: 'Más solicitado (Pico)',
-        grosorClase: 'border-t-[6px]',
-        bordeColor: 'border-t-rose-500',
-        badgeBg: 'bg-rose-50 text-rose-800 border-rose-200',
-        dotColor: 'bg-rose-500 animate-pulse',
+        etiqueta: 'Franja Popular',
+        subtitulo: 'Alta preferencia',
+        grosorClase: 'border-t-[3px]',
+        bordeColor: 'border-t-amber-500',
+        badgeBg: 'bg-amber-50 text-amber-900 border-amber-300',
+        dotColor: 'bg-amber-500',
       };
     }
   };
@@ -1103,6 +1184,45 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
   const semana6Dias = getSemana6Dias();
   const diasDelMes = getDiasDelMes();
+
+  // Garantizar que la fecha y turno elegidos siempre respeten la disponibilidad en #Data para la sede y odontólogo activos
+  useEffect(() => {
+    if (selectedDoctor) {
+      const docEnSede = doctoresEmpadronados.find(
+        (d) =>
+          d.id === selectedDoctor.id ||
+          d.nombre.trim().toLowerCase() === selectedDoctor.nombre.trim().toLowerCase()
+      );
+      if (!docEnSede) {
+        setSelectedDoctor(null);
+        setSelectedDate('');
+        setSelectedSlot('');
+        return;
+      }
+    }
+
+    if (selectedDate) {
+      const diaActualStr = selectedDate.trim().split(' ')[0] as DiaSemanaClinico;
+      if (!diasPermitidosEnSede.includes(diaActualStr)) {
+        const primerDiaDisponible = semana6Dias.find((d) => !d.noDisponibleEnSede);
+        setSelectedDate(primerDiaDisponible ? primerDiaDisponible.fullString : '');
+      }
+    }
+
+    if (selectedSlot) {
+      const esSlotManana = morningSlots.some((s) => s.hora === selectedSlot);
+      const esSlotTarde = afternoonSlots.some((s) => s.hora === selectedSlot);
+      if ((esSlotManana && !mananaHabilitado) || (esSlotTarde && !tardeHabilitado)) {
+        setSelectedSlot('');
+      }
+    }
+  }, [
+    sedeEfectiva,
+    selectedDoctor?.id,
+    diasPermitidosEnSede.join(','),
+    mananaHabilitado,
+    tardeHabilitado,
+  ]);
 
   return (
     <div className="flex flex-col gap-4 pb-44">
@@ -1411,9 +1531,26 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
          ===================================================================== */}
       {bookingConfirmed && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in zoom-in-95 duration-200">
-          <div className="bg-surface-clean-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-border-subtle text-center flex flex-col items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-0.5 border border-emerald-100 shadow-xs">
-              <span className="material-symbols-outlined text-[32px]">verified</span>
+          <div className="bg-surface-clean-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-border-subtle text-center flex flex-col items-center gap-3 max-h-[92vh] overflow-y-auto">
+            {/* Logo Horizontal Institucional del Consultorio para Reforzar Identidad */}
+            <div className="flex items-center justify-center gap-2.5 pb-2.5 border-b border-border-subtle/80 w-full">
+              <img
+                src="/brand/logo-odontosalud-vertical.png"
+                alt="Logo OdontoSalud La Victoria"
+                className="h-10 w-10 sm:h-11 sm:w-11 object-contain shrink-0"
+              />
+              <div className="text-left min-w-0">
+                <div className="font-display font-black text-sm sm:text-base text-dental-deep-navy leading-tight tracking-tight truncate">
+                  OdontoSalud <span className="text-primary font-bold">La Victoria</span>
+                </div>
+                <div className="text-[10px] text-secondary font-semibold tracking-wide truncate">
+                  Centro de Especialidades Odontológicas
+                </div>
+              </div>
+            </div>
+
+            <div className="w-13 h-13 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-0.5 border border-emerald-100 shadow-xs">
+              <span className="material-symbols-outlined text-[30px]">verified</span>
             </div>
 
             <div>
@@ -1520,27 +1657,46 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 <span>Confirmar con Recepción por WhatsApp</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setBookingConfirmed(false);
-                  setSelectedSedeId(null);
-                  setSelectedDoctor(null);
-                  setTreatment('');
-                  setSelectedDate('');
-                  setSelectedSlot('');
-                  setNombres('');
-                  setCedulaNumero('');
-                  setTelefono('');
-                  setMotivo('');
-                  setOpenStep('sede');
-                  setShowAuthModal(true);
-                }}
-                className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-surface-subtle-ice text-primary font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-border-subtle shadow-2xs"
-              >
-                <span className="material-symbols-outlined text-[16px]">add_circle</span>
-                <span>Registrar Otra Cita</span>
-              </button>
+              {/* Botón dividido en 2: "Otra Cita" y "Cerrar" */}
+              <div className="grid grid-cols-2 gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBookingConfirmed(false);
+                    setSelectedSedeId(null);
+                    setSelectedDoctor(null);
+                    setTreatment('');
+                    setSelectedDate('');
+                    setSelectedSlot('');
+                    setNombres('');
+                    setCedulaNumero('');
+                    setTelefono('');
+                    setMotivo('');
+                    setOpenStep('sede');
+                    setShowAuthModal(true);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-surface-subtle-ice text-primary font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-border-subtle shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                  <span>Otra Cita</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBookingConfirmed(false);
+                    if (onNavigateTab) {
+                      onNavigateTab('dashboard');
+                    } else if (onBack) {
+                      onBack();
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-dental-deep-navy font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-border-subtle shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Cerrar</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1769,9 +1925,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             Selecciona el profesional para tu consulta. Al tocar su tarjeta, se guardará y se desplegará el tipo de tratamiento.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {doctoresEmpadronados.map((doc) => {
               const isSelected = selectedDoctor?.id === doc.id;
+              const diasEnSedeActiva =
+                sedeEfectiva === 'tovar' ? doc.diasTovar || [] : doc.diasVictoria || [];
+              const diasEnOtraSede =
+                sedeEfectiva === 'tovar' ? doc.diasVictoria || [] : doc.diasTovar || [];
               return (
                 <button
                   key={doc.id}
@@ -1806,7 +1966,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[9px] font-extrabold uppercase">
                           {doc.titulo}
                         </span>
-                        <span className="text-[10px] text-amber-500 font-bold">⭐ 5.0</span>
+                        {doc.sedeId === 'ambas' && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 text-[8.5px] font-black">
+                            🏢🌲 2 Sedes
+                          </span>
+                        )}
                       </div>
                       <h3 className="font-display font-bold text-xs sm:text-sm text-dental-deep-navy mt-1 truncate">
                         {doc.nombre}
@@ -1815,6 +1979,30 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         {doc.especialidad}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Días de Atención en la Sede Elegida según #Data */}
+                  <div className="bg-white/85 rounded-xl p-2 border border-border-subtle/70 flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-[9.5px] font-extrabold text-dental-deep-navy">
+                      <span>
+                        {sedeEfectiva === 'tovar'
+                          ? '🌲 Días en Col. Tovar:'
+                          : '🏢 Días en La Victoria:'}
+                      </span>
+                      <span className="text-primary font-black">
+                        {diasEnSedeActiva.join(' · ') || 'Sin asignar'}
+                      </span>
+                    </div>
+                    {diasEnOtraSede.length > 0 && (
+                      <div className="flex items-center justify-between text-[9px] text-secondary">
+                        <span>
+                          {sedeEfectiva === 'tovar'
+                            ? '🏢 En La Victoria:'
+                            : '🌲 En Col. Tovar:'}
+                        </span>
+                        <span className="font-semibold">{diasEnOtraSede.join(' · ')}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-border-subtle/80 text-[11px]">
@@ -1955,23 +2143,57 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             </span>
           </div>
 
-          {/* Banner Informativo de Ajuste de Horarios según Duración Estimada de Tratamiento */}
-          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 flex items-start gap-3 shadow-xs">
-            <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-              <span className="material-symbols-outlined text-[19px]">schedule</span>
+          {/* Banner Informativo de Ajuste de Horarios y Disponibilidad por Sede sujeta a #Data */}
+          <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col gap-2 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                <span className="material-symbols-outlined text-[19px]">schedule</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase font-black tracking-wider text-primary bg-white px-2 py-0.5 rounded-md border border-primary/30 shadow-2xs">
+                    ⏱️ Duración Estimada: {duracionTratamientoMin} min
+                  </span>
+                  <span className="text-xs font-bold text-dental-deep-navy truncate">
+                    {treatment || 'Evaluación Odontológica Integral'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-secondary mt-1 leading-snug">
+                  Atención con <strong className="text-dental-deep-navy">{doctorVivoEnData ? doctorVivoEnData.nombre : 'Odontólogo Asignado'}</strong> en{' '}
+                  <strong className="text-primary">
+                    {sedeEfectiva === 'tovar' ? 'Sede Colonia Tovar' : 'Sede La Victoria'}
+                  </strong>{' '}
+                  (Box 0{doctorVivoEnData ? doctorVivoEnData.box : 1}).
+                </p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] uppercase font-black tracking-wider text-primary bg-white px-2 py-0.5 rounded-md border border-primary/30 shadow-2xs">
-                  ⏱️ Duración Estimada: {duracionTratamientoMin} min
+
+            {/* Píldora de Regla de Disponibilidad Sincronizada con #Data */}
+            <div className="pt-2 border-t border-primary/15 flex items-center justify-between flex-wrap gap-2 text-[10.5px]">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-dental-deep-navy flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px] text-status-success">event_available</span>
+                  Días habilitados en {sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'} (#Data):
                 </span>
-                <span className="text-xs font-bold text-dental-deep-navy truncate">
-                  {treatment || 'Evaluación Odontológica Integral'}
+                {diasPermitidosEnSede.map((dia) => (
+                  <span
+                    key={`badge-disp-${dia}`}
+                    className="px-1.5 py-0.5 rounded-md bg-primary text-white font-black text-[9.5px]"
+                  >
+                    {dia}
+                  </span>
+                ))}
+                <span className="text-[10px] font-bold text-secondary ml-1">
+                  • Turno: <strong className="text-dental-deep-navy">{turnoDoctorEnData}</strong>
                 </span>
               </div>
-              <p className="text-[11px] text-secondary mt-1 leading-snug">
-                Atención con <strong className="text-dental-deep-navy">{selectedDoctor ? selectedDoctor.nombre : 'Odontólogo Asignado'}</strong> (Box 0{selectedDoctor ? selectedDoctor.box : 1}). Los turnos de atención se bloquean automáticamente según el tiempo requerido en sillón clínico.
-              </p>
+
+              {diasDoctorEnOtraSede.length > 0 && (
+                <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                  {sedeEfectiva === 'tovar' ? '🏢 En La Victoria:' : '🌲 En Col. Tovar:'}{' '}
+                  <strong>{diasDoctorEnOtraSede.join(', ')}</strong>
+                </span>
+              )}
             </div>
           </div>
 
@@ -2060,8 +2282,54 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
                   {semana6Dias.map((d) => {
                     const isSelected =
-                      selectedDate === d.fullString ||
-                      (selectedDate.includes(d.numero) && selectedDate.includes(d.diaSemana));
+                      !d.noDisponibleEnSede &&
+                      (selectedDate === d.fullString ||
+                        (selectedDate.includes(d.numero) && selectedDate.includes(d.diaSemana)));
+
+                    if (d.noDisponibleEnSede) {
+                      return (
+                        <div
+                          key={d.fullString}
+                          title={
+                            d.atiendeEnOtraSede
+                              ? `El especialista atiende este día en ${
+                                  sedeEfectiva === 'tovar' ? 'Sede La Victoria' : 'Sede Colonia Tovar'
+                                }`
+                              : 'Día sin guardia registrada para esta sede en #Data'
+                          }
+                          className="p-2 sm:p-2.5 rounded-2xl text-center flex flex-col items-center justify-between relative overflow-hidden border border-slate-200 bg-slate-100/80 text-slate-400 select-none opacity-75"
+                        >
+                          <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-300 rounded-l-2xl" />
+                          <div className="w-full pl-2 flex flex-col items-center justify-center">
+                            <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-slate-400">
+                              {d.diaSemana}
+                            </span>
+                            <span className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none my-0.5 text-slate-400 line-through decoration-slate-400/60">
+                              {d.numero}
+                            </span>
+                            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              {d.mesCorto}
+                            </span>
+                            <div className="w-full pt-1.5 border-t border-slate-200/80 mt-1 flex flex-col items-center gap-0.5">
+                              <span className="text-[8px] sm:text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600 inline-flex items-center gap-0.5 leading-tight text-center">
+                                <span className="material-symbols-outlined text-[10px]">block</span>
+                                <span className="truncate">
+                                  {d.atiendeEnOtraSede
+                                    ? sedeEfectiva === 'tovar'
+                                      ? 'En La Victoria'
+                                      : 'En Col. Tovar'
+                                    : 'No atiende'}
+                                </span>
+                              </span>
+                              <span className="text-[8px] font-bold text-slate-400">
+                                Según #Data
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <button
                         key={d.fullString}
@@ -2213,18 +2481,35 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     }
 
                     const isSelected =
-                      selectedDate === c.fullString ||
-                      (selectedDate.includes(c.numero) && selectedDate.includes(c.diaSemana));
+                      !c.noDisponibleEnSede &&
+                      (selectedDate === c.fullString ||
+                        (selectedDate.includes(c.numero) && selectedDate.includes(c.diaSemana)));
 
-                    if (c.esDomingo) {
+                    if (c.esDomingo || c.noDisponibleEnSede) {
                       return (
                         <div
                           key={c.id}
                           className="h-12 rounded-xl bg-slate-100/70 border border-slate-200/50 flex flex-col items-center justify-center text-slate-400 select-none"
-                          title="Domingo cerrado"
+                          title={
+                            c.esDomingo
+                              ? 'Domingo cerrado'
+                              : c.atiendeEnOtraSede
+                              ? `Atiende en ${sedeEfectiva === 'tovar' ? 'La Victoria' : 'Colonia Tovar'}`
+                              : 'Sin guardia en esta sede según #Data'
+                          }
                         >
-                          <span className="text-[11px] font-bold">{c.numero}</span>
-                          <span className="text-[8px] font-semibold">Cerrado</span>
+                          <span className="text-[11px] font-bold line-through decoration-slate-400/50">
+                            {c.numero}
+                          </span>
+                          <span className="text-[7.5px] font-semibold truncate max-w-full px-1">
+                            {c.esDomingo
+                              ? 'Cerrado'
+                              : c.atiendeEnOtraSede
+                              ? sedeEfectiva === 'tovar'
+                                ? 'En LV'
+                                : 'En Tovar'
+                              : 'Sin guardia'}
+                          </span>
                         </div>
                       );
                     }
@@ -2266,37 +2551,37 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
               SECCIÓN 2: TURNOS MATUTINOS Y VESPERTINOS CON ESCALA DE COLOR
              =================================================================== */}
 
-          {/* Leyenda Orientativa en Escala de Grosor y Color para los Horarios según el Día Elegido */}
-          <div className="flex items-center justify-between flex-wrap gap-2 text-[10px] text-secondary bg-surface-subtle-ice px-3.5 py-2.5 rounded-2xl border border-border-subtle shadow-2xs">
+          {/* Leyenda Orientativa en Escala de Afluencia Armónica y Positiva */}
+          <div className="flex items-center justify-between flex-wrap gap-2 text-[10px] sm:text-[11px] text-secondary bg-surface-subtle-ice px-3.5 py-2.5 rounded-2xl border border-border-subtle shadow-2xs">
             <span className="font-extrabold text-dental-deep-navy flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-primary">speed</span>
-              Afluencia y Completitud para {selectedDate || 'el día seleccionado'}:
+              <span className="material-symbols-outlined text-[17px] text-primary">schedule</span>
+              Guía de Afluencia ({selectedDate || 'Día seleccionado'}):
             </span>
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 shadow-2xs">
-                <span className="w-1.5 h-3 rounded-full bg-emerald-500" />
-                Borde fino Verde: Menos solicitado (Tranquilo)
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Atención Ágil (Mayor holgura)
               </span>
-              <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 shadow-2xs">
-                <span className="w-2.5 h-3 rounded-full bg-amber-500" />
-                Borde medio Amarillo: Demanda moderada
+              <span className="inline-flex items-center gap-1.5 font-bold text-sky-900 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-sky-500" />
+                Demanda Habitual (Espacio regular)
               </span>
-              <span className="inline-flex items-center gap-1.5 font-bold text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 shadow-2xs">
-                <span className="w-3.5 h-3 rounded-full bg-rose-500 animate-pulse" />
-                Borde grueso Rojo: Más ocupado / Muy solicitado
+              <span className="inline-flex items-center gap-1.5 font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                Franja Popular (Mayor preferencia)
               </span>
             </div>
           </div>
 
           {/* Turno Mañana: 08:30 AM, 09:15 AM, 10:00 AM, 11:00 AM */}
-          <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle">
+          <div className={`bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle ${!mananaHabilitado ? 'opacity-60' : ''}`}>
             <div className="flex items-center gap-1.5 mb-2.5">
               <span className="material-symbols-outlined text-amber-500 text-[18px]">
                 wb_sunny
               </span>
               <span className="text-xs font-bold text-dental-deep-navy">Turno Mañana</span>
               <span className="text-[10px] text-secondary ml-auto">
-                08:30 AM — 11:00 AM
+                {mananaHabilitado ? '08:30 AM — 11:00 AM' : 'No habilitado en #Data (Solo Tarde)'}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -2308,11 +2593,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   <button
                     key={slot.hora}
                     type="button"
+                    disabled={!mananaHabilitado}
                     onClick={() => {
+                      if (!mananaHabilitado) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
-                        const sem = getSemana6Dias();
-                        setSelectedDate(sem[0]?.fullString || 'JUE 24 Oct');
+                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede);
+                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'JUE 24 Oct');
                       }
                       if (pacienteEncontrado && nombres.trim()) {
                         setOpenStep(null);
@@ -2326,30 +2613,38 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         }, 80);
                       }
                     }}
-                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between cursor-pointer active:scale-95 border-x border-b relative ${demanda.grosorClase} ${demanda.bordeColor} ${
-                      isSelected
-                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
-                        : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between border-x border-b relative ${
+                      !mananaHabilitado
+                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400'
+                        : `${demanda.grosorClase} ${demanda.bordeColor} cursor-pointer active:scale-95 ${
+                            isSelected
+                              ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
+                              : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                          }`
                     }`}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
                       <span className="text-sm font-black tabular-nums">{slot.hora}</span>
                       <span
                         className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                          isSelected ? '!bg-white/20 !text-white !border-white/30' : demanda.badgeBg
+                          !mananaHabilitado
+                            ? 'bg-slate-200 text-slate-500 border-slate-300'
+                            : isSelected
+                            ? '!bg-white/20 !text-white !border-white/30'
+                            : demanda.badgeBg
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${demanda.dotColor}`} />
-                        {demanda.etiqueta}
+                        <span className={`w-1.5 h-1.5 rounded-full ${!mananaHabilitado ? 'bg-slate-400' : demanda.dotColor}`} />
+                        {!mananaHabilitado ? 'Cerrado' : demanda.etiqueta}
                       </span>
                     </div>
 
-                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50">
-                      <span className={`font-semibold truncate ${isSelected ? 'text-white/80' : 'text-primary'}`}>
-                        Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
+                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50 gap-1">
+                      <span className={`font-semibold whitespace-nowrap text-[9.5px] ${isSelected ? 'text-white/90' : 'text-primary'}`}>
+                        Hasta {horaFinEstimada} • {duracionTratamientoMin}m
                       </span>
-                      <span className={`text-[9px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
-                        {slot.sub}
+                      <span className={`text-[9px] font-bold shrink-0 ${isSelected ? 'text-white/80' : 'text-secondary'}`}>
+                        {demanda.subtitulo}
                       </span>
                     </div>
                   </button>
@@ -2359,14 +2654,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           </div>
 
           {/* Turno Tarde: 01:15 PM, 02:00 PM, 03:00 PM, 03:45 PM */}
-          <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle">
+          <div className={`bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle ${!tardeHabilitado ? 'opacity-60' : ''}`}>
             <div className="flex items-center gap-1.5 mb-2.5">
               <span className="material-symbols-outlined text-indigo-500 text-[18px]">
                 wb_twilight
               </span>
               <span className="text-xs font-bold text-dental-deep-navy">Turno Tarde</span>
               <span className="text-[10px] text-primary font-bold ml-auto">
-                01:15 PM — 03:45 PM
+                {tardeHabilitado ? '01:15 PM — 03:45 PM' : 'No habilitado en #Data (Solo Mañana)'}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -2378,11 +2673,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   <button
                     key={slot.hora}
                     type="button"
+                    disabled={!tardeHabilitado}
                     onClick={() => {
+                      if (!tardeHabilitado) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
-                        const sem = getSemana6Dias();
-                        setSelectedDate(sem[0]?.fullString || 'JUE 24 Oct');
+                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede);
+                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'JUE 24 Oct');
                       }
                       if (pacienteEncontrado && nombres.trim()) {
                         setOpenStep(null);
@@ -2396,30 +2693,38 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                         }, 80);
                       }
                     }}
-                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between cursor-pointer active:scale-95 border-x border-b relative ${demanda.grosorClase} ${demanda.bordeColor} ${
-                      isSelected
-                        ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
-                        : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                    className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between border-x border-b relative ${
+                      !tardeHabilitado
+                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400'
+                        : `${demanda.grosorClase} ${demanda.bordeColor} cursor-pointer active:scale-95 ${
+                            isSelected
+                              ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
+                              : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                          }`
                     }`}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
                       <span className="text-sm font-black tabular-nums">{slot.hora}</span>
                       <span
                         className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                          isSelected ? '!bg-white/20 !text-white !border-white/30' : demanda.badgeBg
+                          !tardeHabilitado
+                            ? 'bg-slate-200 text-slate-500 border-slate-300'
+                            : isSelected
+                            ? '!bg-white/20 !text-white !border-white/30'
+                            : demanda.badgeBg
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${demanda.dotColor}`} />
-                        {demanda.etiqueta}
+                        <span className={`w-1.5 h-1.5 rounded-full ${!tardeHabilitado ? 'bg-slate-400' : demanda.dotColor}`} />
+                        {!tardeHabilitado ? 'Cerrado' : demanda.etiqueta}
                       </span>
                     </div>
 
-                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50">
-                      <span className={`font-semibold truncate ${isSelected ? 'text-white/80' : 'text-primary'}`}>
-                        Hasta {horaFinEstimada} ({duracionTratamientoMin}m)
+                    <div className="w-full flex items-center justify-between text-[10px] pt-1.5 border-t border-border-subtle/50 gap-1">
+                      <span className={`font-semibold whitespace-nowrap text-[9.5px] ${isSelected ? 'text-white/90' : 'text-primary'}`}>
+                        Hasta {horaFinEstimada} • {duracionTratamientoMin}m
                       </span>
-                      <span className={`text-[9px] font-bold ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
-                        {slot.sub}
+                      <span className={`text-[9px] font-bold shrink-0 ${isSelected ? 'text-white/80' : 'text-secondary'}`}>
+                        {demanda.subtitulo}
                       </span>
                     </div>
                   </button>

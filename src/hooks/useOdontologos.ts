@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { OdontologoItem } from '../types/clinical';
+import { OdontologoItem, DiaSemanaClinico } from '../types/clinical';
 import { ApiClient } from '../services/api';
 
 export const LOCAL_STORAGE_ODONTOLOGOS_KEY = 'odontosalud_data_odontologos';
+
+export const DIAS_SEMANA_CLINICOS: DiaSemanaClinico[] = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 
 export const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
   {
@@ -19,6 +21,24 @@ export const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
     porcentajeHonorarios: 50,
     estado: 'activo',
     avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80',
+    diasVictoria: ['LUN', 'MAR', 'MIÉ', 'JUE'],
+    diasTovar: ['VIE', 'SÁB'],
+  },
+  {
+    id: 'odo-julianny',
+    nombres: 'Dra. Julianny Ramos',
+    cedula: 'V-20.418.920',
+    cov: 'C.O.V. 27.310',
+    especialidad: 'Odontología Integral, Estética & Rehabilitación Oral',
+    telefono: '+58 414-7782310',
+    email: 'j.ramos@odontosalud.ve',
+    sedeId: 'ambas',
+    boxAsignado: 2,
+    turno: 'Completo',
+    porcentajeHonorarios: 45,
+    estado: 'activo',
+    diasVictoria: ['MAR', 'JUE', 'SÁB'],
+    diasTovar: ['LUN', 'MIÉ', 'VIE'],
   },
   {
     id: 'odo-2',
@@ -33,6 +53,8 @@ export const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
     turno: 'Mañana',
     porcentajeHonorarios: 45,
     estado: 'activo',
+    diasVictoria: ['LUN', 'MIÉ', 'VIE'],
+    diasTovar: [],
   },
   {
     id: 'odo-3',
@@ -42,27 +64,69 @@ export const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
     especialidad: 'Endodoncia Avanzada & Microcirugía Apical',
     telefono: '+58 424-3349011',
     email: 'v.hernandez@odontosalud.ve',
-    sedeId: 'ambas',
+    sedeId: 'victoria',
     boxAsignado: 1,
     turno: 'Tarde',
     porcentajeHonorarios: 45,
     estado: 'en_guardia',
-  },
-  {
-    id: 'odo-4',
-    nombres: 'Dra. Andrea Morales',
-    cedula: 'V-23.891.405',
-    cov: 'C.O.V. 25.334',
-    especialidad: 'Periodoncia, Prótesis & Cirugía Bucal',
-    telefono: '+58 414-9988112',
-    email: 'a.morales@odontosalud.ve',
-    sedeId: 'ambas',
-    boxAsignado: 2,
-    turno: 'Completo',
-    porcentajeHonorarios: 40,
-    estado: 'activo',
+    diasVictoria: ['MAR', 'JUE', 'SÁB'],
+    diasTovar: [],
   },
 ];
+
+export function normalizarDisponibilidadOdontologo(o: OdontologoItem): OdontologoItem {
+  const nombreLower = (o.nombres || '').toLowerCase();
+  const esMaria = nombreLower.includes('maría') || nombreLower.includes('maria') || nombreLower.includes('domínguez') || nombreLower.includes('dominguez');
+  const esJulianny = nombreLower.includes('julianny');
+
+  let diasVictoria = Array.isArray(o.diasVictoria) ? (o.diasVictoria.filter(Boolean) as DiaSemanaClinico[]) : undefined;
+  let diasTovar = Array.isArray(o.diasTovar) ? (o.diasTovar.filter(Boolean) as DiaSemanaClinico[]) : undefined;
+
+  if (!diasVictoria || (diasVictoria.length === 0 && (!diasTovar || diasTovar.length === 0))) {
+    if (esMaria) {
+      diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE'];
+      diasTovar = ['VIE', 'SÁB'];
+    } else if (esJulianny) {
+      diasVictoria = ['MAR', 'JUE', 'SÁB'];
+      diasTovar = ['LUN', 'MIÉ', 'VIE'];
+    } else if (o.sedeId === 'victoria') {
+      diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+      diasTovar = [];
+    } else if (o.sedeId === 'tovar') {
+      diasVictoria = [];
+      diasTovar = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+    } else {
+      // 'ambas'
+      diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE'];
+      diasTovar = ['VIE', 'SÁB'];
+    }
+  } else {
+    if (o.sedeId === 'victoria') {
+      diasTovar = [];
+    } else if (o.sedeId === 'tovar') {
+      diasVictoria = [];
+    }
+  }
+
+  return {
+    ...o,
+    sedeId: (esMaria || esJulianny) && !o.sedeId ? 'ambas' : o.sedeId,
+    diasVictoria: diasVictoria || [],
+    diasTovar: diasTovar || [],
+  };
+}
+
+export function normalizarListaOdontologos(lista: OdontologoItem[]): OdontologoItem[] {
+  const normalizados = lista.map(normalizarDisponibilidadOdontologo);
+  const tieneJulianny = normalizados.some((d) => (d.nombres || '').toLowerCase().includes('julianny'));
+  if (!tieneJulianny) {
+    const juliannyDefault = INITIAL_ODONTOLOGOS.find((d) => d.id === 'odo-julianny');
+    if (juliannyDefault) {
+      return [normalizados[0] || juliannyDefault, juliannyDefault, ...normalizados.slice(1)];
+    }
+  }
+  return normalizados;
+}
 
 export function useOdontologos() {
   const [odontologos, setOdontologos] = useState<OdontologoItem[]>(() => {
@@ -71,7 +135,7 @@ export function useOdontologos() {
         const saved = localStorage.getItem(LOCAL_STORAGE_ODONTOLOGOS_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) return normalizarListaOdontologos(parsed);
         }
       } catch (_) {}
     }
@@ -84,10 +148,11 @@ export function useOdontologos() {
       setLoading(true);
       const data = await ApiClient.getControlData();
       if (data?.odontologos && Array.isArray(data.odontologos) && data.odontologos.length > 0) {
-        setOdontologos(data.odontologos);
+        const norm = normalizarListaOdontologos(data.odontologos);
+        setOdontologos(norm);
         if (typeof window !== 'undefined') {
           try {
-            localStorage.setItem(LOCAL_STORAGE_ODONTOLOGOS_KEY, JSON.stringify(data.odontologos));
+            localStorage.setItem(LOCAL_STORAGE_ODONTOLOGOS_KEY, JSON.stringify(norm));
           } catch (_) {}
         }
       }
@@ -104,13 +169,15 @@ export function useOdontologos() {
     // Sincronización reactiva entre pestañas y vistas al modificar la tabla en Data
     const handleUpdate = (e: any) => {
       if (e?.detail?.tipo === 'odontologos' && Array.isArray(e.detail.data)) {
-        setOdontologos(e.detail.data);
+        setOdontologos(e.detail.data.map(normalizarDisponibilidadOdontologo));
       } else {
         try {
           const saved = localStorage.getItem(LOCAL_STORAGE_ODONTOLOGOS_KEY);
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) setOdontologos(parsed);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setOdontologos(parsed.map(normalizarDisponibilidadOdontologo));
+            }
           }
         } catch (_) {}
       }

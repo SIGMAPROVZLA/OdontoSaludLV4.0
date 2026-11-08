@@ -126,104 +126,108 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           </span>
         </div>
 
-        {/* Cuadrícula 100% Responsiva: 2 columnas en móvil, 4 en tablet y desktop */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
-          {/* Citas Hoy */}
+        {/* Cuadrícula Compacta en 1 Sola Fila: 4 KPIs con Acción Directa de Enlace por Tarjeta */}
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
+          {/* KPI 1: Citas Hoy -> Acciona Enlace a Agenda */}
           <button
             type="button"
-            onClick={() => setModalKpi('citas')}
-            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-primary/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+            onClick={() => onNavigateTab('agenda')}
+            title="Toca para ir a Agenda de Citas"
+            className="bg-surface-clean-white rounded-2xl p-2 sm:p-3 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-primary/60 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
           >
-            <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:scale-105 transition-transform shadow-2xs">
-                <span className="material-symbols-outlined text-[18px]">event_available</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:scale-105 transition-transform shadow-2xs">
+                <span className="material-symbols-outlined text-[15px] sm:text-[18px]">event_available</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-container text-primary font-black flex items-center gap-1">
-                Hoy
-                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
+              <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-surface-container text-primary font-black flex items-center gap-0.5">
+                <span className="hidden xs:inline">Agenda</span>
+                <span className="material-symbols-outlined text-[10px] sm:text-[12px] opacity-70">arrow_forward</span>
               </span>
             </div>
-            <div className="mt-2.5">
-              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
+            <div className="mt-1.5 sm:mt-2.5">
+              <span className="font-display font-black text-sm sm:text-2xl text-dental-deep-navy leading-none block tracking-tight truncate">
                 {pulse?.metricas.citasTotal || 12}
               </span>
-              <span className="text-xs text-secondary block mt-1 truncate font-medium">
-                {pulse?.metricas.enEspera || 3} en espera
+              <span className="text-[9px] sm:text-xs text-secondary block mt-0.5 truncate font-medium">
+                Citas Hoy
               </span>
             </div>
           </button>
 
-          {/* Ocupación Sillones */}
+          {/* KPI 2: Ocupación Sillones -> Acciona Enlace a Coordinación */}
           <button
             type="button"
-            onClick={() => setModalKpi('ocupacion')}
-            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-sky-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+            onClick={() => onNavigateTab('coordinacion')}
+            title="Toca para ir a Coordinación de Boxes"
+            className="bg-surface-clean-white rounded-2xl p-2 sm:p-3 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-sky-500/60 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
           >
-            <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 group-hover:scale-105 transition-transform shadow-2xs">
-                <span className="material-symbols-outlined text-[18px]">airline_seat_recline_extra</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 group-hover:scale-105 transition-transform shadow-2xs">
+                <span className="material-symbols-outlined text-[15px] sm:text-[18px]">airline_seat_recline_extra</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black flex items-center gap-1 border border-emerald-200/60">
-                Óptimo
-                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
+              <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black flex items-center gap-0.5 border border-emerald-200/60">
+                <span className="hidden xs:inline">Boxes</span>
+                <span className="material-symbols-outlined text-[10px] sm:text-[12px] opacity-70">arrow_forward</span>
               </span>
             </div>
-            <div className="mt-2.5">
-              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
+            <div className="mt-1.5 sm:mt-2.5">
+              <span className="font-display font-black text-sm sm:text-2xl text-dental-deep-navy leading-none block tracking-tight truncate">
                 {pulse?.metricas.ocupacionPorcentaje || 85}%
               </span>
-              <span className="text-xs text-secondary block mt-1 truncate font-medium">
-                {sedeActiva.totalBoxes} sillones
+              <span className="text-[9px] sm:text-xs text-secondary block mt-0.5 truncate font-medium">
+                Ocupación
               </span>
             </div>
           </button>
 
-          {/* Presupuestos */}
+          {/* KPI 3: Presupuestos -> Acciona Enlace a Cobros */}
           <button
             type="button"
-            onClick={() => setModalKpi('presupuestos')}
-            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-amber-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+            onClick={() => onNavigateTab('cobros')}
+            title="Toca para ir a Presupuestos y Cobros"
+            className="bg-surface-clean-white rounded-2xl p-2 sm:p-3 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-amber-500/60 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
           >
-            <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 group-hover:scale-105 transition-transform shadow-2xs">
-                <span className="material-symbols-outlined text-[18px]">request_quote</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 group-hover:scale-105 transition-transform shadow-2xs">
+                <span className="material-symbols-outlined text-[15px] sm:text-[18px]">request_quote</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black flex items-center gap-1 border border-amber-200/60">
-                Activos
-                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
+              <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black flex items-center gap-0.5 border border-amber-200/60">
+                <span className="hidden xs:inline">Cobros</span>
+                <span className="material-symbols-outlined text-[10px] sm:text-[12px] opacity-70">arrow_forward</span>
               </span>
             </div>
-            <div className="mt-2.5">
-              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
+            <div className="mt-1.5 sm:mt-2.5">
+              <span className="font-display font-black text-sm sm:text-2xl text-dental-deep-navy leading-none block tracking-tight truncate">
                 ${pulse?.metricas.presupuestosPendientesUsd || 1420}
               </span>
-              <span className="text-xs text-secondary block mt-1 truncate font-medium">
-                5 pacientes
+              <span className="text-[9px] sm:text-xs text-secondary block mt-0.5 truncate font-medium">
+                Presupuestos
               </span>
             </div>
           </button>
 
-          {/* Ingresos Cobrados */}
+          {/* KPI 4: Ingresos Cobrados -> Acciona Enlace a Cobros / Liquidaciones */}
           <button
             type="button"
-            onClick={() => setModalKpi('cobrado')}
-            className="bg-surface-clean-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-emerald-500/50 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+            onClick={() => onNavigateTab('cobros')}
+            title="Toca para ir a Liquidaciones y Cobros"
+            className="bg-surface-clean-white rounded-2xl p-2 sm:p-3 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-emerald-500/60 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer group relative overflow-hidden"
           >
-            <div className="flex items-center justify-between">
-              <span className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 group-hover:scale-105 transition-transform shadow-2xs">
-                <span className="material-symbols-outlined text-[18px]">payments</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 group-hover:scale-105 transition-transform shadow-2xs">
+                <span className="material-symbols-outlined text-[15px] sm:text-[18px]">payments</span>
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center gap-1 border border-emerald-200/60">
-                Cobrado
-                <span className="material-symbols-outlined text-[12px] opacity-60">open_in_new</span>
+              <span className="text-[8px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center gap-0.5 border border-emerald-200/60">
+                <span className="hidden xs:inline">Caja</span>
+                <span className="material-symbols-outlined text-[10px] sm:text-[12px] opacity-70">arrow_forward</span>
               </span>
             </div>
-            <div className="mt-2.5">
-              <span className="font-display font-black text-2xl sm:text-3xl text-dental-deep-navy leading-none block tracking-tight">
+            <div className="mt-1.5 sm:mt-2.5">
+              <span className="font-display font-black text-sm sm:text-2xl text-dental-deep-navy leading-none block tracking-tight truncate">
                 ${pulse?.metricas.cobradoHoyUsd || 680}
               </span>
-              <span className="text-xs text-secondary block mt-1 truncate font-medium">
-                ≈ Bs. {((pulse?.metricas.cobradoHoyUsd || 680) * (tasaBcv || 49.85)).toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+              <span className="text-[9px] sm:text-xs text-secondary block mt-0.5 truncate font-medium">
+                Cobrado Hoy
               </span>
             </div>
           </button>

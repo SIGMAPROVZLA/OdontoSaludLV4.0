@@ -549,6 +549,7 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
   const totalPacientes = odontologasCalculadas.reduce((acc, o) => acc + o.pacientes, 0);
   const totalRecaudadoUsd = odontologasCalculadas.reduce((acc, o) => acc + o.recaudadoUsd, 0);
   const totalHonorariosUsd = odontologasCalculadas.reduce((acc, o) => acc + o.honorariosUsd, 0);
+  const totalDividendosNetosUsd = Math.max(0, totalRecaudadoUsd - totalHonorariosUsd);
 
   return (
     <section
@@ -581,26 +582,33 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
           </div>
         </div>
 
-        {/* Resumen rápido de totales de la selección */}
-        <div className="flex items-center gap-2.5 sm:gap-3 bg-surface-subtle-ice p-2.5 sm:p-3 rounded-2xl border border-border-subtle self-start lg:self-auto shrink-0 flex-wrap">
+        {/* Resumen rápido de totales de la selección: Recaudación, Honorarios en Amarillo y Dividendos Netos en Verde */}
+        <div className="flex items-center gap-2 sm:gap-2.5 bg-surface-subtle-ice p-2 sm:p-2.5 rounded-2xl border border-border-subtle self-start lg:self-auto shrink-0 flex-wrap">
           <div className="px-2 text-center sm:text-left">
-            <span className="text-[10px] font-bold text-secondary uppercase block">Pacientes</span>
-            <span className="text-base sm:text-lg font-display font-black text-dental-deep-navy leading-none">
+            <span className="text-[9.5px] font-bold text-secondary uppercase block">Pacientes</span>
+            <span className="text-sm sm:text-base font-display font-black text-dental-deep-navy leading-none">
               {totalPacientes}
             </span>
           </div>
           <div className="h-6 w-px bg-border-subtle" />
           <div className="px-2 text-center sm:text-left">
-            <span className="text-[10px] font-bold text-secondary uppercase block">Recaudación</span>
-            <span className="text-base sm:text-lg font-display font-black text-primary leading-none">
+            <span className="text-[9.5px] font-bold text-secondary uppercase block">Recaudación</span>
+            <span className="text-sm sm:text-base font-display font-black text-primary leading-none">
               ${totalRecaudadoUsd.toLocaleString()} USD
             </span>
           </div>
           <div className="h-6 w-px bg-border-subtle" />
           <div className="px-2 text-center sm:text-left">
-            <span className="text-[10px] font-bold text-secondary uppercase block">Honorarios</span>
-            <span className="text-base sm:text-lg font-display font-black text-status-success leading-none">
+            <span className="text-[9.5px] font-black text-amber-800 uppercase block">Honorarios</span>
+            <span className="text-sm sm:text-base font-display font-black text-amber-600 leading-none">
               ${totalHonorariosUsd.toLocaleString()} USD
+            </span>
+          </div>
+          <div className="h-6 w-px bg-border-subtle" />
+          <div className="px-2 text-center sm:text-left">
+            <span className="text-[9.5px] font-black text-emerald-800 uppercase block">Dividendos Netos</span>
+            <span className="text-sm sm:text-base font-display font-black text-emerald-600 leading-none">
+              ${totalDividendosNetosUsd.toLocaleString()} USD
             </span>
           </div>
         </div>
@@ -860,72 +868,95 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
                   </div>
                 </div>
 
-                {/* 2. Grid de KPIs Animados por Odontóloga */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 flex-1">
-                  {/* KPI 1: Pacientes Atendidos */}
-                  <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
-                      <span>Pacientes</span>
-                      <span className="material-symbols-outlined text-[14px] text-primary">groups</span>
-                    </span>
-                    <div className="mt-1">
-                      <span className="text-lg sm:text-xl font-display font-black text-dental-deep-navy leading-none">
-                        {odo.pacientes} <span className="text-xs font-normal text-secondary">/ {odo.totalCitas}</span>
-                      </span>
-                      <span className="text-[10px] font-bold text-status-success block mt-0.5">
-                        {odo.tasaPuntualidad}% Efectividad
-                      </span>
-                    </div>
-                  </div>
+                {/* 2. Grid de KPIs Animados por Odontóloga: Pacientes, Tratamientos, Facturación, Honorarios (Amarillo) y Dividendos Netos (Verde) */}
+                {(() => {
+                  const dividendoNetoUsd = Math.max(0, odo.recaudadoUsd - odo.honorariosUsd);
+                  const dividendoNetoBs = dividendoNetoUsd * tasaBcv;
 
-                  {/* KPI 2: Procedimientos Realizados */}
-                  <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
-                      <span>Tratamientos</span>
-                      <span className="material-symbols-outlined text-[14px] text-sky-600">dentistry</span>
-                    </span>
-                    <div className="mt-1">
-                      <span className="text-lg sm:text-xl font-display font-black text-dental-deep-navy leading-none">
-                        {odo.procedimientos.length}
-                      </span>
-                      <span className="text-[10px] text-secondary truncate block mt-0.5">
-                        {odo.procedimientos[0] || 'Procedimientos en curso'}
-                      </span>
-                    </div>
-                  </div>
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-2.5 flex-1">
+                      {/* KPI 1: Pacientes Atendidos */}
+                      <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
+                          <span>Pacientes</span>
+                          <span className="material-symbols-outlined text-[14px] text-primary">groups</span>
+                        </span>
+                        <div className="mt-1">
+                          <span className="text-base sm:text-lg font-display font-black text-dental-deep-navy leading-none">
+                            {odo.pacientes} <span className="text-xs font-normal text-secondary">/ {odo.totalCitas}</span>
+                          </span>
+                          <span className="text-[9.5px] font-bold text-status-success block mt-0.5">
+                            {odo.tasaPuntualidad}% Efectividad
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* KPI 3: Recaudación Facturada (USD / Bs) */}
-                  <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
-                      <span>Facturación</span>
-                      <span className="material-symbols-outlined text-[14px] text-emerald-600">payments</span>
-                    </span>
-                    <div className="mt-1">
-                      <span className="text-lg sm:text-xl font-display font-black text-primary leading-none">
-                        ${odo.recaudadoUsd} <span className="text-[10px] font-bold">USD</span>
-                      </span>
-                      <span className="text-[10px] font-semibold text-secondary truncate block mt-0.5">
-                        ≈ Bs. {odo.recaudadoBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}
-                      </span>
-                    </div>
-                  </div>
+                      {/* KPI 2: Procedimientos Realizados */}
+                      <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
+                          <span>Tratamientos</span>
+                          <span className="material-symbols-outlined text-[14px] text-sky-600">dentistry</span>
+                        </span>
+                        <div className="mt-1">
+                          <span className="text-base sm:text-lg font-display font-black text-dental-deep-navy leading-none">
+                            {odo.procedimientos.length}
+                          </span>
+                          <span className="text-[9.5px] text-secondary truncate block mt-0.5">
+                            {odo.procedimientos[0] || 'En curso'}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* KPI 4: Honorarios Médicos */}
-                  <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex flex-col justify-between">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center justify-between">
-                      <span>Honorarios ({odo.porcentajeHonorario}%)</span>
-                      <span className="material-symbols-outlined text-[14px] text-emerald-700">account_balance_wallet</span>
-                    </span>
-                    <div className="mt-1">
-                      <span className="text-lg sm:text-xl font-display font-black text-emerald-800 leading-none">
-                        ${odo.honorariosUsd.toFixed(0)} <span className="text-[10px] font-bold">USD</span>
-                      </span>
-                      <span className="text-[10px] font-bold text-emerald-700 truncate block mt-0.5">
-                        Bs. {odo.honorariosBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}
-                      </span>
+                      {/* KPI 3: Recaudación Facturada (USD / Bs) */}
+                      <div className="p-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle/80 flex flex-col justify-between">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center justify-between">
+                          <span>Facturación</span>
+                          <span className="material-symbols-outlined text-[14px] text-primary">payments</span>
+                        </span>
+                        <div className="mt-1">
+                          <span className="text-base sm:text-lg font-display font-black text-primary leading-none">
+                            ${odo.recaudadoUsd} <span className="text-[10px] font-bold">USD</span>
+                          </span>
+                          <span className="text-[9.5px] font-semibold text-secondary truncate block mt-0.5">
+                            ≈ Bs. {odo.recaudadoBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* KPI 4: Honorarios Médicos (En Amarillo) */}
+                      <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/90 flex flex-col justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center justify-between">
+                          <span>Honorarios ({odo.porcentajeHonorario}%)</span>
+                          <span className="material-symbols-outlined text-[14px] text-amber-600">account_balance_wallet</span>
+                        </span>
+                        <div className="mt-1">
+                          <span className="text-base sm:text-lg font-display font-black text-amber-600 leading-none">
+                            ${odo.honorariosUsd.toFixed(0)} <span className="text-[10px] font-bold">USD</span>
+                          </span>
+                          <span className="text-[9.5px] font-bold text-amber-700 truncate block mt-0.5">
+                            Bs. {odo.honorariosBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* KPI 5: Dividendos Netos Clínica (En Verde) */}
+                      <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/90 flex flex-col justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-900 flex items-center justify-between">
+                          <span>Dividendos Netos</span>
+                          <span className="material-symbols-outlined text-[14px] text-emerald-700">trending_up</span>
+                        </span>
+                        <div className="mt-1">
+                          <span className="text-base sm:text-lg font-display font-black text-emerald-600 leading-none">
+                            ${dividendoNetoUsd.toFixed(0)} <span className="text-[10px] font-bold">USD</span>
+                          </span>
+                          <span className="text-[9.5px] font-bold text-emerald-700 truncate block mt-0.5">
+                            Bs. {dividendoNetoBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 3. Rendimiento contra Meta & Botón de Expansión */}
                 <div className="flex items-center gap-3 xl:w-56 justify-between xl:justify-end shrink-0 pt-2 xl:pt-0 border-t xl:border-t-0 border-border-subtle/60">

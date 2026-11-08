@@ -238,6 +238,8 @@ export interface NotificacionItem {
   meta?: any;
 }
 
+export type DiaSemanaClinico = 'LUN' | 'MAR' | 'MIÉ' | 'JUE' | 'VIE' | 'SÁB';
+
 export interface OdontologoItem {
   id: string;
   nombres: string;
@@ -252,6 +254,8 @@ export interface OdontologoItem {
   porcentajeHonorarios: number;
   estado: 'activo' | 'en_guardia' | 'descanso';
   avatar?: string;
+  diasVictoria?: DiaSemanaClinico[];
+  diasTovar?: DiaSemanaClinico[];
 }
 
 export interface HigienistaItem {
