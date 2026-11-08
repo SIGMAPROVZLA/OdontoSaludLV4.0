@@ -44,12 +44,13 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
         </p>
       </div>
 
-      {/* 2. Cuatro Tarjetas Métricas Superiores Animadas (Clickeables para Ver Resumen) */}
+      {/* 2. Cuatro Tarjetas Métricas Superiores Animadas (Clickeables para Acción Directa por Tarjeta) */}
       <div className="grid grid-cols-4 gap-4">
-        {/* Card 1: Pacientes Hoy */}
+        {/* Card 1: Pacientes Hoy -> Agenda */}
         <button
           type="button"
-          onClick={() => setModalKpi('citas')}
+          onClick={() => onNavigateTab('agenda')}
+          title="Toca para ir a Agenda de Citas"
           className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-primary/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
@@ -65,7 +66,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 {metricas.citasTotal}
               </span>
-              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+              <span 
+                onClick={(e) => { e.stopPropagation(); setModalKpi('citas'); }}
+                className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 hover:bg-status-success/20"
+                title="Ver desglose detallado"
+              >
                 +12% vs ayer
                 <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
@@ -78,10 +83,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
           </div>
         </button>
 
-        {/* Card 2: Ingresos del Día / Recaudación */}
+        {/* Card 2: Ingresos del Día / Recaudación -> Cobros */}
         <button
           type="button"
-          onClick={() => setModalKpi('cobrado')}
+          onClick={() => onNavigateTab('cobros')}
+          title="Toca para ir a Caja y Liquidaciones"
           className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-emerald-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
@@ -97,7 +103,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 ${metricas.cobradoHoyUsd}
               </span>
-              <span className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+              <span 
+                onClick={(e) => { e.stopPropagation(); setModalKpi('cobrado'); }}
+                className="text-[10px] font-bold text-status-success bg-status-success/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 hover:bg-status-success/20"
+                title="Ver desglose financiero"
+              >
                 Tasa: {(pulse?.tasaBcv ?? 49.85).toFixed(2)}
                 <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
@@ -109,10 +119,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
           </div>
         </button>
 
-        {/* Card 3: Presupuestos & Tratamientos Activos */}
+        {/* Card 3: Presupuestos & Tratamientos Activos -> Cobros */}
         <button
           type="button"
-          onClick={() => setModalKpi('presupuestos')}
+          onClick={() => onNavigateTab('cobros')}
+          title="Toca para ir a Presupuestos"
           className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-amber-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
@@ -128,7 +139,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 ${metricas.presupuestosPendientesUsd}
               </span>
-              <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+              <span 
+                onClick={(e) => { e.stopPropagation(); setModalKpi('presupuestos'); }}
+                className="text-[10px] text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 hover:bg-amber-200"
+                title="Ver presupuestos pendientes"
+              >
                 Por aprobar
                 <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>
@@ -141,10 +156,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
           </div>
         </button>
 
-        {/* Card 4: Ocupación de Boxes */}
+        {/* Card 4: Ocupación de Boxes -> Coordinación */}
         <button
           type="button"
-          onClick={() => setModalKpi('ocupacion')}
+          onClick={() => onNavigateTab('coordinacion')}
+          title="Toca para ir a Coordinación de Boxes"
           className="bg-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col justify-between text-left hover:border-sky-500/50 hover:shadow-md hover:-translate-y-1 active:scale-98 transition-all duration-200 cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
@@ -160,7 +176,11 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
               <span className="text-3xl font-display font-black text-dental-deep-navy">
                 {metricas.ocupacionPorcentaje}%
               </span>
-              <span className="text-[10px] font-semibold text-secondary flex items-center gap-0.5">
+              <span 
+                onClick={(e) => { e.stopPropagation(); setModalKpi('ocupacion'); }}
+                className="text-[10px] font-semibold text-secondary flex items-center gap-0.5 hover:text-dental-deep-navy"
+                title="Ver estado de sillones"
+              >
                 {sedeActiva.totalBoxes} sillones
                 <span className="material-symbols-outlined text-[10px]">open_in_new</span>
               </span>

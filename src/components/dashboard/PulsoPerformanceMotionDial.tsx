@@ -38,14 +38,16 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
 
     // Incluir la nómina completa de odontólogos para reflejar la totalidad de facultativas
     return staffOdontologos.map((doc, idx) => {
-      const partes = doc.nombres.split(' ');
-      const prefijo = doc.nombres.startsWith('Dra.') ? 'Dra.' : doc.nombres.startsWith('Dr.') ? 'Dr.' : 'Od.';
-      const apellido = partes.length >= 3 ? partes[2] : partes[partes.length - 1];
-      const nombreCorto = `${prefijo} ${apellido}`;
+      const sinPrefijo = doc.nombres.replace(/^(Dra\.|Dr\.|Od\.)\s*/i, '').trim();
+      const palabras = sinPrefijo.split(/\s+/);
+      const primerNombre = palabras[0] || '';
+      const primerApellido = palabras.length > 2 ? palabras[palabras.length - 1] : palabras[1] || '';
+      const nombreCorto = `Dra. ${primerNombre} ${primerApellido}`.trim();
 
-      // Carga asistencial proporcional basada en su turno y asignación
-      const pacientes = doc.turno === 'Completo' ? Math.max(5, 8 - (idx % 3)) : doc.turno === 'Mañana' ? 5 : 4;
-      const meta = doc.turno === 'Completo' ? 8 : 5;
+      // Carga asistencial proporcional diferenciada por especialista
+      const pacBase = [8, 7, 6, 5, 4];
+      const pacientes = pacBase[idx % pacBase.length] || 5;
+      const meta = doc.turno === 'Completo' ? 8 : 6;
       const style = rankStyles[idx % rankStyles.length];
 
       const sedeTexto = doc.sedeId === 'ambas'

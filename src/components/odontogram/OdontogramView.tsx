@@ -264,10 +264,28 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           } catch {}
         }
 
-        // Mapear y filtrar únicamente citas aprobadas / confirmadas o en sillón
+        // Mapear todas las citas pre-aprobadas y generadas en reservas
+        let rawCitas: any[] = [];
         if (data?.citas && Array.isArray(data.citas)) {
-          const citasValidas = data.citas
-            .filter((c: any) => c.estado === 'confirmada' || c.estado === 'en_sillon')
+          rawCitas = [...data.citas];
+        }
+        try {
+          const localSaved = localStorage.getItem('odontosalud_data_citas');
+          if (localSaved) {
+            const parsedLocal = JSON.parse(localSaved);
+            if (Array.isArray(parsedLocal)) {
+              parsedLocal.forEach((lc: any) => {
+                if (!rawCitas.some((rc: any) => rc.id === lc.id)) {
+                  rawCitas.push(lc);
+                }
+              });
+            }
+          }
+        } catch {}
+
+        if (rawCitas.length > 0) {
+          const citasValidas = rawCitas
+            .filter((c: any) => c.estado !== 'cancelada')
             .map((c: any) => ({
               id: c.id,
               sedeId: c.sedeId || c.sede_id || 'victoria',
@@ -318,30 +336,23 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
     };
 
     cargarDatosIniciales();
+
+    const handleDataChange = () => {
+      cargarDatosIniciales();
+    };
+    window.addEventListener('odontosalud_data_updated', handleDataChange);
+    window.addEventListener('storage', handleDataChange);
+    return () => {
+      window.removeEventListener('odontosalud_data_updated', handleDataChange);
+      window.removeEventListener('storage', handleDataChange);
+    };
   }, [sedeId]);
 
-  // Citas aprobadas filtradas por sede (o todas)
-  const citasPorSede = React.useMemo(() => {
+  // Citas aprobadas y generadas en reservas filtradas por sede (manteniendo únicamente el filtro de sedes)
+  const citasFiltradas = React.useMemo(() => {
     if (filtroSede === 'todas') return citasAprobadas;
     return citasAprobadas.filter((c) => c.sedeId === filtroSede);
   }, [citasAprobadas, filtroSede]);
-
-  // Fechas disponibles para la sede seleccionada
-  const fechasDisponiblesSede = React.useMemo(() => {
-    return Array.from(new Set(citasPorSede.map((c) => c.fechaCita)));
-  }, [citasPorSede]);
-
-  // Auto-ajustar fechaConsulta si la fecha activa no está en la sede
-  useEffect(() => {
-    if (fechasDisponiblesSede.length > 0 && (!fechaConsulta || !fechasDisponiblesSede.includes(fechaConsulta))) {
-      setFechaConsulta(fechasDisponiblesSede[0]);
-    }
-  }, [fechasDisponiblesSede, fechaConsulta]);
-
-  // Citas aprobadas finales filtradas por sede y por fecha
-  const citasFiltradas = React.useMemo(() => {
-    return citasPorSede.filter((c) => !fechaConsulta || c.fechaCita === fechaConsulta);
-  }, [citasPorSede, fechaConsulta]);
 
   // Sincronizar selectedCitaId con la lista filtrada
   useEffect(() => {
@@ -648,10 +659,10 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
   return (
     <div className="flex flex-col gap-4 pb-32">
       {/* =========================================================================
-          1. TARJETA SUPERIOR: CONTROL DE CITA ODONTOLÓGICA (PASO 1 DE 5)
+          1. TARJETA SUPERIOR: CONTROL DE CITA ODONTOLÓGICA (CARRUSEL TÁCTIL)
          ========================================================================= */}
       <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3.5 relative">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-xs shrink-0">
               <span className="material-symbols-outlined text-[24px]">event_available</span>
@@ -661,15 +672,14 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
                 Control de Cita Odontológica
               </h2>
               <p className="text-xs text-secondary">
-                Atención clínica activa en sillón por sede y fecha de consulta
+                Atención clínica activa en sillón por sede de consulta
               </p>
             </div>
           </div>
 
-          {/* Filtros Superiores: Sede, Fecha y Paso 1 de 5 (Estandarizados a h-8) */}
-          <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
-            {/* Filtro por Sede */}
-            <div className="flex items-center gap-1.5 bg-surface-subtle-ice px-2.5 h-8 rounded-xl border border-border-subtle shadow-2xs">
+          {/* Filtro Superior: Solo Sede (La Victoria / Colonia Tovar / Todas) */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-1.5 bg-surface-subtle-ice px-3 h-8 rounded-xl border border-border-subtle shadow-2xs">
               <span className="text-[11px] font-bold text-secondary">Sede:</span>
               <select
                 value={filtroSede}
@@ -677,123 +687,152 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
                 className="bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
               >
                 <option value="todas">🌐 Todas las Sedes</option>
-                <option value="victoria">📍 Sede La Victoria</option>
-                <option value="tovar">📍 Sede La Colonia Tovar</option>
+                <option value="victoria">🏢 Sede La Victoria</option>
+                <option value="tovar">🌲 Sede Colonia Tovar</option>
               </select>
             </div>
-
-            {/* Filtro por Fecha de Consulta */}
-            <div className="flex items-center gap-1.5 bg-surface-subtle-ice px-2.5 h-8 rounded-xl border border-border-subtle shadow-2xs">
-              <span className="text-[11px] font-bold text-secondary">Fecha:</span>
-              <select
-                value={fechaConsulta}
-                onChange={(e) => setFechaConsulta(e.target.value)}
-                className="bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
-              >
-                {fechasDisponiblesSede.length === 0 ? (
-                  <option value="">Sin citas</option>
-                ) : (
-                  fechasDisponiblesSede.map((f) => {
-                    const cant = citasPorSede.filter((c) => c.fechaCita === f).length;
-                    return (
-                      <option key={f} value={f}>
-                        {f} ({cant} {cant === 1 ? 'cita' : 'citas'})
-                      </option>
-                    );
-                  })
-                )}
-              </select>
-            </div>
-
-            {/* Etiqueta Paso 1 de 5 a la misma altura */}
-            <span className="h-8 px-3 rounded-xl text-xs font-black bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5 shrink-0 shadow-2xs">
-              <span className="material-symbols-outlined text-[15px]">looks_one</span>
-              <span>Paso 1 de 5</span>
-            </span>
           </div>
         </div>
 
-        {/* Lista Desplegable de Pacientes Citados */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[17px] text-primary">person_search</span>
-              <span>Paciente en Consulta (Lista de Pacientes Citados)</span>
+        {/* Carrusel Táctil de Tarjetas de Citas Pre-Aprobadas y de Reservas */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-dental-deep-navy flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[17px] text-primary">view_carousel</span>
+              <span>Citas Pre-Aprobadas & Reservas ({citasFiltradas.length})</span>
             </span>
-            <span className="text-[11px] font-semibold text-secondary">
-              {citasFiltradas.length} {citasFiltradas.length === 1 ? 'paciente con cita aprobada' : 'pacientes con cita aprobada'}
+            <span className="text-[11px] text-secondary font-medium">
+              Desliza horizontalmente y toca una tarjeta para cargar paciente
             </span>
-          </label>
+          </div>
 
           {loadingCitas ? (
-            <div className="p-3 text-center text-xs text-secondary flex items-center justify-center gap-2 bg-surface-subtle-ice rounded-xl border border-border-subtle">
+            <div className="p-4 text-center text-xs text-secondary flex items-center justify-center gap-2 bg-surface-subtle-ice rounded-2xl border border-border-subtle">
               <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
-              <span>Cargando citas aprobadas desde D1...</span>
+              <span>Cargando citas pre-aprobadas...</span>
             </div>
           ) : citasFiltradas.length === 0 ? (
-            <div className="p-3.5 text-center text-xs text-secondary bg-surface-subtle-ice rounded-xl border border-border-subtle">
-              No se registran pacientes con cita aprobada para la sede y fecha seleccionadas.
+            <div className="p-6 text-center text-xs text-secondary bg-surface-subtle-ice rounded-2xl border border-dashed border-border-subtle">
+              No se registran citas pre-aprobadas para la sede seleccionada.
             </div>
           ) : (
-            <div className="relative">
-              <select
-                value={selectedCitaId}
-                onChange={(e) => setSelectedCitaId(e.target.value)}
-                className="w-full h-11 pl-3.5 pr-10 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary shadow-xs appearance-none cursor-pointer"
-              >
-                {citasFiltradas.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    [{c.horaInicio}] {c.pacienteNombre} — {c.pacienteCedula} (Box 0{c.boxNumero || 1} • {c.motivoConsulta})
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-secondary">
-                <span className="material-symbols-outlined text-[20px]">unfold_more</span>
-              </div>
+            <div className="flex items-stretch gap-3 overflow-x-auto pb-2 scrollbar-thin scroll-smooth snap-x">
+              {citasFiltradas.map((c) => {
+                const isSelected = c.id === selectedCitaId;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedCitaId(c.id)}
+                    className={`min-w-[250px] sm:min-w-[275px] max-w-[290px] snap-start rounded-2xl p-3 border transition-all text-left flex flex-col justify-between active:scale-95 cursor-pointer relative ${
+                      isSelected
+                        ? 'bg-dental-deep-navy text-white border-primary shadow-md ring-2 ring-primary/40'
+                        : 'bg-white hover:bg-surface-subtle-ice border-border-subtle text-dental-deep-navy hover:border-primary/40 shadow-2xs'
+                    }`}
+                  >
+                    {/* Header de la Tarjeta del Carrusel */}
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-black tabular-nums ${isSelected ? 'text-amber-300' : 'text-primary'}`}>
+                          {c.horaInicio}
+                        </span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-surface-container text-secondary'
+                        }`}>
+                          Box 0{c.boxNumero || 1}
+                        </span>
+                      </div>
+
+                      <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
+                        c.estado === 'en_sillon'
+                          ? isSelected
+                            ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : isSelected
+                          ? 'bg-white/15 text-white/90 border-white/20'
+                          : 'bg-sky-50 text-sky-800 border-sky-200'
+                      }`}>
+                        {c.estado === 'en_sillon' ? '🟢 En Sillón' : '✓ Pre-Aprobada'}
+                      </span>
+                    </div>
+
+                    {/* Paciente y Metadatos */}
+                    <div className="flex items-center gap-2.5 my-1">
+                      <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 border border-border-subtle/60">
+                        {c.avatarUrl ? (
+                          <img src={c.avatarUrl} alt={c.pacienteNombre} className="w-full h-full object-cover" />
+                        ) : (
+                          <DeterministicIdenticon seed={c.pacienteCedula} name={c.pacienteNombre} size={36} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`text-xs font-bold truncate leading-tight ${isSelected ? 'text-white' : 'text-dental-deep-navy'}`}>
+                          {c.pacienteNombre}
+                        </h4>
+                        <p className={`text-[10px] font-mono mt-0.5 truncate ${isSelected ? 'text-white/70' : 'text-secondary'}`}>
+                          {c.pacienteCedula} • {c.fechaCita}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Footer de la Tarjeta del Carrusel: Motivo & Sede */}
+                    <div className={`mt-2 pt-1.5 border-t text-[10px] flex items-center justify-between gap-1 ${
+                      isSelected ? 'border-white/15 text-white/80' : 'border-border-subtle/60 text-secondary'
+                    }`}>
+                      <span className="truncate font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px] shrink-0 opacity-70">dentistry</span>
+                        <span className="truncate">{c.motivoConsulta}</span>
+                      </span>
+                      <span className="shrink-0 font-semibold text-[9.5px]">
+                        {c.sedeId === 'tovar' ? 'Col. Tovar' : 'La Victoria'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Sección de Datos del Paciente Seleccionado */}
+        {/* Sección de Datos del Paciente Seleccionado - Orden Profesional Clínico */}
         {selectedCita && (
           <div
             key={selectedCita.id}
-            className="pt-2 border-t border-border-subtle flex flex-col gap-3 animate-in fade-in slide-in-from-top-3 duration-300"
+            className="pt-3 border-t border-border-subtle flex flex-col gap-3 animate-in fade-in slide-in-from-top-3 duration-300"
           >
-            {/* Ficha de Identidad & Acciones */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 bg-surface-subtle-ice/60 p-3 rounded-2xl border border-border-subtle">
-              <div className="flex items-start gap-3 min-w-0">
-                {/* Avatar con botón de subida de foto al ancho del avatar */}
-                <div className="flex flex-col items-center gap-1 shrink-0">
+            {/* 1. Tarjeta Principal de Identidad y Expediente */}
+            <div className="bg-surface-subtle-ice/60 p-3.5 sm:p-4 rounded-2xl border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+              <div className="flex items-center gap-3.5 min-w-0">
+                {/* Avatar Clínico con Botón Foto Sincronizado al Ancho Exacto */}
+                <div className="flex flex-col items-center gap-1.5 shrink-0">
                   <div className="relative">
                     {selectedCita.avatarUrl ? (
                       <img
                         src={selectedCita.avatarUrl}
                         alt={selectedCita.pacienteNombre}
-                        className="w-[52px] h-[52px] rounded-2xl object-cover border-2 border-primary/30 shadow-xs"
+                        className="w-14 h-14 rounded-2xl object-cover border-2 border-primary/30 shadow-xs"
                       />
                     ) : (
                       <DeterministicIdenticon
                         seed={selectedCita.pacienteCedula || selectedCita.pacienteId}
                         name={selectedCita.pacienteNombre}
-                        size={52}
+                        size={56}
                       />
                     )}
                     {selectedCita.estado === 'en_sillon' && (
                       <span
-                        className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-status-success text-white shadow-xs animate-pulse"
-                        title="Paciente en Sillón"
+                        className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-black bg-status-success text-white shadow-xs animate-pulse"
+                        title="Paciente activo en sillón dental"
                       >
                         En Sillón
                       </span>
                     )}
                   </div>
 
-                  {/* Botón del ancho del avatar para subir/actualizar foto */}
                   <label
                     htmlFor="paciente-avatar-input"
-                    className="w-[52px] py-1 px-1 rounded-lg bg-surface-clean-white hover:bg-surface-container border border-border-subtle text-[9px] font-black text-dental-deep-navy text-center cursor-pointer shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-0.5"
-                    title="Subir foto de perfil comprimida del paciente"
+                    className="w-14 py-1 px-1 rounded-lg bg-surface-clean-white hover:bg-surface-container border border-border-subtle text-[9px] font-black text-dental-deep-navy text-center cursor-pointer shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1"
+                    title="Actualizar foto de perfil del paciente"
                   >
                     <span className="material-symbols-outlined text-[11px] text-primary">add_a_photo</span>
                     <span>{isCompressingAvatar ? '...' : 'Foto'}</span>
@@ -807,140 +846,122 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
                   />
                 </div>
 
+                {/* Datos Clínicos y Demográficos */}
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-display font-extrabold text-base text-dental-deep-navy">
+                    <h3 className="font-display font-black text-base sm:text-lg text-dental-deep-navy leading-tight truncate">
                       {selectedCita.pacienteNombre}
                     </h3>
-                    <span className="font-mono font-bold text-xs bg-surface-container px-2.5 py-0.5 rounded-lg text-primary">
+                    <span className="font-mono font-bold text-xs bg-surface-container px-2 py-0.5 rounded-lg text-primary border border-border-subtle">
                       {selectedCita.pacienteCedula}
                     </span>
-                    <span className="text-xs text-secondary font-semibold">
-                      {calcularEdad(selectedCita.pacienteFechaNacimiento)} años • {selectedCita.pacienteSexo || 'Femenino'}
-                    </span>
                     <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                         selectedCita.estado === 'en_sillon'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           : 'bg-primary/10 text-primary border border-primary/20'
                       }`}
                     >
-                      {selectedCita.estado === 'en_sillon' ? '🟢 En Sillón' : '✓ Confirmada'}
+                      {selectedCita.estado === 'en_sillon' ? '🟢 En Sillón' : '✓ Cita Aprobada'}
                     </span>
                   </div>
 
-                  {/* Datos Logísticos y Especialista */}
-                  <div className="flex items-center gap-2 text-xs text-secondary mt-1 flex-wrap">
-                    <span>👨‍⚕️ Facultativo: <strong className="text-dental-deep-navy">{selectedCita.doctorNombre || doctorActivo}</strong></span>
+                  {/* Fila de Metadatos: Edad, Sexo, Sede, Box y Horario */}
+                  <div className="flex items-center gap-2 text-xs text-secondary mt-1 flex-wrap font-medium">
+                    <span>{calcularEdad(selectedCita.pacienteFechaNacimiento)} años • {selectedCita.pacienteSexo || 'Femenino'}</span>
                     <span>•</span>
-                    <span>Box 0{selectedCita.boxNumero || 1} ({selectedCita.sedeId === 'tovar' ? 'La Colonia Tovar' : 'La Victoria'})</span>
+                    <span className="text-dental-deep-navy font-bold">Box 0{selectedCita.boxNumero || 1}</span>
                     <span>•</span>
-                    <span className="font-mono font-bold text-dental-deep-navy">⏰ {selectedCita.horaInicio}</span>
+                    <span>{selectedCita.sedeId === 'tovar' ? 'Sede Colonia Tovar' : 'Sede La Victoria'}</span>
+                    <span>•</span>
+                    <span className="font-mono font-bold text-primary">⏰ {selectedCita.horaInicio}</span>
+                  </div>
+
+                  <div className="text-[11px] text-secondary mt-1 flex items-center gap-1 truncate">
+                    <span>👨‍⚕️ Facultativo Tratante:</span>
+                    <strong className="text-dental-deep-navy">{selectedCita.doctorNombre || doctorActivo}</strong>
                   </div>
                 </div>
               </div>
 
-              {/* Botones de Historial Clínico y Exportar Resumen a la Misma Altura */}
-              <div className="flex items-center gap-2 self-start shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowHistorialModal(true)}
-                  className="h-8 sm:h-9 px-3 rounded-xl bg-dental-deep-navy hover:bg-primary text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  title="Consultar historial clínico completo del paciente"
-                >
-                  <span className="material-symbols-outlined text-[16px]">menu_book</span>
-                  <span>Historial ({historialTratamientos.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const seal = await generateForensicSeal(
-                      `${selectedCita.pacienteId}|${selectedCita.pacienteNombre}|${Date.now()}`,
-                      {
-                        pacienteId: selectedCita.pacienteId,
-                        doctorNombre: doctorActivo,
-                        tipoDocumento: 'evolucion_clinica',
-                      }
-                    );
-                    exportClinicalEvolutionVideo({
-                      fechaConsulta: selectedCita.fechaCita || new Date().toISOString().slice(0, 10),
-                      pacienteNombre: selectedCita.pacienteNombre,
-                      pacienteCedula: selectedCita.pacienteCedula,
-                      doctorNombre: doctorActivo,
-                      sedeNombre: selectedCita.sedeId === 'tovar' ? 'Colonia Tovar' : 'La Victoria',
-                      teeth,
-                      presupuestoTotalUsd: totalPresupuestoUsd,
-                      sha256Seal: seal.shortHash,
-                    });
-                  }}
-                  className="h-8 sm:h-9 px-3 rounded-xl bg-surface-clean-white hover:bg-surface-container border border-border-subtle text-primary text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  title="Exportar clip MP4/HD de evolución dental generado 100% en navegador"
-                >
-                  <span className="material-symbols-outlined text-[16px]">movie_edit</span>
-                  <span>Exportar Resumen</span>
-                </button>
-              </div>
+              {/* Botón Único y Limpio: Historial Clínico Completo */}
+              <button
+                type="button"
+                onClick={() => setShowHistorialModal(true)}
+                className="h-9 px-3.5 rounded-xl bg-dental-deep-navy hover:bg-primary text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer self-start sm:self-center shrink-0"
+                title="Consultar historial clínico completo y notas previas del paciente"
+              >
+                <span className="material-symbols-outlined text-[17px]">menu_book</span>
+                <span>Historial Clínico ({historialTratamientos.length})</span>
+              </button>
             </div>
 
-            {/* Motivo de la Cita / Tratamiento en Reserva */}
-            <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs text-dental-deep-navy flex items-start gap-2">
-              <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">assignment</span>
-              <div className="flex-1">
-                <span className="font-bold text-primary">Tratamiento Reportado en Reserva:</span>{' '}
-                <span className="font-medium">{selectedCita.motivoConsulta}</span>
-              </div>
-            </div>
-
-            {/* Información Médica Relevante (Clinical Safety Alert) */}
-            <div className="p-3 rounded-2xl border text-xs flex flex-col gap-1.5 transition-all bg-surface-subtle-ice border-border-subtle">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-bold text-dental-deep-navy">
-                  <span className="material-symbols-outlined text-[18px] text-primary">medical_information</span>
-                  <span>Información Médica Relevante & Anamnesis</span>
+            {/* 2. Cuadrícula de Información Médica y Diagnóstico en 2 Columnas Equilibradas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Motivo de la Cita / Tratamiento en Reserva */}
+              <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/15 text-xs text-dental-deep-navy flex flex-col justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-primary">
+                  <span className="material-symbols-outlined text-[18px]">assignment</span>
+                  <span>Tratamiento Concertado en Reserva</span>
                 </div>
-
-                {condicionMedicaActiva && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                      condicionMedicaActiva.nivelRiesgo === 'Crítico'
-                        ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
-                        : condicionMedicaActiva.nivelRiesgo === 'Alto'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    }`}
-                  >
-                    Riesgo {condicionMedicaActiva.nivelRiesgo}
-                  </span>
-                )}
+                <p className="font-semibold text-dental-deep-navy text-xs leading-relaxed">
+                  {selectedCita.motivoConsulta}
+                </p>
+                <span className="text-[10px] text-secondary font-medium">
+                  Atención agendada para la fecha: {selectedCita.fechaCita}
+                </span>
               </div>
 
-              {condicionMedicaActiva ? (
-                <div className="space-y-1">
-                  <p className="font-semibold text-dental-deep-navy">
-                    Condición diagnosticada: <span className="text-primary font-bold">{condicionMedicaActiva.nombre}</span> ({condicionMedicaActiva.codigoCie})
-                  </p>
-                  <p className="text-secondary text-[11px] leading-relaxed">
-                    <strong>Protocolo Clínico:</strong> {condicionMedicaActiva.protocoloDental}
-                  </p>
-                  {condicionMedicaActiva.requiereProfilaxisAntibiotica && (
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200">
-                      ⚠️ Requiere Profilaxis Antibiótica Previa
+              {/* Información Médica Relevante (Clinical Safety Alert) */}
+              <div className="p-3.5 rounded-2xl border text-xs flex flex-col justify-between gap-1.5 bg-surface-subtle-ice border-border-subtle">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-dental-deep-navy">
+                    <span className="material-symbols-outlined text-[18px] text-primary">medical_information</span>
+                    <span>Anamnesis & Seguridad Médica</span>
+                  </div>
+
+                  {condicionMedicaActiva && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase ${
+                        condicionMedicaActiva.nivelRiesgo === 'Crítico'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                          : condicionMedicaActiva.nivelRiesgo === 'Alto'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      Riesgo {condicionMedicaActiva.nivelRiesgo}
                     </span>
                   )}
                 </div>
-              ) : (
-                <p className="text-secondary text-[11px] italic">
-                  Paciente sin antecedentes médicos de alerta sistémica reportados. Anamnesis basal dentro de límites normales.
-                </p>
-              )}
+
+                {condicionMedicaActiva ? (
+                  <div className="space-y-1">
+                    <p className="font-semibold text-dental-deep-navy">
+                      Condición: <span className="text-primary font-bold">{condicionMedicaActiva.nombre}</span> ({condicionMedicaActiva.codigoCie})
+                    </p>
+                    <p className="text-secondary text-[11px] leading-relaxed">
+                      <strong>Protocolo:</strong> {condicionMedicaActiva.protocoloDental}
+                    </p>
+                    {condicionMedicaActiva.requiereProfilaxisAntibiotica && (
+                      <span className="inline-block px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200">
+                        ⚠️ Requiere Profilaxis Antibiótica Previa
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-secondary text-[11px] italic">
+                    Sin patologías de alerta sistémica reportadas. Anamnesis basal dentro de límites normales.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
       </section>
 
       {/* =========================================================================
-          2. TARJETA: HIGIENISTA / ASISTENTE EN CITA (PASO 2 DE 5)
+          2. TARJETA: HIGIENISTA / ASISTENTE EN CITA
          ========================================================================= */}
       <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3 relative">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle pb-2.5">
@@ -956,13 +977,6 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
                 Personal de bioseguridad y soporte clínico a cuatro manos asignado a esta atención
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="h-8 px-3 rounded-xl text-xs font-black bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1.5 shrink-0 shadow-2xs">
-              <span className="material-symbols-outlined text-[15px]">looks_two</span>
-              <span>Paso 2 de 5</span>
-            </span>
           </div>
         </div>
 
@@ -983,7 +997,7 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
             >
               {staffHigienistas.map((h) => (
                 <option key={h.id} value={h.id}>
-                  [{h.cedula}] {h.nombres} • {h.areaEspecialidad} (Doctor habitual: {h.doctorAsignado})
+                  {h.nombres}
                 </option>
               ))}
             </select>
@@ -1072,10 +1086,6 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               <span className="material-symbols-outlined text-[16px]">add_circle</span>
               <span>+ Agregar Procedimiento</span>
             </button>
-            <span className="h-8 px-3 rounded-xl text-xs font-black bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 shrink-0 shadow-2xs">
-              <span className="material-symbols-outlined text-[15px]">looks_4</span>
-              <span>Paso 4 de 5</span>
-            </span>
           </div>
         </div>
 
@@ -1200,10 +1210,6 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
               </span>
               <span>{modoNuevaEvolucion ? 'Ver Última Nota' : '+ Redactar Nueva Evolución'}</span>
             </button>
-            <span className="h-8 px-3 rounded-xl text-xs font-black bg-teal-50 text-teal-800 border border-teal-200 flex items-center gap-1.5 shrink-0 shadow-2xs">
-              <span className="material-symbols-outlined text-[15px]">looks_5</span>
-              <span>Paso 5 de 5</span>
-            </span>
           </div>
         </div>
 

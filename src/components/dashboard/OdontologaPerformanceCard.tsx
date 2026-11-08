@@ -92,6 +92,53 @@ const ODONTOLOGAS_BASE: OdontologaRendimientoItem[] = [
     },
   },
   {
+    id: 'odo-julianny',
+    nombres: 'Dra. Julianny Ramos',
+    especialidad: 'Odontología Integral, Estética & Rehabilitación Oral',
+    cov: 'C.O.V. 27.310',
+    cedula: 'V-20.418.920',
+    sedeHabitual: 'Ambas Sedes (Rotación Integral)',
+    sedesValidas: ['victoria', 'tovar'],
+    porcentajeHonorario: 45,
+    guardiaTurno: 'ambos',
+    metricasBase: {
+      dia: {
+        manana: {
+          pacientes: 4,
+          totalCitas: 4,
+          procedimientos: ['2 Restauraciones Estéticas', '1 Blanqueamiento LED', '1 Carilla Resina'],
+          recaudadoUsd: 240,
+          metaUsd: 250,
+          satisfaccion: 99,
+        },
+        tarde: {
+          pacientes: 3,
+          totalCitas: 3,
+          procedimientos: ['1 Diseño de Sonrisa', '1 Pulido & Profilaxis'],
+          recaudadoUsd: 210,
+          metaUsd: 220,
+          satisfaccion: 98,
+        },
+      },
+      semana: {
+        pacientes: 32,
+        totalCitas: 34,
+        procedimientos: ['18 Resinas Estéticas', '8 Blanqueamientos', '4 Carillas'],
+        recaudadoUsd: 2350,
+        metaUsd: 2500,
+        satisfaccion: 98.8,
+      },
+      mes: {
+        pacientes: 135,
+        totalCitas: 140,
+        procedimientos: ['72 Restauraciones', '30 Blanqueamientos', '18 Rehabilitaciones'],
+        recaudadoUsd: 9100,
+        metaUsd: 9600,
+        satisfaccion: 99.1,
+      },
+    },
+  },
+  {
     id: 'odo-2',
     nombres: 'Dra. Carmen Elena Silva',
     especialidad: 'Ortodoncia & Ortopedia Maxilofacial',
@@ -598,16 +645,15 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
             </span>
           </div>
           <div className="h-6 w-px bg-border-subtle" />
-          <div className="px-2 text-center sm:text-left">
-            <span className="text-[9.5px] font-black text-amber-800 uppercase block">Honorarios</span>
-            <span className="text-sm sm:text-base font-display font-black text-amber-600 leading-none">
+          <div className="px-2.5 py-1 rounded-xl bg-amber-100/90 border border-amber-300 text-center sm:text-left shadow-2xs">
+            <span className="text-[9.5px] font-black text-amber-900 uppercase block tracking-wider">Honorarios</span>
+            <span className="text-sm sm:text-base font-display font-black text-amber-700 leading-none">
               ${totalHonorariosUsd.toLocaleString()} USD
             </span>
           </div>
-          <div className="h-6 w-px bg-border-subtle" />
-          <div className="px-2 text-center sm:text-left">
-            <span className="text-[9.5px] font-black text-emerald-800 uppercase block">Dividendos Netos</span>
-            <span className="text-sm sm:text-base font-display font-black text-emerald-600 leading-none">
+          <div className="px-2.5 py-1 rounded-xl bg-emerald-100/90 border border-emerald-300 text-center sm:text-left shadow-2xs">
+            <span className="text-[9.5px] font-black text-emerald-900 uppercase block tracking-wider">Dividendos Netos</span>
+            <span className="text-sm sm:text-base font-display font-black text-emerald-700 leading-none">
               ${totalDividendosNetosUsd.toLocaleString()} USD
             </span>
           </div>

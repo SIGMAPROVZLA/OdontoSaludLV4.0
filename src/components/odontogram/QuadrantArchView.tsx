@@ -27,8 +27,7 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [denticionModo, setDenticionModo] = useState<'adulto' | 'pediatrico'>('adulto');
 
-  // Estado de despliegue: en posición inicial OCULTA hasta la etiqueta última modificación
-  const [isDesplegado, setIsDesplegado] = useState<boolean>(false);
+  // Estado de guardado manual del Odontograma FDI
   const [guardandoExito, setGuardandoExito] = useState<boolean>(false);
 
   // Sincronizar selectedTooth cuando teeth cambia externamente
@@ -173,64 +172,30 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
               </span>
             )}
 
-            {/* Botón en la esquina superior derecha: altura sincronizada h-8 sm:h-9 */}
+            {/* Botón directo de Guardar Odontograma en D1 */}
             <button
               type="button"
               onClick={async () => {
-                if (!isDesplegado) {
-                  setIsDesplegado(true);
-                } else {
-                  if (onSaveOdontograma) {
-                    onSaveOdontograma();
-                  }
-                  setGuardandoExito(true);
-                  setTimeout(() => setGuardandoExito(false), 2200);
+                if (onSaveOdontograma) {
+                  onSaveOdontograma();
                 }
+                setGuardandoExito(true);
+                setTimeout(() => setGuardandoExito(false), 2200);
               }}
-              title={isDesplegado ? 'Guardar cambios del Odontograma FDI en D1' : 'Desplegar Odontograma FDI Activo'}
+              title="Guardar cambios del Odontograma FDI en Cloudflare D1"
               className={`h-8 sm:h-9 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer select-none ${
                 guardandoExito
                   ? 'bg-emerald-700 text-white shadow-emerald-700/20'
-                  : isDesplegado
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 ring-2 ring-emerald-500/20'
-                  : 'bg-dental-deep-navy hover:bg-primary text-white shadow-dental-deep-navy/20'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
               }`}
             >
               <span className="material-symbols-outlined text-[16px]">
-                {guardandoExito ? 'check_circle' : isDesplegado ? 'save' : 'visibility'}
+                {guardandoExito ? 'check_circle' : 'save'}
               </span>
-              <span>{guardandoExito ? '¡Guardado!' : isDesplegado ? 'Guardar' : 'Abrir'}</span>
+              <span>{guardandoExito ? '¡Guardado!' : 'Guardar Odontograma'}</span>
             </button>
-
-            {/* Etiqueta de Paso 3 de 5 a la misma altura del título */}
-            <span className="h-8 sm:h-9 px-3 rounded-xl text-xs font-black bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1.5 shrink-0 shadow-2xs">
-              <span className="material-symbols-outlined text-[15px]">looks_3</span>
-              <span>Paso 3 de 5</span>
-            </span>
           </div>
         </div>
-
-        {!isDesplegado ? (
-          /* Estado Colapsado Inicial: Oculto a partir de Última Modificación */
-          <div className="bg-surface-subtle-ice/70 border border-dashed border-border-subtle rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-secondary animate-in fade-in duration-200">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[20px]">layers</span>
-              <p className="leading-snug">
-                El odontograma FDI vectorial se encuentra en <strong>modo compacto</strong> para optimizar espacio clínico. Pulse <strong>Abrir</strong> para desplegar las arcadas dentales y herramientas de diagnóstico.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsDesplegado(true)}
-              className="px-3 py-1.5 rounded-lg bg-surface-clean-white hover:bg-white text-primary border border-border-subtle font-black text-xs shrink-0 flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
-            >
-              <span>Desplegar</span>
-              <span className="material-symbols-outlined text-[16px]">expand_more</span>
-            </button>
-          </div>
-        ) : (
-          /* Estado Desplegado: Leyenda, Arcadas Anatómicas FDI y Herramientas */
-          <>
 
         {/* Leyenda clínica de estados enriquecida con Endodoncia, Exodoncia, Prótesis e Implante */}
         <div className="flex flex-wrap items-center gap-2 bg-surface-subtle-ice p-2.5 rounded-xl border border-border-subtle text-xs">
@@ -524,8 +489,6 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
             </div>
           </div>
         )}
-        </>
-      )}
       </div>
 
       {/* Modal de Edición de Caras */}

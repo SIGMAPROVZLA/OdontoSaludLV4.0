@@ -2271,6 +2271,7 @@ async function _initControlDataTablesInternal(db: D1Database) {
         ['odo-julianny', 'Dra. Julianny Ramos', 'V-20.418.920', 'C.O.V. 27.310', 'Odontología Integral, Estética & Rehabilitación Oral', '+58 414-7782310', 'j.ramos@odontosalud.ve', 'ambas', 2, 'Completo', 45, 'activo', JSON.stringify(['MAR', 'JUE', 'SÁB']), JSON.stringify(['LUN', 'MIÉ', 'VIE'])],
         ['odo-2', 'Dra. Carmen Elena Silva', 'V-18.329.110', 'C.O.V. 19.450', 'Ortodoncia & Ortopedia Dentofacial', '+58 412-8891234', 'c.silva@odontosalud.ve', 'victoria', 2, 'Mañana', 45, 'activo', JSON.stringify(['LUN', 'MIÉ', 'VIE']), JSON.stringify([])],
         ['odo-3', 'Dra. Valeria Hernández', 'V-21.054.672', 'C.O.V. 22.108', 'Endodoncia Avanzada & Microcirugía Apical', '+58 424-3349011', 'v.hernandez@odontosalud.ve', 'victoria', 1, 'Tarde', 45, 'en_guardia', JSON.stringify(['MAR', 'JUE', 'SÁB']), JSON.stringify([])],
+        ['odo-4', 'Dra. Andrea Morales', 'V-23.891.405', 'C.O.V. 25.334', 'Periodoncia, Prótesis & Cirugía Bucal', '+58 414-9988112', 'a.morales@odontosalud.ve', 'ambas', 1, 'Completo', 40, 'activo', JSON.stringify(['LUN', 'MAR', 'MIÉ']), JSON.stringify(['JUE', 'VIE', 'SÁB'])],
       ];
       for (const o of initialOdo) {
         await db.prepare(`
@@ -2306,6 +2307,36 @@ async function _initControlDataTablesInternal(db: D1Database) {
             'activo',
             JSON.stringify(['MAR', 'JUE', 'SÁB']),
             JSON.stringify(['LUN', 'MIÉ', 'VIE'])
+          )
+          .run();
+      }
+
+      // Asegurar que la Dra. Andrea Morales esté registrada en la plantilla
+      const andreaCheck = await db
+        .prepare(`SELECT id FROM staff_odontologos WHERE LOWER(nombres) LIKE '%andrea%'`)
+        .first();
+      if (!andreaCheck) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO staff_odontologos (
+              id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            'odo-4',
+            'Dra. Andrea Morales',
+            'V-23.891.405',
+            'C.O.V. 25.334',
+            'Periodoncia, Prótesis & Cirugía Bucal',
+            '+58 414-9988112',
+            'a.morales@odontosalud.ve',
+            'ambas',
+            1,
+            'Completo',
+            40,
+            'activo',
+            JSON.stringify(['LUN', 'MAR', 'MIÉ']),
+            JSON.stringify(['JUE', 'VIE', 'SÁB'])
           )
           .run();
       }
