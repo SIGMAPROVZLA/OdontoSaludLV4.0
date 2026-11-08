@@ -72,29 +72,12 @@ export const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
     diasVictoria: ['MAR', 'JUE', 'SÁB'],
     diasTovar: [],
   },
-  {
-    id: 'odo-4',
-    nombres: 'Dra. Andrea Morales',
-    cedula: 'V-23.891.405',
-    cov: 'C.O.V. 25.334',
-    especialidad: 'Periodoncia, Prótesis & Cirugía Bucal',
-    telefono: '+58 414-9988112',
-    email: 'a.morales@odontosalud.ve',
-    sedeId: 'ambas',
-    boxAsignado: 1,
-    turno: 'Completo',
-    porcentajeHonorarios: 40,
-    estado: 'activo',
-    diasVictoria: ['LUN', 'MAR', 'MIÉ'],
-    diasTovar: ['JUE', 'VIE', 'SÁB'],
-  },
 ];
 
 export function normalizarDisponibilidadOdontologo(o: OdontologoItem): OdontologoItem {
   const nombreLower = (o.nombres || '').toLowerCase();
   const esMaria = nombreLower.includes('maría') || nombreLower.includes('maria') || nombreLower.includes('domínguez') || nombreLower.includes('dominguez');
   const esJulianny = nombreLower.includes('julianny');
-  const esAndrea = nombreLower.includes('andrea') || nombreLower.includes('morales');
 
   let diasVictoria = Array.isArray(o.diasVictoria) ? (o.diasVictoria.filter(Boolean) as DiaSemanaClinico[]) : undefined;
   let diasTovar = Array.isArray(o.diasTovar) ? (o.diasTovar.filter(Boolean) as DiaSemanaClinico[]) : undefined;
@@ -106,9 +89,6 @@ export function normalizarDisponibilidadOdontologo(o: OdontologoItem): Odontolog
     } else if (esJulianny) {
       diasVictoria = ['MAR', 'JUE', 'SÁB'];
       diasTovar = ['LUN', 'MIÉ', 'VIE'];
-    } else if (esAndrea) {
-      diasVictoria = ['LUN', 'MAR', 'MIÉ'];
-      diasTovar = ['JUE', 'VIE', 'SÁB'];
     } else if (o.sedeId === 'victoria') {
       diasVictoria = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
       diasTovar = [];
@@ -130,28 +110,17 @@ export function normalizarDisponibilidadOdontologo(o: OdontologoItem): Odontolog
 
   return {
     ...o,
-    sedeId: (esMaria || esJulianny || esAndrea) && (!o.sedeId || o.sedeId === 'ambas') ? 'ambas' : o.sedeId,
+    sedeId: (esMaria || esJulianny) && (!o.sedeId || o.sedeId === 'ambas') ? 'ambas' : o.sedeId,
     diasVictoria: diasVictoria || [],
     diasTovar: diasTovar || [],
   };
 }
 
 export function normalizarListaOdontologos(lista: OdontologoItem[]): OdontologoItem[] {
-  const normalizados = lista.map(normalizarDisponibilidadOdontologo);
-  const listaFinal = [...normalizados];
-
-  // Garantizar que la plantilla oficial de OdontoSalud esté siempre presente
-  for (const baseDoc of INITIAL_ODONTOLOGOS) {
-    const cleanCedula = baseDoc.cedula.replace(/[^0-9]/g, '');
-    const yaExiste = listaFinal.some((d) => {
-      const dCed = (d.cedula || '').replace(/[^0-9]/g, '');
-      return d.id === baseDoc.id || (cleanCedula && dCed === cleanCedula);
-    });
-    if (!yaExiste) {
-      listaFinal.push(baseDoc);
-    }
+  if (!Array.isArray(lista) || lista.length === 0) {
+    return INITIAL_ODONTOLOGOS.map(normalizarDisponibilidadOdontologo);
   }
-  return listaFinal;
+  return lista.map(normalizarDisponibilidadOdontologo);
 }
 
 export function useOdontologos() {

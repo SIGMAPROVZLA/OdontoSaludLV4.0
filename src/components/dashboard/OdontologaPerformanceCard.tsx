@@ -232,53 +232,6 @@ const ODONTOLOGAS_BASE: OdontologaRendimientoItem[] = [
       },
     },
   },
-  {
-    id: 'odo-4',
-    nombres: 'Dra. Andrea Morales',
-    especialidad: 'Periodoncia, Prótesis & Cirugía Bucal',
-    cov: 'C.O.V. 25.334',
-    cedula: 'V-23.891.405',
-    sedeHabitual: 'Sede Colonia Tovar & La Victoria',
-    sedesValidas: ['victoria', 'tovar'],
-    porcentajeHonorario: 40,
-    guardiaTurno: 'ambos',
-    metricasBase: {
-      dia: {
-        manana: {
-          pacientes: 3,
-          totalCitas: 3,
-          procedimientos: ['1 Raspado Periodontal', '1 Gingivectomía', '1 Toma Impresión'],
-          recaudadoUsd: 190,
-          metaUsd: 200,
-          satisfaccion: 96,
-        },
-        tarde: {
-          pacientes: 2,
-          totalCitas: 2,
-          procedimientos: ['1 Prueba de Prótesis', '1 Cirugía Cordal Simple'],
-          recaudadoUsd: 170,
-          metaUsd: 180,
-          satisfaccion: 97,
-        },
-      },
-      semana: {
-        pacientes: 24,
-        totalCitas: 25,
-        procedimientos: ['12 Cirugías Menores', '8 Prótesis Removibles', '4 Mantenimientos'],
-        recaudadoUsd: 1720,
-        metaUsd: 1800,
-        satisfaccion: 97.5,
-      },
-      mes: {
-        pacientes: 98,
-        totalCitas: 104,
-        procedimientos: ['48 Tratamientos Periodontales', '32 Prótesis Dentales', '18 Cirugías'],
-        recaudadoUsd: 6950,
-        metaUsd: 7200,
-        satisfaccion: 98.2,
-      },
-    },
-  },
 ];
 
 interface OdontologaPerformanceCardProps {
