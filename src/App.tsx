@@ -13,6 +13,7 @@ import { AppointmentCoordinationView } from './components/booking/AppointmentCoo
 import { VictoriaAssistantModal } from './components/booking/VictoriaAssistantModal';
 import { ControlDataView } from './components/data/ControlDataView';
 import { SuperAdminView } from './components/superadmin/SuperAdminView';
+import { LoginView } from './components/auth/LoginView';
 
 import { useDeviceLayout } from './hooks/useDeviceLayout';
 import { DesktopSidebar } from './components/layout/DesktopSidebar';
@@ -25,17 +26,19 @@ const parseTabFromLocation = (): TabId => {
   const target = cleanHash || cleanPath;
 
   if (target === 'reserva' || target === 'autoregistro' || target === 'citas' || target === 'cita') return 'reserva';
+  if (target === 'login' || target === 'auth' || target === 'acceso' || target === 'logueo' || target === 'identificacion') return 'login';
   if (target === 'coordinacion' || target === 'triaje') return 'coordinacion';
   if (target === 'agenda') return 'agenda';
   if (target === 'odontograma' || target === 'ficha') return 'odontograma';
   if (target === 'cobros') return 'cobros';
   if (target === 'data' || target === 'control-data' || target === 'controldata') return 'data';
-  if (target === 'superadmin' || target === 'admin' || target === 'usuarios' || target === 'auth' || target === 'gobernanza' || target === 'citadel' || target === 'telemetria') return 'superadmin';
+  if (target === 'superadmin' || target === 'admin' || target === 'usuarios' || target === 'gobernanza' || target === 'citadel' || target === 'telemetria') return 'superadmin';
   if (target === 'dashboard' || target === 'inicio') return 'dashboard';
 
   const params = new URLSearchParams(window.location.search);
   const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase();
   if (tabParam === 'reserva' || tabParam === 'autoregistro') return 'reserva';
+  if (tabParam === 'login' || tabParam === 'auth' || tabParam === 'acceso') return 'login';
   if (tabParam === 'coordinacion' || tabParam === 'triaje') return 'coordinacion';
   if (tabParam === 'agenda') return 'agenda';
   if (tabParam === 'odontograma') return 'odontograma';
@@ -64,6 +67,14 @@ export const AppContent: React.FC = () => {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  if (activeTab === 'login') {
+    return (
+      <div className="min-h-screen bg-slate-900 font-sans antialiased">
+        <LoginView onNavigateTab={setActiveTab} />
+      </div>
+    );
+  }
 
   if (isDesktop) {
     return (

@@ -8,7 +8,8 @@ export type TabId =
   | 'cobros'
   | 'reserva'
   | 'data'
-  | 'superadmin';
+  | 'superadmin'
+  | 'login';
 
 interface BottomNavigationProps {
   activeTab: TabId;

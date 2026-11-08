@@ -4396,324 +4396,559 @@ export const ControlDataView: React.FC = () => {
       })()}
 
       {/* ---------------------------------------------------------------------
-          SECCIÓN 04: CONTROL DE CITAS PROGRAMADAS (APROBACIONES & MULTI-FILTRO)
+          SECCIÓN 04: RESUMEN ANALÍTICO DE CITAS EN FUNCIÓN DEL TIEMPO Y ODONTÓLOGOS
          --------------------------------------------------------------------- */}
-      {activeTab === 'citas' && (
-        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-vibrant-cyan" />
+      {activeTab === 'citas' && (() => {
+        // Métricas calculadas en función de los odontólogos y el tiempo
+        const hoyIso = new Date().toISOString().slice(0, 10);
+        const citasCompletadas = citas.filter((c) => c.estado === 'completada').length;
+        const citasEnSillon = citas.filter((c) => c.estado === 'en_sillon').length;
+        const citasConfirmadas = citas.filter((c) => c.estado === 'confirmada').length;
+        const citasUrgencias = citas.filter((c) => c.esUrgencia).length;
+        const citasHoyCount = citas.filter((c) => c.fechaCita === hoyIso).length;
 
-          {/* Header Módulo 04 • Citas */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">event_available</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 04
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
-                    Control de Agenda
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {citas.length} citas ({citasPendientesCount} por confirmar)
-                  </span>
+        // Distribución por Turnos (Mañana vs Tarde)
+        const citasManana = citas.filter((c) => {
+          const h = (c.horaInicio || '').toUpperCase();
+          return h.includes('AM') || h.startsWith('08') || h.startsWith('09') || h.startsWith('10') || h.startsWith('11');
+        }).length;
+        const citasTarde = citas.length - citasManana;
+
+        // Distribución por Sede
+        const citasVictoriaCount = citas.filter((c) => c.sedeId === 'victoria' || !c.sedeId).length;
+        const citasTovarCount = citas.filter((c) => c.sedeId === 'tovar').length;
+
+        // Procedimientos agrupados
+        const procedimientosCountMap: Record<string, number> = {};
+        citas.forEach((c) => {
+          const m = c.motivo || 'Evaluación General';
+          procedimientosCountMap[m] = (procedimientosCountMap[m] || 0) + 1;
+        });
+        const topProcedimientos = Object.entries(procedimientosCountMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4);
+
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-5 relative overflow-hidden animate-in fade-in duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-sky-500 via-primary to-dental-deep-navy" />
+
+            {/* Header Módulo 04 • Resumen Analítico de Citas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[26px]">insights</span>
                 </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Agenda Operativa & Control de Citas
-                </h2>
-              </div>
-            </div>
-
-            {/* Acción de Aprobación en Lote */}
-            {citasPendientesCount > 0 && (
-              <button
-                type="button"
-                onClick={handleAprobarTodasPendientes}
-                className="px-3.5 py-1.5 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-              >
-                <span className="material-symbols-outlined text-[16px]">done_all</span>
-                <span>Aprobar {citasPendientesCount} Pendientes</span>
-              </button>
-            )}
-          </div>
-
-          {/* Multi-Filtro Avanzado (Doctor, Paciente, Fecha, Tratamiento, Estado) */}
-          <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-primary">filter_list</span>
-                Filtros Multicriterio de Citas
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCitasFiltroDoctor('todos');
-                  setCitasFiltroPaciente('');
-                  setCitasFiltroFecha('todas');
-                  setCitasFechaEspecifica('');
-                  setCitasFiltroTratamiento('todos');
-                  setCitasFiltroEstado('todos');
-                }}
-                className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
-              >
-                Restablecer Filtros
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-              {/* Filtro 1: Doctor */}
-              <div>
-                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
-                  Filtrar por Odontólogo
-                </label>
-                <select
-                  value={citasFiltroDoctor}
-                  onChange={(e) => setCitasFiltroDoctor(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
-                >
-                  <option value="todos">Todos los Odontólogos</option>
-                  {odontologos.map((doc) => (
-                    <option key={doc.id} value={doc.nombres}>
-                      {doc.nombres}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filtro 2: Paciente */}
-              <div>
-                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
-                  Paciente (Nombre o Cédula)
-                </label>
-                <input
-                  type="text"
-                  value={citasFiltroPaciente}
-                  onChange={(e) => setCitasFiltroPaciente(e.target.value)}
-                  placeholder="Ej. Raymond o 16.762..."
-                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy px-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              {/* Filtro 3: Fecha */}
-              <div>
-                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
-                  Rango de Fecha
-                </label>
-                <select
-                  value={citasFiltroFecha}
-                  onChange={(e) => setCitasFiltroFecha(e.target.value as any)}
-                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
-                >
-                  <option value="todas">Todas las Fechas</option>
-                  <option value="hoy">Citas de Hoy</option>
-                  <option value="semana">Esta Semana</option>
-                  <option value="especifica">Fecha Específica...</option>
-                </select>
-              </div>
-
-              {/* Filtro 4: Tratamiento */}
-              <div>
-                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
-                  Tratamiento / Motivo
-                </label>
-                <select
-                  value={citasFiltroTratamiento}
-                  onChange={(e) => setCitasFiltroTratamiento(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
-                >
-                  <option value="todos">Todos los Tratamientos</option>
-                  {tratamientos.map((t) => (
-                    <option key={t.id} value={t.nombre}>
-                      {t.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filtro 5: Estado de Aprobación */}
-              <div>
-                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
-                  Estado de Cita
-                </label>
-                <select
-                  value={citasFiltroEstado}
-                  onChange={(e) => setCitasFiltroEstado(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy px-2"
-                >
-                  <option value="todos">Todos los Estados</option>
-                  <option value="pendiente">🟡 Pendiente de Aprobación</option>
-                  <option value="confirmada">🟢 Confirmada / Aprobada</option>
-                  <option value="en_sillon">🔵 En Sillón</option>
-                  <option value="completada">⚪ Completada</option>
-                  <option value="cancelada">🔴 Cancelada</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Input complementario si seleccionó Fecha Específica */}
-            {citasFiltroFecha === 'especifica' && (
-              <div className="flex items-center gap-2 pt-2 border-t border-border-subtle/50">
-                <span className="text-xs font-bold text-dental-deep-navy">Seleccionar fecha:</span>
-                <input
-                  type="date"
-                  value={citasFechaEspecifica}
-                  onChange={(e) => setCitasFechaEspecifica(e.target.value)}
-                  className="h-8 px-2.5 rounded-lg border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Listado de Citas Programadas */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
-              <span>CITAS ENCONTRADAS ({citasFiltradas.length})</span>
-              <span>Aprobación rápida & gestión de sillón</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto pr-1">
-              {citasFiltradas.length === 0 ? (
-                <div className="col-span-full py-12 text-center text-secondary text-xs">
-                  <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/40">event_busy</span>
-                  No se encontraron citas con los filtros seleccionados.
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 04
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
+                      Análisis Cronológico & Facultativo
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {citas.length} citas registradas • {odontologos.length} odontólogos en monitoreo
+                    </span>
+                  </div>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Resumen de Citas en Función del Tiempo & Desempeño por Odontólogo
+                  </h2>
+                  <p className="text-xs text-secondary mt-0.5">
+                    Evaluación analítica y estadística del flujo de pacientes, distribución horaria por turnos y volumen por facultativo
+                  </p>
                 </div>
-              ) : (
-                citasFiltradas.map((c) => {
-                  const isPendiente = c.estado === 'pendiente';
-                  const isConfirmada = c.estado === 'confirmada';
-                  const isEnSillon = c.estado === 'en_sillon';
+              </div>
 
-                  const badgeClass =
-                    c.estado === 'confirmada'
-                      ? 'bg-status-success/15 text-status-success border-status-success/30'
-                      : c.estado === 'en_sillon'
-                      ? 'bg-sky-100 text-sky-800 border-sky-300'
-                      : c.estado === 'completada'
-                      ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
-                      : c.estado === 'cancelada'
-                      ? 'bg-status-danger/15 text-status-danger border-status-danger/30'
-                      : 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-300/50';
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="px-3 py-1.5 rounded-xl bg-surface-subtle-ice text-dental-deep-navy font-bold text-xs border border-border-subtle flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-sky-600">query_builder</span>
+                  <span>Hoy: {citasHoyCount} citas</span>
+                </span>
+              </div>
+            </div>
 
-                  const labelEstado =
-                    c.estado === 'confirmada'
-                      ? '🟢 Aprobada / Confirmada'
-                      : c.estado === 'en_sillon'
-                      ? '🔵 En Sillón'
-                      : c.estado === 'completada'
-                      ? '⚪ Completada'
-                      : c.estado === 'cancelada'
-                      ? '🔴 Cancelada'
-                      : '🟡 Pendiente de Aprobación';
+            {/* =====================================================================
+                TARJETA EJECUTIVA DE CITAS EN 3 COLUMNAS VISUALES Y RELEVANTES
+               ===================================================================== */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Columna 1: Distribución por Odontóloga / Odontólogo */}
+              <div className="p-4 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-[19px]">stethoscope</span>
+                      <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy">
+                        Desempeño por Odontólogo
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">
+                      Citas Asignadas
+                    </span>
+                  </div>
 
-                  return (
-                    <div
-                      key={c.id}
-                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                        isPendiente
-                          ? 'bg-amber-50/60 border-amber-300 shadow-sm'
-                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
-                      }`}
-                    >
-                      <div>
-                        {/* Cabecera de la Cita */}
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${badgeClass}`}>
-                            {labelEstado}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            {c.esUrgencia && (
-                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-status-danger text-white">
-                                Urgencia
+                  <div className="space-y-2.5 mt-3">
+                    {odontologos.map((doc) => {
+                      const citasDoc = citas.filter(
+                        (c) =>
+                          (c.doctorNombre || '').toLowerCase().includes(doc.nombres.toLowerCase()) ||
+                          doc.nombres.toLowerCase().includes((c.doctorNombre || '').toLowerCase())
+                      );
+                      const totalDoc = citasDoc.length;
+                      const pctDoc = citas.length > 0 ? Math.round((totalDoc / citas.length) * 100) : 0;
+                      const estimacionHoras = (totalDoc * 0.75).toFixed(1);
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className="bg-white p-2.5 rounded-xl border border-border-subtle/80 flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {doc.avatar ? (
+                                <img
+                                  src={doc.avatar}
+                                  alt={doc.nombres}
+                                  className="w-7 h-7 rounded-lg object-cover border border-primary/20 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-lg bg-dental-deep-navy text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  {doc.nombres.replace(/^Dr[a]?\.\s*/i, '').slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="font-bold text-xs text-dental-deep-navy truncate block">
+                                  {doc.nombres}
+                                </span>
+                                <span className="text-[10px] text-secondary truncate block">
+                                  {doc.especialidad} • Box 0{doc.boxAsignado || 1}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-display font-black text-sm text-primary">
+                                {totalDoc}
                               </span>
-                            )}
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy">
-                              {c.sedeId === 'tovar' ? 'Tovar (Box 01)' : `Victoria (Box 0${c.boxNumero || 1})`}
-                            </span>
+                              <span className="text-[10px] text-secondary block font-mono">
+                                {pctDoc}% del total
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Barra de Proporción y Horas de Sillón */}
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-primary h-full rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, Math.max(5, pctDoc))}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-secondary pt-0.5">
+                            <span>Sede: {doc.sedeId === 'ambas' ? 'La Victoria / Tovar' : doc.sedeId === 'victoria' ? 'La Victoria' : 'Colonia Tovar'}</span>
+                            <span className="font-semibold text-dental-deep-navy">~{estimacionHoras} hrs en sillón</span>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
 
-                        {/* Paciente y Cédula */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className="w-8 h-8 rounded-lg bg-dental-deep-navy text-white font-bold text-xs flex items-center justify-center shrink-0">
-                            {c.pacienteNombre.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-xs text-dental-deep-navy truncate">
-                              {c.pacienteNombre}
-                            </h4>
-                            <div className="flex items-center gap-1.5 text-[10px] text-secondary">
-                              <span className="font-mono font-bold text-primary">{c.pacienteCedula}</span>
-                              {c.pacienteTelefono && (
-                                <>
-                                  <span>•</span>
-                                  <span>{c.pacienteTelefono}</span>
-                                </>
+              {/* Columna 2: Distribución en Función del Tiempo (Turnos & Línea Temporal) */}
+              <div className="p-4 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sky-600 text-[19px]">schedule</span>
+                      <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy">
+                        Distribución en el Tiempo & Turnos
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">
+                      Cronología
+                    </span>
+                  </div>
+
+                  {/* Cuadrícula de Turnos Mañana vs Tarde */}
+                  <div className="grid grid-cols-2 gap-2.5 mt-3">
+                    <div className="bg-white p-3 rounded-xl border border-border-subtle text-center">
+                      <span className="text-xs">🌅</span>
+                      <span className="text-[10px] font-bold text-secondary uppercase block mt-1">
+                        Turno Mañana
+                      </span>
+                      <span className="text-[10px] text-secondary font-mono block">08:30 AM – 12:30 PM</span>
+                      <span className="font-display font-black text-lg text-dental-deep-navy block mt-1">
+                        {citasManana}{' '}
+                        <span className="text-xs font-normal text-secondary">
+                          ({citas.length > 0 ? Math.round((citasManana / citas.length) * 100) : 0}%)
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-border-subtle text-center">
+                      <span className="text-xs">🌇</span>
+                      <span className="text-[10px] font-bold text-secondary uppercase block mt-1">
+                        Turno Tarde
+                      </span>
+                      <span className="text-[10px] text-secondary font-mono block">01:15 PM – 05:00 PM</span>
+                      <span className="font-display font-black text-lg text-dental-deep-navy block mt-1">
+                        {citasTarde}{' '}
+                        <span className="text-xs font-normal text-secondary">
+                          ({citas.length > 0 ? Math.round((citasTarde / citas.length) * 100) : 0}%)
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Resumen de Estados Clínicos */}
+                  <div className="bg-white p-3 rounded-xl border border-border-subtle mt-3 space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-secondary block">
+                      Estado Clínico de las Citas
+                    </span>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-dental-deep-navy">
+                        <span className="w-2 h-2 rounded-full bg-status-success" />
+                        <span>Aprobadas / Confirmadas:</span>
+                      </span>
+                      <strong className="text-status-success font-black">{citasConfirmadas}</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-dental-deep-navy">
+                        <span className="w-2 h-2 rounded-full bg-sky-500" />
+                        <span>En Sillón / Atención activa:</span>
+                      </span>
+                      <strong className="text-sky-600 font-black">{citasEnSillon}</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-dental-deep-navy">
+                        <span className="w-2 h-2 rounded-full bg-slate-500" />
+                        <span>Completadas con éxito:</span>
+                      </span>
+                      <strong className="text-dental-deep-navy font-black">{citasCompletadas}</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-status-danger">
+                        <span className="w-2 h-2 rounded-full bg-status-danger" />
+                        <span>Urgencias Atendidas:</span>
+                      </span>
+                      <strong className="text-status-danger font-black">{citasUrgencias}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-[11px] font-medium flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-sky-700 shrink-0">event_note</span>
+                  <span>Monitoreo continuo conforme a la agenda de sillones y triaje</span>
+                </div>
+              </div>
+
+              {/* Columna 3: Procedimientos Frecuentes, Sedes & Tiempos Clínicos */}
+              <div className="p-4 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-emerald-600 text-[19px]">dentistry</span>
+                      <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy">
+                        Procedimientos & Sedes
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">
+                      Carga Clínica
+                    </span>
+                  </div>
+
+                  {/* Comparativa por Sedes */}
+                  <div className="grid grid-cols-2 gap-2.5 mt-3">
+                    <div className="bg-white p-2.5 rounded-xl border border-border-subtle">
+                      <span className="text-[10px] text-secondary font-bold block">🏢 La Victoria</span>
+                      <span className="font-display font-black text-base text-dental-deep-navy block mt-0.5">
+                        {citasVictoriaCount} citas
+                      </span>
+                      <span className="text-[10px] text-secondary font-mono">Boxes 01 y 02</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-border-subtle">
+                      <span className="text-[10px] text-secondary font-bold block">🌲 Colonia Tovar</span>
+                      <span className="font-display font-black text-base text-dental-deep-navy block mt-0.5">
+                        {citasTovarCount} citas
+                      </span>
+                      <span className="text-[10px] text-secondary font-mono">Box 01 Integral</span>
+                    </div>
+                  </div>
+
+                  {/* Top Procedimientos Clínicos Solicitados */}
+                  <div className="bg-white p-3 rounded-xl border border-border-subtle mt-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-secondary block mb-2">
+                      Procedimientos Más Frecuentes
+                    </span>
+                    <div className="space-y-1.5">
+                      {topProcedimientos.map(([proc, cnt]) => (
+                        <div key={proc} className="flex items-center justify-between text-xs">
+                          <span className="text-dental-deep-navy font-semibold truncate pr-2">
+                            🦷 {proc}
+                          </span>
+                          <span className="font-mono font-bold text-primary shrink-0 bg-surface-subtle-ice px-2 py-0.5 rounded-md">
+                            {cnt} {cnt === 1 ? 'cita' : 'citas'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-white border border-border-subtle flex items-center justify-between text-xs">
+                  <span className="text-secondary font-semibold">Promedio de duración en box:</span>
+                  <strong className="text-dental-deep-navy font-black">~40 minutos / cita</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* =====================================================================
+                FILTROS MULTICRITERIO PARA CONSULTA HISTÓRICA DE CITAS
+               ===================================================================== */}
+            <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-primary">filter_list</span>
+                  Filtros de Exploración Histórica de Citas
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCitasFiltroDoctor('todos');
+                    setCitasFiltroPaciente('');
+                    setCitasFiltroFecha('todas');
+                    setCitasFechaEspecifica('');
+                    setCitasFiltroTratamiento('todos');
+                    setCitasFiltroEstado('todos');
+                  }}
+                  className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                >
+                  Restablecer Filtros
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                {/* Filtro 1: Doctor */}
+                <div>
+                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                    Filtrar por Odontólogo
+                  </label>
+                  <select
+                    value={citasFiltroDoctor}
+                    onChange={(e) => setCitasFiltroDoctor(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                  >
+                    <option value="todos">Todos los Odontólogos</option>
+                    {odontologos.map((doc) => (
+                      <option key={doc.id} value={doc.nombres}>
+                        {doc.nombres}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Filtro 2: Paciente */}
+                <div>
+                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                    Paciente (Nombre o Cédula)
+                  </label>
+                  <input
+                    type="text"
+                    value={citasFiltroPaciente}
+                    onChange={(e) => setCitasFiltroPaciente(e.target.value)}
+                    placeholder="Ej. Raymond o 16.762..."
+                    className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy px-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Filtro 3: Fecha */}
+                <div>
+                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                    Rango de Fecha
+                  </label>
+                  <select
+                    value={citasFiltroFecha}
+                    onChange={(e) => setCitasFiltroFecha(e.target.value as any)}
+                    className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                  >
+                    <option value="todas">Todas las Fechas</option>
+                    <option value="hoy">Citas de Hoy</option>
+                    <option value="semana">Esta Semana</option>
+                    <option value="especifica">Fecha Específica...</option>
+                  </select>
+                </div>
+
+                {/* Filtro 4: Tratamiento */}
+                <div>
+                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                    Tratamiento / Motivo
+                  </label>
+                  <select
+                    value={citasFiltroTratamiento}
+                    onChange={(e) => setCitasFiltroTratamiento(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-semibold text-dental-deep-navy px-2"
+                  >
+                    <option value="todos">Todos los Tratamientos</option>
+                    {tratamientos.map((t) => (
+                      <option key={t.id} value={t.nombre}>
+                        {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Filtro 5: Estado de la Cita */}
+                <div>
+                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">
+                    Estado Clínico
+                  </label>
+                  <select
+                    value={citasFiltroEstado}
+                    onChange={(e) => setCitasFiltroEstado(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy px-2"
+                  >
+                    <option value="todos">Todos los Estados</option>
+                    <option value="confirmada">🟢 Confirmada</option>
+                    <option value="en_sillon">🔵 En Sillón</option>
+                    <option value="completada">⚪ Completada</option>
+                    <option value="pendiente">🟡 Pendiente</option>
+                    <option value="cancelada">🔴 Cancelada</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Input complementario si seleccionó Fecha Específica */}
+              {citasFiltroFecha === 'especifica' && (
+                <div className="flex items-center gap-2 pt-2 border-t border-border-subtle/50">
+                  <span className="text-xs font-bold text-dental-deep-navy">Seleccionar fecha:</span>
+                  <input
+                    type="date"
+                    value={citasFechaEspecifica}
+                    onChange={(e) => setCitasFechaEspecifica(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg border border-border-subtle bg-white text-xs font-bold text-dental-deep-navy"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* =====================================================================
+                GRILLA DE CITAS EN 3 COLUMNAS RESPONSIVAS (VISUALIZACIÓN RELEVANTE)
+               ===================================================================== */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
+                <span>HISTORIAL DE CITAS ENCONTRADAS ({citasFiltradas.length})</span>
+                <span>Visualización analítica en 3 columnas</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[560px] overflow-y-auto pr-1">
+                {citasFiltradas.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-secondary text-xs">
+                    <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/40">event_busy</span>
+                    No se encontraron citas con los criterios seleccionados.
+                  </div>
+                ) : (
+                  citasFiltradas.map((c) => {
+                    const badgeClass =
+                      c.estado === 'confirmada'
+                        ? 'bg-status-success/15 text-status-success border-status-success/30'
+                        : c.estado === 'en_sillon'
+                        ? 'bg-sky-100 text-sky-800 border-sky-300'
+                        : c.estado === 'completada'
+                        ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+                        : c.estado === 'cancelada'
+                        ? 'bg-status-danger/15 text-status-danger border-status-danger/30'
+                        : 'bg-amber-100 text-amber-900 border-amber-300';
+
+                    const labelEstado =
+                      c.estado === 'confirmada'
+                        ? '🟢 Confirmada'
+                        : c.estado === 'en_sillon'
+                        ? '🔵 En Sillón'
+                        : c.estado === 'completada'
+                        ? '⚪ Completada'
+                        : c.estado === 'cancelada'
+                        ? '🔴 Cancelada'
+                        : '🟡 Pendiente';
+
+                    return (
+                      <div
+                        key={c.id}
+                        className="p-3.5 rounded-2xl border border-border-subtle bg-surface-subtle-ice hover:bg-surface-container transition-all flex flex-col justify-between gap-3 shadow-2xs"
+                      >
+                        <div className="space-y-2.5">
+                          {/* Cabecera de la Cita */}
+                          <div className="flex items-start justify-between gap-2">
+                            <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${badgeClass}`}>
+                              {labelEstado}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {c.esUrgencia && (
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-status-danger text-white">
+                                  Urgencia
+                                </span>
                               )}
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy">
+                                {c.sedeId === 'tovar' ? '🌲 Col. Tovar' : `🏢 Victoria (Box 0${c.boxNumero || 1})`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Paciente */}
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-dental-deep-navy text-white font-display font-black text-xs flex items-center justify-center shrink-0">
+                              {c.pacienteNombre.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-display font-extrabold text-xs sm:text-sm text-dental-deep-navy truncate">
+                                {c.pacienteNombre}
+                              </h4>
+                              <div className="flex items-center gap-1.5 text-[11px] text-secondary font-mono">
+                                <span className="font-bold text-primary">{c.pacienteCedula}</span>
+                                {c.pacienteTelefono && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{c.pacienteTelefono}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Ficha Resumen de Cita */}
+                          <div className="bg-white p-2.5 rounded-xl border border-border-subtle/80 space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between font-bold text-dental-deep-navy">
+                              <span>📅 {c.fechaCita}</span>
+                              <span className="font-mono text-primary">⏰ {c.horaInicio}</span>
+                            </div>
+                            <div className="text-secondary font-medium truncate">
+                              👨‍⚕️ <strong className="text-dental-deep-navy font-semibold">{c.doctorNombre}</strong>
+                            </div>
+                            <div className="text-primary font-bold truncate">
+                              🦷 {c.motivo}
                             </div>
                           </div>
                         </div>
 
-                        {/* Ficha de la Cita (Fecha, Hora, Doctor, Motivo) */}
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-border-subtle/50 text-[11px] space-y-1 mt-2">
-                          <div className="flex items-center justify-between font-bold text-dental-deep-navy">
-                            <span>📅 {c.fechaCita}</span>
-                            <span>⏰ {c.horaInicio}</span>
-                          </div>
-                          <div className="text-secondary font-medium truncate">
-                            👨‍⚕️ <span className="font-semibold text-dental-deep-navy">{c.doctorNombre}</span>
-                          </div>
-                          <div className="text-primary font-bold truncate">
-                            🦷 {c.motivo}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Footer de Acciones y Aprobación */}
-                      <div className="pt-2 border-t border-border-subtle/60 flex flex-col gap-2">
-                        {isPendiente && (
-                          <button
-                            type="button"
-                            onClick={() => handleAprobarCita(c)}
-                            className="w-full py-2 px-3 rounded-xl bg-status-success hover:bg-dental-deep-navy text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                            <span>Aprobar Cita</span>
-                          </button>
-                        )}
-
-                        <div className="flex items-center justify-between gap-1.5">
-                          <select
-                            value={c.estado}
-                            onChange={(e) => handleCambiarEstadoCita(c, e.target.value as any)}
-                            className="flex-1 h-8 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-dental-deep-navy"
-                          >
-                            <option value="pendiente">🟡 Pendiente</option>
-                            <option value="confirmada">🟢 Confirmada</option>
-                            <option value="en_sillon">🔵 En Sillón</option>
-                            <option value="completada">⚪ Completada</option>
-                            <option value="cancelada">🔴 Cancelada</option>
-                          </select>
-
+                        {/* Pie de Ficha con ID y Acción de Eliminación o Consulta */}
+                        <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[10px] text-secondary">
+                          <span className="font-mono">ID: {c.id}</span>
                           <button
                             type="button"
                             onClick={() => handleEliminarCita(c.id, c.pacienteNombre)}
-                            title="Eliminar cita"
-                            className="h-8 px-2.5 rounded-lg bg-white border border-border-subtle text-status-danger hover:bg-status-danger/10 text-xs font-bold active:scale-95 transition-all cursor-pointer"
+                            title="Eliminar registro histórico de cita"
+                            className="p-1 rounded-lg hover:bg-status-danger/10 text-status-danger transition-colors cursor-pointer"
                           >
                             <span className="material-symbols-outlined text-[15px]">delete</span>
                           </button>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        </section>
-      )}
+          </section>
+        );
+      })()}
 
       {/* ---------------------------------------------------------------------
           SECCIÓN 04: CATÁLOGO DE TRATAMIENTOS, DATOS CLÍNICOS Y COSTOS

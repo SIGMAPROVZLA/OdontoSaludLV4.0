@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSede, SEDES_DISPONIBLES } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { TabId } from '../layout/BottomNavigation';
@@ -279,6 +279,99 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Estados para adaptación y presentación profesional vía QR y WhatsApp
+  const [showQrShareModal, setShowQrShareModal] = useState<boolean>(false);
+  const [qrSedeDestino, setQrSedeDestino] = useState<SedeId | 'todas'>('todas');
+  const [enlaceCopiado, setEnlaceCopiado] = useState<boolean>(false);
+  const [resumenCopiado, setResumenCopiado] = useState<boolean>(false);
+
+  // Detección de canal de acceso (QR, WhatsApp o directo)
+  const canalAcceso = useMemo<'qr' | 'whatsapp' | 'directo'>(() => {
+    if (typeof window === 'undefined') return 'directo';
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+      const hashSearch = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : null;
+      const param = (
+        searchParams.get('src') ||
+        searchParams.get('source') ||
+        searchParams.get('origen') ||
+        hashSearch?.get('src') ||
+        hashSearch?.get('source') ||
+        hashSearch?.get('origen') ||
+        ''
+      ).toLowerCase();
+
+      if (param.includes('qr')) return 'qr';
+      if (param.includes('wa') || param.includes('whatsapp')) return 'whatsapp';
+    } catch {}
+    return 'directo';
+  }, []);
+
+  // Helpers para generar y compartir enlaces de reserva vía QR y WhatsApp
+  const getUrlReserva = (sede?: SedeId | 'todas', canal: 'qr' | 'wa' | 'web' = 'qr') => {
+    if (typeof window === 'undefined') return 'https://odontosaludlv.com/#reserva';
+    const origin = window.location.origin || 'http://localhost:3000';
+    const pathname = window.location.pathname || '/';
+    const baseUrl = `${origin}${pathname}#reserva`;
+    const params = new URLSearchParams();
+    if (sede && sede !== 'todas') params.set('sede', sede);
+    params.set('src', canal);
+    return `${baseUrl}?${params.toString()}`;
+  };
+
+  const copiarEnlaceReserva = async () => {
+    const url = getUrlReserva(qrSedeDestino === 'todas' ? undefined : qrSedeDestino, 'qr');
+    try {
+      await navigator.clipboard.writeText(url);
+      setEnlaceCopiado(true);
+      setTimeout(() => setEnlaceCopiado(false), 3000);
+    } catch {
+      // Fallback manual si clipboard falla
+      prompt('Copia el enlace de reserva oficial:', url);
+    }
+  };
+
+  const compartirEnlaceWhatsApp = () => {
+    const url = getUrlReserva(qrSedeDestino === 'todas' ? undefined : qrSedeDestino, 'wa');
+    const sedeTexto =
+      qrSedeDestino === 'victoria'
+        ? 'Sede La Victoria (C.C. Márquez del Toro)'
+        : qrSedeDestino === 'tovar'
+        ? 'Sede La Colonia Tovar (C.C. San Martín de Tours)'
+        : 'Sedes La Victoria y Colonia Tovar';
+
+    const texto = encodeURIComponent(
+      `🦷 *ODONTOSALUD - RESERVA TU CITA ODONTOLÓGICA EN LÍNEA*\n\n` +
+      `¡Hola! Te compartimos el portal oficial para agendar tu consulta y tratamiento dental en ${sedeTexto} sin intermediarios:\n\n` +
+      `👉 *Acceder al portal de reserva:* ${url}\n\n` +
+      `✨ *Elige tu odontólogo favorito, procedimiento y turno en menos de 2 minutos.* Al completar tu solicitud obtendrás tu Comprobante Digital con Código QR para recepción inmediata.`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
+  };
+
+  const copiarResumenCita = async () => {
+    const sedeFinal = selectedSedeId ? SEDES_DISPONIBLES[selectedSedeId] : sedeActiva;
+    const resumenTexto =
+      `🦷 *COMPROBANTE DE CITA ODONTOLÓGICA - ${sedeFinal.nombre.toUpperCase()}*\n\n` +
+      `📋 *Código de Turno:* ${codigoConfirmacion}\n` +
+      `👤 *Paciente:* ${nombres} (${cedulaTipo}-${cedulaNumero})\n` +
+      `🩺 *Tratamiento:* ${treatment}\n` +
+      `📅 *Fecha y Turno:* ${selectedDate} a las ${selectedSlot}\n` +
+      `👨‍⚕️ *Facultativo:* ${selectedDoctor ? selectedDoctor.nombre : 'Por asignar'} (Box 0${selectedDoctor ? selectedDoctor.box : 1})\n` +
+      `📍 *Sede:* ${sedeFinal.nombre} - ${sedeFinal.direccion}\n` +
+      `⏰ *Recepción:* Presentarse 10 minutos antes con cédula de identidad.\n` +
+      `🌐 *Portal:* ${getUrlReserva(selectedSedeId || 'victoria', 'wa')}`;
+
+    try {
+      await navigator.clipboard.writeText(resumenTexto);
+      setResumenCopiado(true);
+      setTimeout(() => setResumenCopiado(false), 3000);
+    } catch {
+      prompt('Copia el resumen de tu cita:', resumenTexto);
+    }
+  };
 
   // 1. Conexión con Data: Odontólogos, Pacientes y Condiciones Médicas de #DATA
   const [dataOdontologos, setDataOdontologos] = useState<OdontologoItem[]>(() => {
@@ -1719,6 +1812,45 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
               )}
             </div>
 
+            {/* =================================================================
+                PASE DIGITAL CON CÓDIGO QR DINÁMICO PARA CHECK-IN INMEDIATO
+               ================================================================= */}
+            <div className="w-full bg-white rounded-2xl border-2 border-dashed border-emerald-400/80 p-3.5 flex flex-col items-center gap-2.5 relative shadow-xs">
+              <div className="flex items-center justify-between w-full px-1 border-b border-border-subtle/60 pb-1.5">
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Pase Digital QR • Check-in Rápido
+                </span>
+                <span className="text-[10px] font-mono font-bold text-primary">Recepción OdontoSalud</span>
+              </div>
+
+              {/* Imagen QR Dinámica con Datos Completos de la Cita */}
+              <div className="p-2.5 bg-white rounded-2xl border border-border-subtle shadow-xs">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    `ODONTOSALUD-CITA|COD:${codigoConfirmacion}|PAC:${nombres}|CED:${cedulaTipo}-${cedulaNumero}|FEC:${selectedDate}|HORA:${selectedSlot}|DR:${selectedDoctor?.nombre || 'General'}|SEDE:${selectedSedeId || sedeId}`
+                  )}&margin=4`}
+                  alt="Código QR de Verificación de Cita"
+                  className="w-36 h-36 sm:w-40 sm:h-40 object-contain"
+                />
+              </div>
+
+              <p className="text-[10px] text-secondary font-medium leading-tight text-center px-2">
+                Muestra este código QR en recepción al llegar o compártelo por WhatsApp para acceder directo a tu Box clínico.
+              </p>
+
+              <button
+                type="button"
+                onClick={copiarResumenCita}
+                className="w-full py-1.5 px-3 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-[11px] font-bold text-dental-deep-navy transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <span className="material-symbols-outlined text-[14px] text-primary">
+                  {resumenCopiado ? 'done' : 'content_copy'}
+                </span>
+                <span>{resumenCopiado ? '¡Resumen Copiado al Portapapeles!' : 'Copiar Resumen de Cita'}</span>
+              </button>
+            </div>
+
             <p className="text-[11px] text-secondary leading-relaxed px-2 text-center">
               Recepción central de <strong className="text-dental-deep-navy font-semibold">{selectedSedeId ? SEDES_DISPONIBLES[selectedSedeId].nombre : sedeActiva.nombre}</strong> reservará tu Box clínico de forma inmediata.
             </p>
@@ -1726,20 +1858,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             <div className="w-full flex flex-col gap-2 pt-1">
               <button
                 type="button"
-                onClick={compartirPorWhatsApp}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">share</span>
-                <span>Compartir Cita vía WhatsApp</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={abrirWhatsAppConfirmacion}
                 className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-plum-royal text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[17px]">chat</span>
-                <span>Confirmar con Recepción por WhatsApp</span>
+                <span>Enviar Comprobante a WhatsApp Recepción</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={compartirPorWhatsApp}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">share</span>
+                <span>Compartir Comprobante con Familiar / Contacto</span>
               </button>
 
               {/* Botón dividido en 2: "Otra Cita" y "Cerrar" */}
@@ -1822,17 +1954,163 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAuthModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy transition-all active:scale-95 shrink-0"
-        >
-          <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
-          <span className="hidden sm:inline">
-            {cedulaNumero ? `${cedulaTipo}-${cedulaNumero}` : 'Validar Cédula'}
-          </span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Botón Profesional para Mostrar y Compartir Código QR Oficial */}
+          <button
+            type="button"
+            onClick={() => setShowQrShareModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
+            title="Ver y compartir Código QR oficial de reserva y enlace para WhatsApp"
+          >
+            <span className="material-symbols-outlined text-[16px] text-emerald-700">qr_code_2</span>
+            <span className="hidden sm:inline">QR & WhatsApp</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAuthModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy transition-all active:scale-95 shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
+            <span className="hidden sm:inline">
+              {cedulaNumero ? `${cedulaTipo}-${cedulaNumero}` : 'Validar Cédula'}
+            </span>
+          </button>
+        </div>
       </section>
+
+      {/* =====================================================================
+          MODAL DE COMPARTIR Y PRESENTACIÓN PROFESIONAL VÍA CÓDIGO QR & WHATSAPP
+         ===================================================================== */}
+      {showQrShareModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-surface-clean-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-border-subtle text-center flex flex-col items-center gap-4 max-h-[92vh] overflow-y-auto">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between w-full border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5 text-left">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs">
+                  <span className="material-symbols-outlined text-[22px]">qr_code_2</span>
+                </div>
+                <div>
+                  <h3 className="font-display font-extrabold text-base text-dental-deep-navy leading-tight">
+                    Código QR Oficial de Reserva
+                  </h3>
+                  <p className="text-[10px] text-secondary font-semibold">
+                    OdontoSalud La Victoria & Colonia Tovar
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQrShareModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-secondary hover:text-dental-deep-navy transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Selector de Sede para el QR */}
+            <div className="flex items-center gap-1 bg-surface-subtle-ice p-1 rounded-2xl w-full border border-border-subtle/80 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setQrSedeDestino('todas')}
+                className={`flex-1 py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
+                  qrSedeDestino === 'todas'
+                    ? 'bg-dental-deep-navy text-white shadow-2xs'
+                    : 'text-secondary hover:text-dental-deep-navy'
+                }`}
+              >
+                Ambas Sedes
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrSedeDestino('victoria')}
+                className={`flex-1 py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
+                  qrSedeDestino === 'victoria'
+                    ? 'bg-dental-deep-navy text-white shadow-2xs'
+                    : 'text-secondary hover:text-dental-deep-navy'
+                }`}
+              >
+                La Victoria
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrSedeDestino('tovar')}
+                className={`flex-1 py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
+                  qrSedeDestino === 'tovar'
+                    ? 'bg-dental-deep-navy text-white shadow-2xs'
+                    : 'text-secondary hover:text-dental-deep-navy'
+                }`}
+              >
+                Colonia Tovar
+              </button>
+            </div>
+
+            {/* Tarjeta Visual de Presentación con el Código QR */}
+            <div className="w-full bg-[#FAF8FB] rounded-2xl border-2 border-dashed border-emerald-400/80 p-4 flex flex-col items-center gap-3 shadow-inner">
+              <div className="bg-white p-3 rounded-2xl border border-border-subtle shadow-md">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+                    getUrlReserva(qrSedeDestino === 'todas' ? undefined : qrSedeDestino, 'qr')
+                  )}&margin=6`}
+                  alt="Código QR de Reserva OdontoSalud"
+                  className="w-48 h-48 sm:w-52 sm:h-52 object-contain"
+                />
+              </div>
+
+              <div className="text-center px-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                  {qrSedeDestino === 'victoria'
+                    ? 'Sede C.C. Márquez del Toro'
+                    : qrSedeDestino === 'tovar'
+                    ? 'Sede C.C. San Martín de Tours'
+                    : 'Acceso a Red de Especialistas'}
+                </span>
+                <p className="text-xs text-secondary leading-snug">
+                  Apunta con la cámara de tu teléfono móvil al código QR para ingresar de inmediato al portal de reserva independiente.
+                </p>
+              </div>
+
+              {/* Enlace en texto para ver o copiar */}
+              <div className="w-full bg-white rounded-xl border border-border-subtle/80 p-2 flex items-center justify-between gap-2 text-left">
+                <span className="font-mono text-[10px] text-secondary truncate flex-1 select-all">
+                  {getUrlReserva(qrSedeDestino === 'todas' ? undefined : qrSedeDestino, 'qr')}
+                </span>
+                <button
+                  type="button"
+                  onClick={copiarEnlaceReserva}
+                  className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-[10px] font-bold text-dental-deep-navy transition-all active:scale-95 shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[13px] text-primary">
+                    {enlaceCopiado ? 'done' : 'content_copy'}
+                  </span>
+                  <span>{enlaceCopiado ? '¡Copiado!' : 'Copiar'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Acciones Rápidas */}
+            <div className="w-full flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={compartirEnlaceWhatsApp}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[17px]">chat</span>
+                <span>Compartir Portal por WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowQrShareModal(false)}
+                className="w-full py-2 px-3 rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-dental-deep-navy font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer border border-border-subtle shadow-2xs"
+              >
+                <span>Cerrar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================================
           MARQUESINA ANIMADA TIPO WALL STREET (100% EN MOVIMIENTO Y NADA FIJO)
@@ -1858,6 +2136,64 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           </div>
         </div>
       </div>
+
+      {/* =====================================================================
+          TARJETA DE PRESENTACIÓN OFICIAL: ACCESO DIGITAL QR & WHATSAPP
+         ===================================================================== */}
+      <section className="bg-gradient-to-r from-surface-clean-white via-surface-subtle-ice to-emerald-50/40 rounded-3xl p-3.5 sm:p-4 border border-border-subtle shadow-soft-elevated flex flex-col sm:flex-row items-center justify-between gap-3 relative overflow-hidden">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-500/10 text-emerald-700 border border-emerald-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+            <span className="material-symbols-outlined text-[22px]">
+              {canalAcceso === 'qr' ? 'qr_code_scanner' : canalAcceso === 'whatsapp' ? 'chat' : 'health_and_safety'}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                canalAcceso === 'qr'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : canalAcceso === 'whatsapp'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : 'bg-primary/10 text-primary border-primary/20'
+              }`}>
+                {canalAcceso === 'qr'
+                  ? '📱 Acceso Verificado por Código QR'
+                  : canalAcceso === 'whatsapp'
+                  ? '💬 Acceso Oficial desde WhatsApp'
+                  : '🦷 Portal Oficial de Citas Médicas'}
+              </span>
+              <span className="text-[10px] text-secondary font-bold">• 100% Sin Esperas</span>
+            </div>
+            <p className="text-xs font-bold text-dental-deep-navy mt-0.5 leading-snug">
+              {canalAcceso === 'qr'
+                ? 'Escaneaste nuestro QR oficial. Tus datos se agendarán en orden cronológico con confirmación inmediata.'
+                : canalAcceso === 'whatsapp'
+                ? 'Conectado a Recepción. Al completar tu reserva recibirás tu comprobante médico con QR para tu cita.'
+                : 'Reserva tu consulta con el odontólogo de tu preferencia. Presentación homologada para escaneo QR y WhatsApp.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+          <button
+            type="button"
+            onClick={() => setShowQrShareModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 text-[11px] font-bold shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[15px] text-emerald-600">qr_code</span>
+            <span>Ver QR de Reserva</span>
+          </button>
+          <button
+            type="button"
+            onClick={compartirEnlaceWhatsApp}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            title="Compartir enlace oficial de reserva por WhatsApp"
+          >
+            <span className="material-symbols-outlined text-[15px]">send</span>
+            <span>Enviar por WhatsApp</span>
+          </button>
+        </div>
+      </section>
 
       {/* =====================================================================
           PASO 1: ELIGE TU SEDE ODONTOSALUD 🏢 🌲 (TARJETA NRO 1 DE #RESERVA)

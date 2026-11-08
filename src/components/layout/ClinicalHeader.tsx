@@ -71,8 +71,18 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
           </div>
         </div>
 
-        {/* Derecha: Campanita de Notificación + Icono de VictorIA Pro */}
+        {/* Derecha: Login / Perfil + Campanita de Notificación + Icono de VictorIA Pro */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Botón de Acceso a Vista Independiente de Login */}
+          <button
+            type="button"
+            onClick={() => (onNavigateTab ? onNavigateTab('login') : (window.location.hash = 'login'))}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-dental-deep-navy border border-border-subtle shadow-2xs transition-all active:scale-90 cursor-pointer"
+            title="Iniciar Sesión / Validar Credenciales (#login)"
+          >
+            <span className="material-symbols-outlined text-[21px] text-primary">account_circle</span>
+          </button>
+
           {/* Campanita de Notificación Ultra Llamativa (Tasa BCV + Avisos) */}
           <button
             type="button"

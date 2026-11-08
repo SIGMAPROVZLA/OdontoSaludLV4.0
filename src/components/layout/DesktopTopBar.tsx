@@ -167,17 +167,24 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
             )}
           </button>
 
-          <div className="flex items-center gap-2 pl-1">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('login')}
+            className="flex items-center gap-2 pl-1 cursor-pointer hover:opacity-85 transition-opacity text-left"
+            title="Sesión Clínica / Validar Credenciales (#login)"
+          >
             <DeterministicIdenticon seed={doctorActivo} name={doctorActivo} size={36} />
             <div className="hidden xl:flex flex-col text-left">
               <span className="text-xs font-bold text-dental-deep-navy leading-tight">
                 {doctorActivo}
               </span>
-              <span className="text-[10px] text-secondary">
-                {sedeActiva.nombre}
+              <span className="text-[10px] text-primary font-semibold flex items-center gap-1">
+                <span>{sedeActiva.nombre}</span>
+                <span>•</span>
+                <span className="underline">Sesión</span>
               </span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
