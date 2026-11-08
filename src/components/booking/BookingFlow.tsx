@@ -221,7 +221,7 @@ const INITIAL_CONDICIONES_FALLBACK: CondicionMedicaItem[] = [
   },
 ];
 
-export const getDoctorAvatar = (nombre: string = '', box: number = 1): string => {
+const getDoctorAvatar = (nombre: string = '', box: number = 1): string => {
   const n = (nombre || '').toLowerCase();
   if (n.includes('domínguez') || n.includes('dominguez') || n.includes('maría') || n.includes('maria') || n.includes('alejandra')) {
     return 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=200&q=80';
@@ -455,6 +455,40 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     }
   });
 
+  // Segmentación y filtros de odontólogos por turno para la sede activa
+  const doctoresJornadaCompleta = doctoresEmpadronados.filter(
+    (d) => d.turno === 'Completo' || !d.turno
+  );
+  const doctoresManana = doctoresEmpadronados.filter((d) => d.turno === 'Mañana');
+  const doctoresTarde = doctoresEmpadronados.filter((d) => d.turno === 'Tarde');
+
+  const seccionesTurnos = [
+    {
+      id: 'completo',
+      titulo: '⭐ Jornada Completa',
+      horario: '08:30 AM – 05:00 PM',
+      descripcion: 'Atención continua matutina y vespertina',
+      colorBadge: 'bg-amber-100 text-amber-900 border-amber-300',
+      doctores: doctoresJornadaCompleta,
+    },
+    {
+      id: 'manana',
+      titulo: '🌅 Turno Mañana',
+      horario: '08:30 AM – 12:30 PM',
+      descripcion: 'Atención prioritaria en horario matutino',
+      colorBadge: 'bg-sky-100 text-sky-900 border-sky-300',
+      doctores: doctoresManana,
+    },
+    {
+      id: 'tarde',
+      titulo: '🌇 Turno Tarde',
+      horario: '01:15 PM – 05:00 PM',
+      descripcion: 'Atención especializada en horario vespertino',
+      colorBadge: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+      doctores: doctoresTarde,
+    },
+  ].filter((sec) => sec.doctores.length > 0);
+
   const [cedulaTipo, setCedulaTipo] = useState<'V' | 'E' | 'J' | 'G' | 'P'>('V');
   const [cedulaNumero, setCedulaNumero] = useState<string>('');
   const [nombres, setNombres] = useState<string>('');
@@ -469,6 +503,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
   // Estado del flujo secuencial (inicia en 'sede' como Tarjeta Nro 1)
   const [openStep, setOpenStep] = useState<BookingStep | null>('sede');
+  const [filtroTurnoDoctor, setFiltroTurnoDoctor] = useState<'todos' | 'completo' | 'manana' | 'tarde'>('todos');
 
   // 3. Modal Login Emergente con Validación de Cédula y Delay de 2 Segundos
   const [showAuthModal, setShowAuthModal] = useState<boolean>(true);
@@ -823,6 +858,45 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         window.scrollTo({ top: 120, behavior: 'smooth' });
       }
     }, 80);
+  };
+
+  // Función para retroceder al paso anterior de forma limpia y ordenada
+  const retrocederPaso = () => {
+    if (openStep === 'doctor') {
+      irAPaso('sede');
+    } else if (openStep === 'treatment') {
+      irAPaso('doctor');
+    } else if (openStep === 'datetime') {
+      irAPaso('treatment');
+    } else if (openStep === 'patient') {
+      irAPaso('datetime');
+    } else if (openStep === null) {
+      irAPaso('patient');
+    } else if (openStep === 'sede') {
+      if (onNavigateTab) {
+        onNavigateTab('dashboard');
+      } else if (onBack) {
+        onBack();
+      }
+    }
+  };
+
+  const getTextoRetroceso = (): string => {
+    switch (openStep) {
+      case 'doctor':
+        return 'Cambiar Sede';
+      case 'treatment':
+        return 'Cambiar Odontólogo';
+      case 'datetime':
+        return 'Cambiar Tratamiento';
+      case 'patient':
+        return 'Cambiar Horario';
+      case null:
+        return 'Modificar Cita';
+      case 'sede':
+      default:
+        return 'Volver al Inicio';
+    }
   };
 
   // 4. Catálogos Clínicos y Opciones
@@ -1828,19 +1902,32 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       )}
 
       {/* =====================================================================
-          HEADER COMPACTO CON LOGO
+          HEADER COMPACTO CON LOGO Y BOTÓN DE RETROCESO PROFESIONAL
          ===================================================================== */}
       <section className="bg-surface-clean-white rounded-3xl p-4 shadow-soft-elevated border border-border-subtle flex items-center justify-between gap-3 relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-primary via-dental-deep-navy to-status-success" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          {/* Botón Atrás Profesional y Ergonómico */}
+          <button
+            type="button"
+            onClick={retrocederPaso}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy transition-all active:scale-95 shrink-0 shadow-2xs group cursor-pointer"
+            title={openStep === 'sede' ? 'Volver al Inicio' : 'Volver al paso anterior'}
+          >
+            <span className="material-symbols-outlined text-[18px] text-primary group-hover:-translate-x-0.5 transition-transform">
+              arrow_back
+            </span>
+            <span className="hidden sm:inline">{getTextoRetroceso()}</span>
+          </button>
+
           <img
             src="/brand/logo-odontosalud-vertical.png"
             alt="Logo OdontoSalud La Victoria"
-            className="h-14 w-14 sm:h-16 sm:w-16 object-contain shrink-0"
+            className="h-12 w-12 sm:h-14 sm:w-14 object-contain shrink-0"
           />
           <div className="min-w-0">
-            <h1 className="font-display font-extrabold text-lg sm:text-xl text-dental-deep-navy leading-tight tracking-tight">
+            <h1 className="font-display font-extrabold text-base sm:text-xl text-dental-deep-navy leading-tight tracking-tight truncate">
               Reserva tu Cita Odontológica
             </h1>
             <p className="text-xs text-secondary mt-0.5 truncate">
@@ -2022,199 +2109,326 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       )}
 
       {/* =====================================================================
-          PASO 2: ELIGE TU ODONTÓLOGO FAVORITO ⭐❤️ (CONECTADO A #DATA)
+          PASO 2: ELIGE TU ODONTÓLOGO SEGMENTADO POR HORARIO Y SEDE (#DATA)
          ===================================================================== */}
       {openStep === 'doctor' && (
         <section
           ref={doctorCardRef}
-          className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-3.5 animate-in fade-in slide-in-from-top-3 duration-300 scroll-mt-4"
+          className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 animate-in fade-in slide-in-from-top-3 duration-300 scroll-mt-4"
         >
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
-                  Paso 2 de 5
-                </span>
-                <span className="text-xs text-secondary">• {doctoresEmpadronados.length} odontólogos en plantilla</span>
+          {/* Cabecera del Paso 2 con Botón Atrás Profesional */}
+          <div className="flex flex-col gap-3 border-b border-border-subtle pb-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy">
+                    Paso 2 de 5
+                  </span>
+                  <span className="text-xs text-secondary">
+                    • {doctoresEmpadronados.length} facultativos en {sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}
+                  </span>
+                </div>
+                <h2 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy mt-1">
+                  Elige tu Odontólogo en {sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'} ⭐❤️
+                </h2>
               </div>
-              <h2 className="font-display font-extrabold text-lg text-dental-deep-navy mt-1">
-                Elige tu odontólogo favorito ⭐❤️
-              </h2>
+
+              {/* Botón Atrás Profesional y Ergonómico */}
+              <button
+                type="button"
+                onClick={retrocederPaso}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+                title="Volver al Paso 1: Selección de Sede"
+              >
+                <span className="material-symbols-outlined text-[16px] text-primary group-hover:-translate-x-0.5 transition-transform">
+                  arrow_back
+                </span>
+                <span>Cambiar Sede</span>
+              </button>
             </div>
-            <span className="w-8 h-8 rounded-full bg-status-success/15 text-status-success flex items-center justify-center">
-              <span className="material-symbols-outlined text-[18px]">verified</span>
-            </span>
+
+            {/* Segmentador Rápido de Sede Activa */}
+            <div className="flex items-center gap-2 p-1 bg-surface-container/60 rounded-2xl border border-border-subtle/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSedeId('victoria');
+                  cambiarSede('victoria');
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  sedeEfectiva === 'victoria'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'text-secondary hover:text-dental-deep-navy hover:bg-white/60'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[15px]">apartment</span>
+                <span>OdontoSalud La Victoria</span>
+                <span
+                  className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-black ${
+                    sedeEfectiva === 'victoria' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {todosDoctoresData.filter((d) => (d.sedeId === 'victoria' || d.sedeId === 'ambas') && (d.diasVictoria?.length || 0) > 0).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSedeId('tovar');
+                  cambiarSede('tovar');
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  sedeEfectiva === 'tovar'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-secondary hover:text-dental-deep-navy hover:bg-white/60'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[15px]">cottage</span>
+                <span>OdontoSalud Colonia Tovar</span>
+                <span
+                  className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-black ${
+                    sedeEfectiva === 'tovar' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {todosDoctoresData.filter((d) => (d.sedeId === 'tovar' || d.sedeId === 'ambas') && (d.diasTovar?.length || 0) > 0).length}
+                </span>
+              </button>
+            </div>
+
+            {/* Filtro Rápido de Horarios / Turnos */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+              <span className="text-[11px] font-bold text-secondary flex items-center gap-1 shrink-0 mr-1">
+                <span className="material-symbols-outlined text-[15px] text-primary">filter_list</span>
+                <span>Filtrar Horario:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setFiltroTurnoDoctor('todos')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                  filtroTurnoDoctor === 'todos'
+                    ? 'bg-dental-deep-navy text-white shadow-xs'
+                    : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy hover:bg-white border border-border-subtle'
+                }`}
+              >
+                Todos ({doctoresEmpadronados.length})
+              </button>
+              {doctoresJornadaCompleta.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTurnoDoctor('completo')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    filtroTurnoDoctor === 'completo'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-surface-subtle-ice text-secondary hover:text-amber-800 hover:bg-white border border-border-subtle'
+                  }`}
+                >
+                  ⭐ Jornada Completa ({doctoresJornadaCompleta.length})
+                </button>
+              )}
+              {doctoresManana.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTurnoDoctor('manana')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    filtroTurnoDoctor === 'manana'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'bg-surface-subtle-ice text-secondary hover:text-sky-800 hover:bg-white border border-border-subtle'
+                  }`}
+                >
+                  🌅 Mañana ({doctoresManana.length})
+                </button>
+              )}
+              {doctoresTarde.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroTurnoDoctor('tarde')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    filtroTurnoDoctor === 'tarde'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-surface-subtle-ice text-secondary hover:text-indigo-800 hover:bg-white border border-border-subtle'
+                  }`}
+                >
+                  🌇 Tarde ({doctoresTarde.length})
+                </button>
+              )}
+            </div>
           </div>
 
           <p className="text-xs text-secondary">
-            Selecciona el profesional para tu consulta. Al tocar su tarjeta, se guardará y se desplegará el tipo de tratamiento.
+            Selecciona el profesional para tu consulta en <strong>{sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}</strong>. Al tocar su tarjeta, se guardará y avanzará a la elección del procedimiento dental.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {doctoresEmpadronados.map((doc) => {
-              const isSelected = selectedDoctor?.id === doc.id;
-              const diasEnSedeActiva =
-                sedeEfectiva === 'tovar' ? doc.diasTovar || [] : doc.diasVictoria || [];
-              const diasEnOtraSede =
-                sedeEfectiva === 'tovar' ? doc.diasVictoria || [] : doc.diasTovar || [];
-
-              const horarioTurnoTexto =
-                doc.turno === 'Mañana'
-                  ? '🌅 08:30 AM – 12:30 PM'
-                  : doc.turno === 'Tarde'
-                  ? '🌇 01:15 PM – 05:00 PM'
-                  : '⭐ 08:30 AM – 05:00 PM';
-
-              return (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDoctor(doc);
-                    setOpenStep('treatment');
-                    setTimeout(() => {
-                      treatmentCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 80);
-                  }}
-                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-3.5 transition-all cursor-pointer active:scale-95 relative overflow-hidden ${
-                    isSelected
-                      ? 'bg-surface-clean-white border-2 border-primary shadow-lg ring-4 ring-primary/15'
-                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-white hover:border-primary/40 hover:shadow-sm'
-                  }`}
-                >
-                  {/* Etiqueta de Doctor Seleccionado */}
-                  {isSelected && (
-                    <span className="absolute top-0 right-0 w-16 h-16 pointer-events-none overflow-hidden">
-                      <span className="absolute transform rotate-45 bg-primary text-white text-[8.5px] font-black py-0.5 right-[-24px] top-[14px] w-[90px] text-center shadow-xs">
-                        ELEGIDO
+          {/* Secciones Divididas y Segmentadas por Horario */}
+          <div className="flex flex-col gap-5">
+            {seccionesTurnos
+              .filter((sec) => filtroTurnoDoctor === 'todos' || filtroTurnoDoctor === sec.id)
+              .map((sec) => (
+                <div key={sec.id} className="flex flex-col gap-2.5">
+                  {/* Encabezado del Segmento de Horario */}
+                  <div className="flex items-center justify-between bg-surface-subtle-ice/80 px-3.5 py-2 rounded-2xl border border-border-subtle/80">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider ${sec.colorBadge}`}>
+                        {sec.titulo}
                       </span>
+                      <span className="font-mono text-xs font-bold text-dental-deep-navy">
+                        {sec.horario}
+                      </span>
+                      <span className="hidden sm:inline text-[11px] text-secondary">
+                        • {sec.descripcion}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-extrabold text-secondary shrink-0">
+                      {sec.doctores.length} {sec.doctores.length === 1 ? 'facultativo' : 'facultativos'}
                     </span>
-                  )}
-
-                  {/* Cabecera del Doctor con Avatar Protegido */}
-                  <div className="flex items-start gap-3">
-                    <div className="relative shrink-0">
-                      <img
-                        src={cleanAvatar(doc.avatar, doc.nombre, doc.box)}
-                        alt={doc.nombre}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = getDoctorAvatar(doc.nombre, doc.box);
-                        }}
-                        className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20 shadow-sm bg-white"
-                      />
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-status-success ring-2 ring-white flex items-center justify-center">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                      </span>
-                    </div>
-
-                    <div className="min-w-0 flex-1 pr-6">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[9px] font-extrabold uppercase tracking-wide">
-                          {doc.titulo}
-                        </span>
-                        {doc.sedeId === 'ambas' && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[8.5px] font-black inline-flex items-center gap-0.5">
-                            🏢🌲 2 Sedes
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy mt-1 leading-snug">
-                        {doc.nombre}
-                      </h3>
-                      <p className="text-[11px] text-secondary truncate mt-0.5">
-                        {doc.especialidad}
-                      </p>
-                    </div>
                   </div>
 
-                  {/* Disponibilidad Semanal Visual (Chips de los 6 Días Clínicos LUN a SÁB) */}
-                  <div className="bg-white rounded-xl p-2.5 border border-border-subtle/80 flex flex-col gap-2 shadow-2xs">
-                    <div className="flex items-center justify-between text-[10.5px]">
-                      <span className="font-extrabold text-dental-deep-navy flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[15px] text-primary">event_available</span>
-                        <span>{sedeEfectiva === 'tovar' ? 'Colonia Tovar:' : 'La Victoria:'}</span>
-                      </span>
-                      <span className="text-[10px] font-bold text-secondary">
-                        {diasEnSedeActiva.length} {diasEnSedeActiva.length === 1 ? 'día' : 'días'} de guardia
-                      </span>
-                    </div>
+                  {/* Grilla de Tarjetas de Doctores para este Segmento de Horario */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {sec.doctores.map((doc) => {
+                      const isSelected = selectedDoctor?.id === doc.id;
+                      const diasEnSedeActiva =
+                        sedeEfectiva === 'tovar' ? doc.diasTovar || [] : doc.diasVictoria || [];
 
-                    {/* Matriz de Chips Semanales */}
-                    <div className="grid grid-cols-6 gap-1">
-                      {DIAS_SEMANA_CLINICOS.map((dia) => {
-                        const enEstaSede = diasEnSedeActiva.includes(dia);
-                        const enOtra = !enEstaSede && diasEnOtraSede.includes(dia);
+                      const horarioTurnoTexto =
+                        doc.turno === 'Mañana'
+                          ? '🌅 Turno Mañana (08:30 AM – 12:30 PM)'
+                          : doc.turno === 'Tarde'
+                          ? '🌇 Turno Tarde (01:15 PM – 05:00 PM)'
+                          : '⭐ Jornada Completa (08:30 AM – 05:00 PM)';
 
-                        return (
-                          <div
-                            key={dia}
-                            className={`py-1 rounded-lg text-center font-black text-[9.5px] transition-all flex flex-col items-center justify-center ${
-                              enEstaSede
-                                ? 'bg-primary text-white shadow-xs'
-                                : enOtra
-                                ? 'bg-amber-100/90 text-amber-900 border border-amber-300'
-                                : 'bg-slate-100 text-slate-350 opacity-40 line-through'
-                            }`}
-                            title={
-                              enEstaSede
-                                ? `Atiende en ${sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}`
-                                : enOtra
-                                ? `Atiende en ${sedeEfectiva === 'tovar' ? 'La Victoria' : 'Colonia Tovar'}`
-                                : 'Sin guardia este día'
-                            }
-                          >
-                            <span>{dia}</span>
+                      return (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDoctor(doc);
+                            irAPaso('treatment');
+                          }}
+                          className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-3.5 transition-all cursor-pointer active:scale-95 relative overflow-hidden ${
+                            isSelected
+                              ? 'bg-surface-clean-white border-2 border-primary shadow-lg ring-4 ring-primary/15'
+                              : 'bg-surface-subtle-ice border-border-subtle hover:bg-white hover:border-primary/40 hover:shadow-sm'
+                          }`}
+                        >
+                          {/* Etiqueta de Doctor Seleccionado */}
+                          {isSelected && (
+                            <span className="absolute top-0 right-0 w-16 h-16 pointer-events-none overflow-hidden">
+                              <span className="absolute transform rotate-45 bg-primary text-white text-[8.5px] font-black py-0.5 right-[-24px] top-[14px] w-[90px] text-center shadow-xs">
+                                ELEGIDO
+                              </span>
+                            </span>
+                          )}
+
+                          {/* Cabecera del Doctor con Avatar Protegido */}
+                          <div className="flex items-start gap-3">
+                            <div className="relative shrink-0">
+                              <img
+                                src={cleanAvatar(doc.avatar, doc.nombre, doc.box)}
+                                alt={doc.nombre}
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = getDoctorAvatar(doc.nombre, doc.box);
+                                }}
+                                className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20 shadow-sm bg-white"
+                              />
+                              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-status-success ring-2 ring-white flex items-center justify-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                              </span>
+                            </div>
+
+                            <div className="min-w-0 flex-1 pr-6">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[9px] font-extrabold uppercase tracking-wide">
+                                  {doc.titulo}
+                                </span>
+                              </div>
+                              <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy mt-1 leading-snug">
+                                {doc.nombre}
+                              </h3>
+                              <p className="text-[11px] text-secondary truncate mt-0.5">
+                                {doc.especialidad}
+                              </p>
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
 
-                    {/* Leyenda y Días Explícitos */}
-                    <div className="pt-1.5 border-t border-border-subtle/60 flex flex-col gap-1 text-[10px]">
-                      <div className="flex items-center justify-between text-dental-deep-navy">
-                        <span className="text-secondary font-medium">Días en sede activa:</span>
-                        <strong className="text-primary font-bold">
-                          {diasEnSedeActiva.join(' · ') || 'Sin guardia'}
-                        </strong>
-                      </div>
-                      {diasEnOtraSede.length > 0 && (
-                        <div className="flex items-center justify-between text-[9.5px] text-amber-800">
-                          <span className="font-medium">
-                            {sedeEfectiva === 'tovar' ? '🏢 En La Victoria:' : '🌲 En Col. Tovar:'}
-                          </span>
-                          <span className="font-bold">{diasEnOtraSede.join(' · ')}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                          {/* Disponibilidad Semanal Visual (Chips de los 6 Días Clínicos LUN a SÁB) */}
+                          <div className="bg-white rounded-xl p-2.5 border border-border-subtle/80 flex flex-col gap-2 shadow-2xs">
+                            <div className="flex items-center justify-between text-[10.5px]">
+                              <span className="font-extrabold text-dental-deep-navy flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[15px] text-primary">event_available</span>
+                                <span>{sedeEfectiva === 'tovar' ? 'Colonia Tovar:' : 'La Victoria:'}</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-secondary">
+                                {diasEnSedeActiva.length} {diasEnSedeActiva.length === 1 ? 'día' : 'días'} de guardia
+                              </span>
+                            </div>
 
-                  {/* Franja de Horario / Turno y Box Asignado */}
-                  <div className="flex items-center justify-between bg-surface-container/40 px-2.5 py-1.5 rounded-xl border border-border-subtle/60 text-[10.5px]">
-                    <span className="font-bold text-dental-deep-navy flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px] text-secondary">schedule</span>
-                      <span>{horarioTurnoTexto}</span>
-                    </span>
-                    <span className="font-extrabold text-primary bg-white px-2 py-0.5 rounded-md border border-primary/20 shadow-2xs">
-                      Box 0{doc.box}
-                    </span>
-                  </div>
+                            {/* Matriz de Chips Semanales Exclusivos de esta Sede */}
+                            <div className="grid grid-cols-6 gap-1">
+                              {DIAS_SEMANA_CLINICOS.map((dia) => {
+                                const enEstaSede = diasEnSedeActiva.includes(dia);
 
-                  {/* Botón de Selección Inferior */}
-                  <div className="flex items-center justify-between pt-1 text-[11px]">
-                    <span className="text-[10px] font-bold text-status-success flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-status-success" />
-                      <span>{doc.turno || 'Jornada Completa'}</span>
-                    </span>
-                    <span className={`font-extrabold flex items-center gap-1 ${isSelected ? 'text-primary' : 'text-dental-deep-navy group-hover:text-primary'}`}>
-                      <span>{isSelected ? '✓ Seleccionado' : 'Seleccionar'}</span>
-                      <span className="material-symbols-outlined text-[14px]">
-                        {isSelected ? 'check' : 'arrow_forward'}
-                      </span>
-                    </span>
+                                return (
+                                  <div
+                                    key={dia}
+                                    className={`py-1 rounded-lg text-center font-black text-[9.5px] transition-all flex flex-col items-center justify-center ${
+                                      enEstaSede
+                                        ? 'bg-primary text-white shadow-xs'
+                                        : 'bg-slate-100 text-slate-350 opacity-40 line-through'
+                                    }`}
+                                    title={
+                                      enEstaSede
+                                        ? `Atiende en ${sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}`
+                                        : 'Sin guardia en esta sede este día'
+                                    }
+                                  >
+                                    <span>{dia}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Días Explícitos Exclusivos de esta Sede */}
+                            <div className="pt-1.5 border-t border-border-subtle/60 flex items-center justify-between text-[10px] text-dental-deep-navy">
+                              <span className="text-secondary font-medium">
+                                Días en Sede {sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}:
+                              </span>
+                              <strong className="text-primary font-bold">
+                                {diasEnSedeActiva.join(' · ') || 'Sin guardia'}
+                              </strong>
+                            </div>
+                          </div>
+
+                          {/* Franja de Horario / Turno y Box Asignado */}
+                          <div className="flex items-center justify-between bg-surface-container/40 px-2.5 py-1.5 rounded-xl border border-border-subtle/60 text-[10.5px]">
+                            <span className="font-bold text-dental-deep-navy flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px] text-secondary">schedule</span>
+                              <span>{horarioTurnoTexto}</span>
+                            </span>
+                            <span className="font-extrabold text-primary bg-white px-2 py-0.5 rounded-md border border-primary/20 shadow-2xs">
+                              Box 0{doc.box}
+                            </span>
+                          </div>
+
+                          {/* Botón de Selección Inferior */}
+                          <div className="flex items-center justify-between pt-1 text-[11px]">
+                            <span className="text-[10px] font-bold text-status-success flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-status-success" />
+                              <span>{doc.turno || 'Jornada Completa'}</span>
+                            </span>
+                            <span className={`font-extrabold flex items-center gap-1 ${isSelected ? 'text-primary' : 'text-dental-deep-navy group-hover:text-primary'}`}>
+                              <span>{isSelected ? '✓ Seleccionado' : 'Seleccionar'}</span>
+                              <span className="material-symbols-outlined text-[14px]">
+                                {isSelected ? 'check' : 'arrow_forward'}
+                              </span>
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                </button>
-              );
-            })}
+                </div>
+              ))}
           </div>
         </section>
       )}
@@ -2239,9 +2453,17 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 Tipo de Tratamiento
               </h2>
             </div>
-            <span className="text-xs text-primary font-bold bg-surface-container px-2.5 py-1 rounded-full">
-              Paso 3
-            </span>
+            <button
+              type="button"
+              onClick={retrocederPaso}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+              title="Volver a elegir Odontólogo"
+            >
+              <span className="material-symbols-outlined text-[16px] text-primary group-hover:-translate-x-0.5 transition-transform">
+                arrow_back
+              </span>
+              <span>Cambiar Odontólogo</span>
+            </button>
           </div>
 
           <p className="text-xs text-secondary">
@@ -2335,9 +2557,22 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 Selecciona Fecha y Turno
               </h2>
             </div>
-            <span className="text-xs text-primary font-bold bg-surface-container px-2.5 py-1 rounded-full">
-              Box 0{selectedDoctor ? selectedDoctor.box : 1}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-block text-xs text-primary font-bold bg-surface-container px-2.5 py-1 rounded-full">
+                Box 0{selectedDoctor ? selectedDoctor.box : 1}
+              </span>
+              <button
+                type="button"
+                onClick={retrocederPaso}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+                title="Volver a seleccionar Tratamiento"
+              >
+                <span className="material-symbols-outlined text-[16px] text-primary group-hover:-translate-x-0.5 transition-transform">
+                  arrow_back
+                </span>
+                <span>Cambiar Tratamiento</span>
+              </button>
+            </div>
           </div>
 
           {/* Banner Informativo de Ajuste de Horarios y Disponibilidad por Sede sujeta a #Data */}
@@ -2991,9 +3226,17 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 Datos personales y Médicos
               </h2>
             </div>
-            <span className="text-xs text-primary font-bold bg-surface-container px-2.5 py-1 rounded-full">
-              Paso Final
-            </span>
+            <button
+              type="button"
+              onClick={retrocederPaso}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+              title="Volver a seleccionar Horario"
+            >
+              <span className="material-symbols-outlined text-[16px] text-primary group-hover:-translate-x-0.5 transition-transform">
+                arrow_back
+              </span>
+              <span>Cambiar Horario</span>
+            </button>
           </div>
 
           <p className="text-xs text-secondary">
@@ -3347,7 +3590,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           ref={summaryCardRef}
           className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border-2 border-primary/20 flex flex-col gap-3 animate-in fade-in slide-in-from-top-3 duration-300 scroll-mt-4"
         >
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+          <div className="flex items-center justify-between border-b border-border-subtle pb-3 gap-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center">
                 <span className="material-symbols-outlined text-[18px]">verified</span>
@@ -3361,9 +3604,22 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full bg-status-success/15 text-status-success font-black text-xs">
-              100% Completado
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => irAPaso('patient')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-xs font-bold text-dental-deep-navy shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+                title="Modificar datos o citas"
+              >
+                <span className="material-symbols-outlined text-[16px] text-primary group-hover:-translate-x-0.5 transition-transform">
+                  arrow_back
+                </span>
+                <span>Modificar Datos</span>
+              </button>
+              <span className="px-2.5 py-1 rounded-full bg-status-success/15 text-status-success font-black text-xs shrink-0">
+                100% Completado
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
@@ -3570,6 +3826,17 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           <div className="flex flex-col gap-2 animate-in fade-in duration-200">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 min-w-0">
+                {openStep !== 'sede' && (
+                  <button
+                    type="button"
+                    onClick={retrocederPaso}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-surface-container hover:bg-border-subtle text-[11px] font-extrabold text-dental-deep-navy border border-border-subtle transition-all active:scale-95 shrink-0 shadow-2xs cursor-pointer"
+                    title="Retroceder al paso anterior"
+                  >
+                    <span className="material-symbols-outlined text-[15px] text-primary">arrow_back</span>
+                    <span className="hidden xs:inline">Atrás</span>
+                  </button>
+                )}
                 <span className="material-symbols-outlined text-[18px] text-primary animate-pulse shrink-0">
                   trending_up
                 </span>
@@ -3625,9 +3892,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 </div>
               </div>
 
-              <span className="text-[10px] font-black text-status-success bg-status-success/15 px-2.5 py-1 rounded-full shrink-0">
-                Listo para Confirmar
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => irAPaso('patient')}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-[11px] font-extrabold text-dental-deep-navy border border-border-subtle transition-all active:scale-95 cursor-pointer"
+                  title="Modificar antes de confirmar"
+                >
+                  <span className="material-symbols-outlined text-[14px]">arrow_back</span>
+                  <span>Modificar</span>
+                </button>
+                <span className="text-[10px] font-black text-status-success bg-status-success/15 px-2.5 py-1 rounded-full">
+                  Listo para Confirmar
+                </span>
+              </div>
             </div>
 
             <button
