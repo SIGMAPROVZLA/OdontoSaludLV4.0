@@ -284,8 +284,9 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         } catch {}
 
         if (rawCitas.length > 0) {
+          // Filtrar estrictamente solo citas que han sido aprobadas / confirmadas por el facultativo
           const citasValidas = rawCitas
-            .filter((c: any) => c.estado !== 'cancelada')
+            .filter((c: any) => c.estado === 'confirmada' || c.estado === 'aprobada' || c.estado === 'completada')
             .map((c: any) => ({
               id: c.id,
               sedeId: c.sedeId || c.sede_id || 'victoria',
@@ -694,12 +695,12 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           </div>
         </div>
 
-        {/* Carrusel Táctil de Tarjetas de Citas Pre-Aprobadas y de Reservas */}
+        {/* Carrusel Táctil de Tarjetas de Citas Aprobadas */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-dental-deep-navy flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[17px] text-primary">view_carousel</span>
-              <span>Citas Pre-Aprobadas & Reservas ({citasFiltradas.length})</span>
+              <span>Citas Aprobadas ({citasFiltradas.length})</span>
             </span>
             <span className="text-[11px] text-secondary font-medium">
               Desliza horizontalmente y toca una tarjeta para cargar paciente
@@ -709,11 +710,11 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           {loadingCitas ? (
             <div className="p-4 text-center text-xs text-secondary flex items-center justify-center gap-2 bg-surface-subtle-ice rounded-2xl border border-border-subtle">
               <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
-              <span>Cargando citas pre-aprobadas...</span>
+              <span>Cargando citas aprobadas...</span>
             </div>
           ) : citasFiltradas.length === 0 ? (
             <div className="p-6 text-center text-xs text-secondary bg-surface-subtle-ice rounded-2xl border border-dashed border-border-subtle">
-              No se registran citas pre-aprobadas para la sede seleccionada.
+              No se registran citas aprobadas para la sede seleccionada. Aprueba citas en Triaje / Coordinación.
             </div>
           ) : (
             <div className="flex items-stretch gap-3 overflow-x-auto pb-2 scrollbar-thin scroll-smooth snap-x">

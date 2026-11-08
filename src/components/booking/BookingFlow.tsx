@@ -1109,33 +1109,45 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     const targetSede = selectedSedeId || sedeId;
     const sedeFinal = selectedSedeId ? SEDES_DISPONIBLES[selectedSedeId] : sedeActiva;
 
+    const citaIdGenerada = `cita-${Date.now()}`;
+    const payloadCita: Cita = {
+      id: citaIdGenerada,
+      sedeId: targetSede as SedeId,
+      pacienteId: pacienteEncontrado?.id || `pac-${Date.now()}`,
+      pacienteNombre: nombres,
+      pacienteCedula: `${cedulaTipo}-${cedulaNumero}`,
+      pacienteTelefono: telefono,
+      pacienteEmail: email,
+      pacienteSexo: sexo,
+      pacienteFechaNacimiento: fechaNacimiento,
+      condicionMedicaId: selectedCondicionId,
+      doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por asignar',
+      boxNumero: selectedDoctor ? selectedDoctor.box : 1,
+      fechaCita: selectedDate || '2024-10-24',
+      horaInicio: selectedSlot || '09:00 AM',
+      motivo: motivoCompleto,
+      estado: 'pendiente',
+      esUrgencia:
+        treatment.toLowerCase().includes('urgencia') ||
+        treatment.toLowerCase().includes('dolor'),
+    };
+
     try {
-      await ApiClient.crearCita(targetSede, {
-        pacienteId: pacienteEncontrado?.id || `pac-${Date.now()}`,
-        pacienteNombre: nombres,
-        pacienteCedula: `${cedulaTipo}-${cedulaNumero}`,
-        pacienteTelefono: telefono,
-        pacienteEmail: email,
-        pacienteSexo: sexo,
-        pacienteFechaNacimiento: fechaNacimiento,
-        condicionMedicaId: selectedCondicionId,
-        doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por asignar',
-        boxNumero: selectedDoctor ? selectedDoctor.box : 1,
-        fechaCita: selectedDate || '2024-10-24',
-        horaInicio: selectedSlot || '09:00 AM',
-        motivo: motivoCompleto,
-        estado: 'pendiente',
-        esUrgencia:
-          treatment.toLowerCase().includes('urgencia') ||
-          treatment.toLowerCase().includes('dolor'),
-      });
-      setBookingConfirmed(true);
+      await ApiClient.crearCita(targetSede, payloadCita);
     } catch (err) {
-      console.error('Error al solicitar cita:', err);
-      setBookingConfirmed(true);
-    } finally {
-      setIsSubmitting(false);
+      console.error('Error al solicitar cita en API:', err);
     }
+
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      const list = saved ? JSON.parse(saved) : [];
+      list.push(payloadCita);
+      localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } }));
+    } catch {}
+
+    setBookingConfirmed(true);
+    setIsSubmitting(false);
   };
 
   const compartirPorWhatsApp = () => {

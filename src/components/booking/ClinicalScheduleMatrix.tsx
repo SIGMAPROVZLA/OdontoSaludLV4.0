@@ -1,9 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   SolicitudCita,
   parseHoraToMinutes,
   formatMinutesToHora,
   calcularHoraFin,
+  obtenerTratamientoTexto,
+  obtenerNivelRiesgo,
+  obtenerEdadPaciente,
 } from './AppointmentCoordinationView';
 import { SedeId } from '../../types/clinical';
 import { useSede } from '../../context/SedeContext';
@@ -79,6 +82,20 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
   // 2. Filtro de Box para La Victoria (Permite ver Box 01, Box 02 a ancho completo en móviles o ambos)
   const [filtroBoxVictoria, setFiltroBoxVictoria] = useState<'todos' | 1 | 2>(1);
 
+  // Estado del dropdown activo para asignación de citas
+  const [openAsignarSlot, setOpenAsignarSlot] = useState<{ boxNumero: number; hora: string } | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.dropdown-asignar-cita-container')) {
+        setOpenAsignarSlot(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Configuración de boxes según sede (La Victoria 2 Boxes, Colonia Tovar 1 Box)
   const allBoxes = useMemo(() => {
     if (sedeSeleccionada === 'tovar') {
@@ -131,12 +148,25 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
     return [...HORAS_MANANA, ...HORAS_TARDE];
   }, [turnoSeleccionado]);
 
-  // Citas disponibles pendientes de asignación de horario para el desplegable simple
+  // Citas disponibles pendientes de asignación cargadas en orden estricto de solicitud en Reserva
   const citasDisponiblesParaAsignar = useMemo(() => {
     const listado = todasSolicitudes || solicitudes;
-    return listado.filter(
-      (s) => s.horaTexto === 'Por asignar' || s.estado === 'por_confirmar' || s.estado === 'espera'
+    const sinAsignar = listado.filter(
+      (s) =>
+        s.horaTexto === 'Por asignar' ||
+        s.estado === 'por_confirmar' ||
+        s.estado === 'espera' ||
+        (s.estado as any) === 'pendiente'
     );
+    // Deduplicar respetando el orden cronológico de reserva
+    const vistas = new Set<string>();
+    return sinAsignar.filter((s) => {
+      const cleanCed = (s.pacienteCedula || '').replace(/[^0-9]/g, '');
+      const clave = cleanCed ? `${cleanCed}-${s.pacienteNombre}` : s.id;
+      if (vistas.has(clave)) return false;
+      vistas.add(clave);
+      return true;
+    });
   }, [todasSolicitudes, solicitudes]);
 
   // Manejar cambio de duración con cascada
@@ -649,8 +679,8 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                             </span>
                           </div>
                         ) : (
-                          /* CASO C: Disponible con Selector Simple */
-                          <div className="p-1.5 sm:p-2 rounded-xl border border-dashed border-emerald-300/80 bg-emerald-50/20 hover:bg-emerald-50/50 transition-colors flex flex-col gap-1 text-left">
+                          /* CASO C: Disponible con Selector de 2 Líneas en Orden de Reserva */
+                          <div className="p-1.5 sm:p-2 rounded-xl border border-dashed border-emerald-300/80 bg-emerald-50/20 hover:bg-emerald-50/50 transition-colors flex flex-col gap-1 text-left relative dropdown-asignar-cita-container">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] sm:text-xs font-black text-emerald-800 flex items-center gap-1">
                                 <span className="material-symbols-outlined text-[13px] text-emerald-600">add_circle</span>
@@ -659,31 +689,94 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                               <span className="text-[9px] font-mono text-emerald-700 font-bold">{hora}</span>
                             </div>
 
-                            <select
-                              defaultValue=""
-                              onChange={(e) => {
-                                const citaId = e.target.value;
-                                if (citaId && onAsignarCitaAHora) {
-                                  onAsignarCitaAHora(citaId, box.numero, hora);
-                                }
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenAsignarSlot((prev) =>
+                                  prev?.boxNumero === box.numero && prev?.hora === hora
+                                    ? null
+                                    : { boxNumero: box.numero, hora }
+                                );
                               }}
-                              className="w-full text-[9px] sm:text-[10px] font-bold py-1 px-1.5 rounded-lg bg-white border border-emerald-300 text-dental-deep-navy outline-none cursor-pointer hover:border-emerald-500 transition-colors shadow-2xs"
+                              className="w-full text-[9px] sm:text-[10px] font-bold py-1 px-1.5 rounded-lg bg-white border border-emerald-300 hover:border-emerald-500 text-dental-deep-navy flex items-center justify-between gap-1 cursor-pointer transition-all shadow-2xs active:scale-98"
                             >
-                              <option value="" disabled>
-                                ➕ Asignar Cita a las {hora}...
-                              </option>
-                              {citasDisponiblesParaAsignar.length > 0 ? (
-                                citasDisponiblesParaAsignar.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.pacienteNombre} ({c.duracionMinutos || 30}m)
-                                  </option>
-                                ))
-                              ) : (
-                                <option value="" disabled>
-                                  (Sin citas pendientes de horario)
-                                </option>
-                              )}
-                            </select>
+                              <span className="truncate flex items-center gap-1">
+                                <span className="text-emerald-700 font-bold">➕ Asignar Cita a las {hora}...</span>
+                              </span>
+                              <span className="material-symbols-outlined text-[14px] text-secondary shrink-0">
+                                {openAsignarSlot?.boxNumero === box.numero && openAsignarSlot?.hora === hora
+                                  ? 'expand_less'
+                                  : 'expand_more'}
+                              </span>
+                            </button>
+
+                            {/* Dropdown Flotante con 2 Líneas Estructuradas: 
+                                Línea 1: Tratamiento y Duración en NEGRITAS 
+                                Línea 2: Nombre del paciente, edad y nivel de riesgo */}
+                            {openAsignarSlot?.boxNumero === box.numero && openAsignarSlot?.hora === hora && (
+                              <div className="absolute left-0 top-full mt-1.5 z-50 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-border-subtle p-2 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-150 divide-y divide-border-subtle/50">
+                                <div className="px-2 py-1 text-[9px] font-black uppercase tracking-wider text-secondary flex items-center justify-between bg-surface-subtle-ice rounded-lg mb-1.5">
+                                  <span>Solicitudes de Reserva ({citasDisponiblesParaAsignar.length})</span>
+                                  <span className="text-[8.5px] font-bold text-primary">Orden cronológico</span>
+                                </div>
+
+                                {citasDisponiblesParaAsignar.length === 0 ? (
+                                  <div className="p-3 text-center text-xs text-secondary italic">
+                                    No hay citas pendientes de asignación
+                                  </div>
+                                ) : (
+                                  citasDisponiblesParaAsignar.map((c) => {
+                                    const tratamiento = obtenerTratamientoTexto(c.motivo);
+                                    const duracion = c.duracionMinutos || 45;
+                                    const edad = obtenerEdadPaciente(c);
+                                    const riesgo = obtenerNivelRiesgo(c);
+
+                                    return (
+                                      <button
+                                        key={c.id}
+                                        type="button"
+                                        onClick={() => {
+                                          if (onAsignarCitaAHora) {
+                                            onAsignarCitaAHora(c.id, box.numero, hora);
+                                          }
+                                          setOpenAsignarSlot(null);
+                                        }}
+                                        className="w-full text-left p-2 rounded-xl hover:bg-emerald-50/70 active:bg-emerald-100 transition-colors cursor-pointer group flex flex-col gap-0.5"
+                                      >
+                                        {/* 1ra Línea: Tratamiento y Duración en NEGRITAS */}
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="font-display font-extrabold text-xs text-dental-deep-navy group-hover:text-primary transition-colors truncate">
+                                            {tratamiento}
+                                          </span>
+                                          <span className="font-mono font-black text-[10px] text-primary shrink-0 bg-primary/10 px-1.5 py-0.2 rounded-md">
+                                            {duracion}m
+                                          </span>
+                                        </div>
+
+                                        {/* 2da Línea: Nombre del paciente, edad y nivel de riesgo */}
+                                        <div className="flex items-center gap-1.5 text-[10px] text-secondary flex-wrap">
+                                          <span className="font-semibold text-dental-deep-navy/90">{c.pacienteNombre}</span>
+                                          <span>•</span>
+                                          <span>{edad} años</span>
+                                          <span>•</span>
+                                          <span
+                                            className={`px-1.5 py-0.2 rounded font-black text-[8.5px] uppercase tracking-wider border ${
+                                              riesgo === 'Alto'
+                                                ? 'bg-rose-100 text-rose-800 border-rose-300/70'
+                                                : riesgo === 'Moderado'
+                                                ? 'bg-amber-100 text-amber-800 border-amber-300/70'
+                                                : 'bg-emerald-100 text-emerald-800 border-emerald-300/70'
+                                            }`}
+                                          >
+                                            Riesgo {riesgo}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>

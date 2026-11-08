@@ -30,6 +30,55 @@ export interface SolicitudCita {
   saldoPendientePrevioUsd?: number;
   // Estado de confirmación de datos con el paciente vía WhatsApp
   confirmacionPaciente?: 'pendiente' | 'enlace_enviado' | 'confirmado';
+  pacienteFechaNacimiento?: string;
+  pacienteEdad?: number;
+  nivelRiesgo?: 'Bajo' | 'Moderado' | 'Alto' | string;
+  timestampOrden?: number;
+}
+
+export function obtenerTratamientoTexto(motivo: string): string {
+  if (!motivo) return 'Evaluación Odontológica';
+  const partes = motivo.split('•');
+  return partes[0].trim();
+}
+
+export function obtenerNivelRiesgo(sol: SolicitudCita): 'Bajo' | 'Moderado' | 'Alto' {
+  if (sol.nivelRiesgo) return sol.nivelRiesgo as any;
+  const texto = (sol.motivo || '').toLowerCase();
+  if (sol.tipo === 'urgencia' || texto.includes('dolor') || texto.includes('urgencia')) {
+    return 'Alto';
+  }
+  if (
+    texto.includes('hipertensión') ||
+    texto.includes('diabetes') ||
+    texto.includes('i10') ||
+    texto.includes('cardio')
+  ) {
+    return 'Moderado';
+  }
+  return 'Bajo';
+}
+
+export function obtenerEdadPaciente(sol: SolicitudCita): number {
+  if (sol.pacienteEdad && sol.pacienteEdad > 0) return sol.pacienteEdad;
+  const fn = (sol.pacienteFechaNacimiento || '').trim();
+  if (fn) {
+    const y = parseInt(fn.split('-')[0], 10);
+    if (!isNaN(y) && y > 1900 && y < 2030) {
+      return new Date().getFullYear() - y;
+    }
+  }
+  const cleanDigits = (sol.pacienteCedula || '').replace(/[^0-9]/g, '');
+  const num = parseInt(cleanDigits, 10);
+  if (!isNaN(num)) {
+    if (num > 28000000) return 22;
+    if (num > 24000000) return 28;
+    if (num > 19000000) return 35;
+    if (num > 15000000) return 42;
+    if (num > 10000000) return 54;
+    return 65;
+  }
+  return 34;
 }
 
 interface AppointmentCoordinationViewProps {
@@ -438,47 +487,80 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Cargar citas reales desde Cloudflare D1
+  // Cargar citas reales desde Cloudflare D1 y LocalStorage en estricto orden de solicitud
   const cargarCitasDesdeD1 = async () => {
     setIsRefreshing(true);
     try {
+      let todasCitasCrudas: any[] = [];
       const citasD1 = await ApiClient.getCitas(sedeId, 'all');
-      if (citasD1 && citasD1.length > 0) {
-        const d1Mapeadas: SolicitudCita[] = citasD1.map((c, idx) => ({
+      if (citasD1 && Array.isArray(citasD1)) {
+        todasCitasCrudas = [...citasD1];
+      }
+
+      // Cargar solicitudes de reserva desde LocalStorage
+      try {
+        const localSaved = localStorage.getItem('odontosalud_data_citas');
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((lc: any) => {
+              if (!todasCitasCrudas.some((rc: any) => rc.id === lc.id)) {
+                todasCitasCrudas.push(lc);
+              }
+            });
+          }
+        }
+      } catch {}
+
+      if (todasCitasCrudas.length > 0) {
+        const d1Mapeadas: SolicitudCita[] = todasCitasCrudas.map((c, idx) => ({
           id: c.id,
-          pacienteNombre: c.pacienteNombre,
-          pacienteCedula: c.pacienteCedula || 'V-19.845.221',
-          pacienteTelefono: c.pacienteTelefono || '+584129876543',
-          pacienteEmail: `${c.pacienteNombre.toLowerCase().replace(/\s+/g, '.')}@email.com`,
+          pacienteNombre: c.pacienteNombre || c.paciente_nombre || 'Paciente',
+          pacienteCedula: c.pacienteCedula || c.paciente_cedula || 'V-00.000.000',
+          pacienteTelefono: c.pacienteTelefono || c.paciente_telefono || '+58 412-0000000',
+          pacienteEmail: c.pacienteEmail || `${(c.pacienteNombre || 'paciente').toLowerCase().replace(/\s+/g, '.')}@email.com`,
+          pacienteFechaNacimiento: c.pacienteFechaNacimiento || c.paciente_fecha_nacimiento || '',
           origen: c.esUrgencia ? 'web' : idx % 2 === 0 ? 'chatbot' : 'whatsapp',
           tipo: c.esUrgencia
             ? 'urgencia'
-            : c.motivo.toLowerCase().includes('bracket')
+            : (c.motivo || '').toLowerCase().includes('bracket')
             ? 'control'
             : 'nuevo',
-          motivo: c.motivo,
+          motivo: c.motivo || 'Consulta Odontológica General',
           fechaTexto:
-            c.fechaCita === fechasRelativas.hoyIso
+            c.fechaCita === fechasRelativas.hoyIso || c.fecha_cita === fechasRelativas.hoyIso
               ? 'Hoy'
-              : c.fechaCita === fechasRelativas.ayerIso
+              : c.fechaCita === fechasRelativas.ayerIso || c.fecha_cita === fechasRelativas.ayerIso
               ? 'Ayer'
-              : c.fechaCita === fechasRelativas.mananaIso
+              : c.fechaCita === fechasRelativas.mananaIso || c.fecha_cita === fechasRelativas.mananaIso
               ? 'Mañana'
-              : c.fechaCita,
-          fechaIso: c.fechaCita,
-          horaTexto: c.horaInicio || '09:00 AM',
-          duracionMinutos: 45,
-          boxSugerido: c.boxNumero || 1,
-          doctorSugerido: c.doctorNombre || 'Dra. María Alejandra Domínguez',
+              : c.fechaCita || c.fecha_cita || 'Hoy',
+          fechaIso: c.fechaCita || c.fecha_cita || fechasRelativas.hoyIso,
+          horaTexto: c.horaInicio || c.hora_inicio || '09:00 AM',
+          duracionMinutos: c.duracionMinutos || 45,
+          boxSugerido: c.boxNumero || c.box_numero || 1,
+          doctorSugerido: c.doctorNombre || c.doctor_nombre || 'Dra. María Alejandra Domínguez',
           estado: (c.estado === 'pendiente' ? 'por_confirmar' : c.estado) as any,
-          tiempoTranscurrido: 'Sincronizado D1',
+          tiempoTranscurrido: c.estado === 'confirmada' ? 'Confirmada' : 'En cola de Reserva',
           confirmacionPaciente: c.estado === 'confirmada' ? 'confirmado' : 'pendiente',
+          timestampOrden: idx,
         }));
 
         setSolicitudes((prev) => {
-          const idsExistentes = new Set(d1Mapeadas.map((d) => d.id));
-          const mockRestantes = prev.filter((p) => !idsExistentes.has(p.id));
-          return [...d1Mapeadas, ...mockRestantes];
+          // Deduplicar estrictamente por cédula y por ID para evitar duplicados en la lista
+          const vistasCedula = new Set<string>();
+          const listaUnificada = [...d1Mapeadas, ...prev];
+          const unicos: SolicitudCita[] = [];
+
+          for (const item of listaUnificada) {
+            const clean = (item.pacienteCedula || '').replace(/[^0-9]/g, '');
+            const key = clean ? `${clean}-${item.fechaIso}-${item.horaTexto}` : item.id;
+            if (!vistasCedula.has(key)) {
+              vistasCedula.add(key);
+              unicos.push(item);
+            }
+          }
+          return unicos;
         });
       }
     } catch {
@@ -490,6 +572,16 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
 
   useEffect(() => {
     cargarCitasDesdeD1();
+
+    const handleActualizacion = () => {
+      cargarCitasDesdeD1();
+    };
+    window.addEventListener('odontosalud_data_updated', handleActualizacion);
+    window.addEventListener('storage', handleActualizacion);
+    return () => {
+      window.removeEventListener('odontosalud_data_updated', handleActualizacion);
+      window.removeEventListener('storage', handleActualizacion);
+    };
   }, [sedeId]);
 
   // Abrir modal flotante de cambiar horario
@@ -516,25 +608,65 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     setModalHorario(null);
   };
 
-  // Botón 1: Enviar enlace de confirmación por WhatsApp y reflejar estado en la tarjeta
-  const handleEnviarWhatsAppConfirmacion = (sol: SolicitudCita) => {
+  // Botón 1: Enviar enlace de confirmación por WhatsApp y aprobar la cita
+  const handleEnviarWhatsAppConfirmacion = async (sol: SolicitudCita) => {
     const horaFin = calcularHoraFin(sol.horaTexto, sol.duracionMinutos);
     const cleanPhone = sol.pacienteTelefono.replace(/[^0-9]/g, '');
 
-    // Enlace de confirmación directa del paciente
     const enlaceConfirmacion = `https://odontosaludlv.com/#confirmar?id=${sol.id}&p=${encodeURIComponent(sol.pacienteCedula)}`;
 
     const mensaje = encodeURIComponent(
-      `¡Hola ${sol.pacienteNombre}! Le saludamos de OdontoSalud (${sedeActiva.nombre}). Para confirmar su cita de *${sol.motivo}* programada para el *${sol.fechaTexto}* a las *${sol.horaTexto} a ${horaFin}* (${sol.duracionMinutos} min) con ${sol.doctorSugerido}, por favor confirme pulsando este enlace directo:\n\n👉 ${enlaceConfirmacion}\n\nO responda *CONFIRMO* a este mensaje.`
+      `¡Hola ${sol.pacienteNombre}! Le saludamos de OdontoSalud (${sedeActiva.nombre}). Su cita para *${sol.motivo}* ha sido APROBADA para hoy a las *${sol.horaTexto} a ${horaFin}* (${sol.duracionMinutos} min) en Box 0${sol.boxSugerido} con ${sol.doctorSugerido}.\n\nPara verificar su ficha digital pulse aquí:\n👉 ${enlaceConfirmacion}\n\n¡Le esperamos con puntualidad!`
     );
 
-    // Actualizar estado en la tarjeta a "enlace_enviado"
+    // Actualizar estado a confirmada / aprobada
     setSolicitudes((prev) =>
-      prev.map((s) => (s.id === sol.id ? { ...s, confirmacionPaciente: 'enlace_enviado' } : s))
+      prev.map((s) => (s.id === sol.id ? { ...s, estado: 'confirmada', confirmacionPaciente: 'confirmado' } : s))
     );
+
+    await ApiClient.actualizarEstadoCita(
+      sol.id,
+      'confirmada',
+      sedeId,
+      sol.boxSugerido,
+      sol.horaTexto,
+      sol.fechaIso,
+      sol.doctorSugerido
+    );
+
+    // Sincronizar en localStorage para que la vista Ficha la reciba inmediatamente en su carrusel
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      let list = saved ? JSON.parse(saved) : [];
+      let found = false;
+      list = list.map((c: any) => {
+        if (c.id === sol.id) {
+          found = true;
+          return { ...c, estado: 'confirmada', horaInicio: sol.horaTexto, boxNumero: sol.boxSugerido, fechaCita: sol.fechaIso };
+        }
+        return c;
+      });
+      if (!found) {
+        list.push({
+          id: sol.id,
+          pacienteNombre: sol.pacienteNombre,
+          pacienteCedula: sol.pacienteCedula,
+          pacienteTelefono: sol.pacienteTelefono,
+          motivo: sol.motivo,
+          fechaCita: sol.fechaIso,
+          horaInicio: sol.horaTexto,
+          boxNumero: sol.boxSugerido,
+          doctorNombre: sol.doctorSugerido,
+          sedeId,
+          estado: 'confirmada',
+        });
+      }
+      localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } }));
+    } catch {}
 
     window.open(`https://wa.me/${cleanPhone}?text=${mensaje}`, '_blank');
-    mostrarNotificacion(`💬 Enlace de confirmación enviado por WhatsApp a ${sol.pacienteNombre}.`);
+    mostrarNotificacion(`💬 Cita de ${sol.pacienteNombre} aprobada y enviada vía WhatsApp.`);
   };
 
   // Botón Especial (Optimización 3): Notificación Proactiva de Saldo Pendiente por WhatsApp
@@ -597,6 +729,36 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       sol.doctorSugerido
     );
 
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      let list = saved ? JSON.parse(saved) : [];
+      let found = false;
+      list = list.map((c: any) => {
+        if (c.id === sol.id) {
+          found = true;
+          return { ...c, estado: 'confirmada', horaInicio: sol.horaTexto, boxNumero: sol.boxSugerido };
+        }
+        return c;
+      });
+      if (!found) {
+        list.push({
+          id: sol.id,
+          pacienteNombre: sol.pacienteNombre,
+          pacienteCedula: sol.pacienteCedula,
+          pacienteTelefono: sol.pacienteTelefono,
+          motivo: sol.motivo,
+          fechaCita: sol.fechaIso,
+          horaInicio: sol.horaTexto,
+          boxNumero: sol.boxSugerido,
+          doctorNombre: sol.doctorSugerido,
+          sedeId,
+          estado: 'confirmada',
+        });
+      }
+      localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } }));
+    } catch {}
+
     mostrarNotificacion(`✅ Cita de ${sol.pacienteNombre} aprobada en Agenda.`);
   };
 
@@ -633,6 +795,37 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       boxNumero,
       hora
     );
+
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      let list = saved ? JSON.parse(saved) : [];
+      let found = false;
+      list = list.map((c: any) => {
+        if (c.id === citaId) {
+          found = true;
+          return { ...c, boxNumero, horaInicio: hora };
+        }
+        return c;
+      });
+      if (!found) {
+        list.push({
+          id: cita.id,
+          pacienteNombre: cita.pacienteNombre,
+          pacienteCedula: cita.pacienteCedula,
+          pacienteTelefono: cita.pacienteTelefono,
+          motivo: cita.motivo,
+          fechaCita: cita.fechaIso,
+          horaInicio: hora,
+          boxNumero,
+          doctorNombre: cita.doctorSugerido,
+          sedeId,
+          estado: cita.estado,
+        });
+      }
+      localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } }));
+    } catch {}
+
     mostrarNotificacion(`✅ Cita de ${cita.pacienteNombre} asignada al Box 0${boxNumero} a las ${hora}`);
   };
 
