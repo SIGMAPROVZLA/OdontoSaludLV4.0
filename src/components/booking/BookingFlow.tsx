@@ -249,7 +249,7 @@ export const getDoctorAvatar = (nombre: string = '', box: number = 1): string =>
     : 'https://images.unsplash.com/photo-1594824813637-4560767733a1?auto=format&fit=crop&w=200&q=80';
 };
 
-export const cleanAvatar = (rawAvatar?: string, nombre: string = '', box: number = 1): string => {
+const cleanAvatar = (rawAvatar?: string, nombre: string = '', box: number = 1): string => {
   if (rawAvatar && (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://') || rawAvatar.startsWith('data:image/'))) {
     return rawAvatar;
   }
