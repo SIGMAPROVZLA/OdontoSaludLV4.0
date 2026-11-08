@@ -4,9 +4,14 @@
  */
 
 export interface ForensicSealMetadata {
-  pacienteId: string;
+  pacienteId?: string;
   doctorNombre: string;
-  tipoDocumento: 'radiografia_rvg' | 'prescripcion_medica' | 'evolucion_clinica' | 'comprobante_pago';
+  tipoDocumento:
+    | 'radiografia_rvg'
+    | 'prescripcion_medica'
+    | 'evolucion_clinica'
+    | 'comprobante_pago'
+    | 'comprobante_liquidacion_honorarios';
   timestampUtc?: string;
 }
 
@@ -55,7 +60,7 @@ export async function generateForensicSeal(
 ): Promise<ForensicSealResult> {
   const selladoUtc = meta.timestampUtc || new Date().toISOString();
   const doctorFirmante = (meta.doctorNombre || 'Facultativo OdontoSalud').trim();
-  const canonicalEnvelope = `ODONTOSALUD-FORENSIC-V4|${meta.tipoDocumento}|${meta.pacienteId}|${doctorFirmante}|${selladoUtc}|${contentData}`;
+  const canonicalEnvelope = `ODONTOSALUD-FORENSIC-V4|${meta.tipoDocumento}|${meta.pacienteId || 'N/A'}|${doctorFirmante}|${selladoUtc}|${contentData}`;
 
   const sha256Hash = await computeSha256Hex(canonicalEnvelope);
   const payloadSizeBytes = new TextEncoder().encode(contentData).byteLength;

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { TabId } from '../layout/BottomNavigation';
+import { SedeId } from '../../types/clinical';
+import { ClinicalScheduleMatrix } from './ClinicalScheduleMatrix';
+import { PatientClinicalHistoryModal } from './PatientClinicalHistoryModal';
 
 export interface SolicitudCita {
   id: string;
@@ -22,6 +25,9 @@ export interface SolicitudCita {
   tiempoTranscurrido: string;
   notaRecepcion?: string;
   pagoAnticipado?: string;
+  montoReservaUsd?: number;
+  referenciaReserva?: string;
+  saldoPendientePrevioUsd?: number;
   // Estado de confirmación de datos con el paciente vía WhatsApp
   confirmacionPaciente?: 'pendiente' | 'enlace_enviado' | 'confirmado';
 }
@@ -130,6 +136,11 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  // Estado para la Matriz Horaria Clínica (Propuesta A)
+  const [sedeMatriz, setSedeMatriz] = useState<SedeId>((sedeId as SedeId) || 'victoria');
+  const [turnoMatriz, setTurnoMatriz] = useState<'manana' | 'tarde' | 'completo'>('manana');
+  const [citaSeleccionadaId, setCitaSeleccionadaId] = useState<string | null>(null);
+
   // Formulario flotante preciso de cambio de horario (en modal flotante 2 columnas)
   const [modalHorario, setModalHorario] = useState<{
     id: string;
@@ -137,6 +148,9 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     hora: string;
     duracion: number;
   } | null>(null);
+
+  // Modal de Historia Clínica Digital en la misma interfaz
+  const [modalHistoriaPaciente, setModalHistoriaPaciente] = useState<SolicitudCita | null>(null);
 
   // Solicitudes de citas previas
   const [solicitudes, setSolicitudes] = useState<SolicitudCita[]>([
@@ -174,13 +188,32 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       horaTexto: '03:00 PM',
       duracionMinutos: 45,
       boxSugerido: 2,
-      doctorSugerido: 'Dra. Carmen Elena Silva',
+      doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
       estado: 'confirmada',
       tiempoTranscurrido: 'Ayer',
       confirmacionPaciente: 'confirmado',
     },
 
-    // HOY
+    // HOY (Horario Clínico Consecuente según Distribución de Sillones)
+    {
+      id: 'sol-hoy-0',
+      pacienteNombre: 'María Alejandra Domínguez Hernández',
+      pacienteCedula: 'V-14.890.123',
+      pacienteTelefono: '+584141234567',
+      pacienteEmail: 'm.dominguez@gmail.com',
+      origen: 'web',
+      tipo: 'nuevo',
+      motivo: 'Profilaxis Ultrasónica & Pulido Coronario • Anamnesis: [Z01.2] Examen odontológico',
+      fechaTexto: 'Hoy',
+      fechaIso: fechasRelativas.hoyIso,
+      horaTexto: '08:00 AM',
+      duracionMinutos: 30,
+      boxSugerido: 2,
+      doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
+      estado: 'por_confirmar',
+      tiempoTranscurrido: 'Hace 8m',
+      confirmacionPaciente: 'pendiente',
+    },
     {
       id: 'sol-hoy-1',
       pacienteNombre: 'Patricia Velásquez',
@@ -200,6 +233,46 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       tiempoTranscurrido: 'Hace 14m',
       confirmacionPaciente: 'pendiente',
       notaRecepcion: 'Paciente refiere dolor que no cede con analgésicos comunes.',
+      montoReservaUsd: 20,
+      referenciaReserva: 'PM-984210',
+    },
+    {
+      id: 'sol-hoy-elena',
+      pacienteNombre: 'Elena Blanco',
+      pacienteCedula: 'V-25.115.894',
+      pacienteTelefono: '+584129876543',
+      pacienteEmail: 'elena.blanco@gmail.com',
+      origen: 'web',
+      tipo: 'nuevo',
+      motivo: 'Profilaxis & Destartraje ultrasónico completo',
+      fechaTexto: 'Hoy',
+      fechaIso: fechasRelativas.hoyIso,
+      horaTexto: '09:00 AM',
+      duracionMinutos: 45,
+      boxSugerido: 1,
+      doctorSugerido: 'Dra. María Alejandra Domínguez',
+      estado: 'por_confirmar',
+      tiempoTranscurrido: 'Hace 25m',
+      confirmacionPaciente: 'pendiente',
+    },
+    {
+      id: 'sol-hoy-3',
+      pacienteNombre: 'Carlos Mendoza',
+      pacienteCedula: 'V-17.654.321',
+      pacienteTelefono: '+584121234567',
+      pacienteEmail: 'carlos.mendoza@email.com',
+      origen: 'whatsapp',
+      tipo: 'urgencia',
+      motivo: 'Endodoncia #16',
+      fechaTexto: 'Hoy',
+      fechaIso: fechasRelativas.hoyIso,
+      horaTexto: '09:30 AM',
+      duracionMinutos: 45,
+      boxSugerido: 1,
+      doctorSugerido: 'Dra. María Alejandra Domínguez',
+      estado: 'por_confirmar',
+      tiempoTranscurrido: 'Hace 30m',
+      confirmacionPaciente: 'pendiente',
     },
     {
       id: 'sol-hoy-2',
@@ -215,30 +288,49 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       horaTexto: '09:30 AM',
       duracionMinutos: 30,
       boxSugerido: 2,
-      doctorSugerido: 'Dra. Carmen Elena Silva',
+      doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
       estado: 'por_confirmar',
       tiempoTranscurrido: 'Hace 35m',
       confirmacionPaciente: 'enlace_enviado',
+      saldoPendientePrevioUsd: 35,
     },
     {
-      id: 'sol-hoy-3',
-      pacienteNombre: 'Carlos Mendoza',
-      pacienteCedula: 'V-17.654.321',
-      pacienteTelefono: '+584121234567',
-      pacienteEmail: 'carlos.mendoza@email.com',
-      origen: 'whatsapp',
-      tipo: 'urgencia',
-      motivo: 'Endodoncia Molar 1.6 (Dolor moderado recurrente)',
+      id: 'sol-hoy-raymond',
+      pacienteNombre: 'Raymond Gilbonio',
+      pacienteCedula: 'V-16.782.901',
+      pacienteTelefono: '+584149988112',
+      pacienteEmail: 'raymond.gilbonio@gmail.com',
+      origen: 'web',
+      tipo: 'nuevo',
+      motivo: 'Profilaxis Ultrasónica & Pulido Coronario • Anamnesis: [I10] Hipertensión',
       fechaTexto: 'Hoy',
       fechaIso: fechasRelativas.hoyIso,
-      horaTexto: '11:00 AM',
-      duracionMinutos: 60,
+      horaTexto: '10:00 AM',
+      duracionMinutos: 30,
       boxSugerido: 1,
-      doctorSugerido: 'Dra. Valeria Hernández',
+      doctorSugerido: 'Dra. María Alejandra Domínguez',
+      estado: 'confirmada',
+      tiempoTranscurrido: 'Hace 45m',
+      confirmacionPaciente: 'confirmado',
+    },
+    {
+      id: 'sol-hoy-guillermo',
+      pacienteNombre: 'Guillermo Parra',
+      pacienteCedula: 'V-18.234.567',
+      pacienteTelefono: '+584149988776',
+      pacienteEmail: 'guillermo.parra@gmail.com',
+      origen: 'chatbot',
+      tipo: 'control',
+      motivo: 'Toma de impresión definitiva para prótesis fija',
+      fechaTexto: 'Hoy',
+      fechaIso: fechasRelativas.hoyIso,
+      horaTexto: '10:30 AM',
+      duracionMinutos: 45,
+      boxSugerido: 2,
+      doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
       estado: 'por_confirmar',
-      tiempoTranscurrido: 'Hace 1h',
-      confirmacionPaciente: 'pendiente',
-      notaRecepcion: 'Paciente solicita turno preferencial antes del mediodía.',
+      tiempoTranscurrido: 'Hace 50m',
+      confirmacionPaciente: 'enlace_enviado',
     },
     {
       id: 'sol-hoy-4',
@@ -254,7 +346,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       horaTexto: '02:00 PM',
       duracionMinutos: 45,
       boxSugerido: 2,
-      doctorSugerido: 'Dra. Andrea Morales',
+      doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
       estado: 'confirmada',
       tiempoTranscurrido: 'Hace 2h',
       confirmacionPaciente: 'confirmado',
@@ -445,6 +537,22 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     mostrarNotificacion(`💬 Enlace de confirmación enviado por WhatsApp a ${sol.pacienteNombre}.`);
   };
 
+  // Botón Especial (Optimización 3): Notificación Proactiva de Saldo Pendiente por WhatsApp
+  const handleEnviarNotificacionSaldoWhatsApp = (sol: SolicitudCita) => {
+    const saldo = sol.saldoPendientePrevioUsd || 0;
+    if (saldo <= 0) return;
+
+    const cleanPhone = sol.pacienteTelefono.replace(/[^0-9]/g, '');
+    const saldoBs = Math.round(saldo * 45.5); // Referencial o tasa activa
+
+    const mensaje = encodeURIComponent(
+      `Estimado(a) ${sol.pacienteNombre}, le recordamos cordialmente desde OdontoSalud (${sedeActiva.nombre}) su próxima cita de control de *${sol.motivo}* con ${sol.doctorSugerido} programada para el *${sol.fechaTexto} a las ${sol.horaTexto}*.\n\nLe recordamos que mantiene un saldo pendiente de *$${saldo.toFixed(2)} USD* (aprox. ${saldoBs.toLocaleString('es-VE')} Bs.).\n\nPuede abonar o liquidar previamente por Pago Móvil o en recepción al llegar. Para ver su estado de cuenta en línea pulse aquí:\n👉 https://odontosaludlv.com/#estado-cuenta?p=${encodeURIComponent(sol.pacienteCedula)}\n\n¡Le esperamos!`
+    );
+
+    window.open(`https://wa.me/${cleanPhone}?text=${mensaje}`, '_blank');
+    mostrarNotificacion(`📲 Recordatorio proactivo de saldo enviado por WhatsApp a ${sol.pacienteNombre}.`);
+  };
+
   // Alternar estado de confirmación del paciente con 1 toque en el badge
   const handleToggleEstadoConfirmacion = (sol: SolicitudCita) => {
     setSolicitudes((prev) =>
@@ -490,6 +598,123 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     );
 
     mostrarNotificacion(`✅ Cita de ${sol.pacienteNombre} aprobada en Agenda.`);
+  };
+
+  // Manejar selección de cita desde la Matriz Horaria (Scroll suave y resalte luminoso)
+  const handleSeleccionarCitaDesdeMatriz = (citaId: string) => {
+    setCitaSeleccionadaId(citaId);
+    const element = document.getElementById(`cita-card-${citaId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    // Quitar el foco tras 4 segundos
+    setTimeout(() => {
+      setCitaSeleccionadaId((prev) => (prev === citaId ? null : prev));
+    }, 4000);
+  };
+
+  // Manejar asignación directa de cita a un Box y Hora desde la Matriz (Campo de Selección Simple)
+  const handleAsignarCitaAHora = async (citaId: string, boxNumero: number, hora: string) => {
+    const cita = solicitudes.find((s) => s.id === citaId);
+    if (!cita) return;
+
+    setSolicitudes((prev) =>
+      prev.map((s) =>
+        s.id === citaId
+          ? { ...s, boxSugerido: boxNumero, horaTexto: hora }
+          : s
+      )
+    );
+
+    await ApiClient.actualizarEstadoCita(
+      citaId,
+      cita.estado === 'confirmada' ? 'confirmada' : 'pendiente',
+      sedeId,
+      boxNumero,
+      hora
+    );
+    mostrarNotificacion(`✅ Cita de ${cita.pacienteNombre} asignada al Box 0${boxNumero} a las ${hora}`);
+  };
+
+  // Manejar cambio de duración con efecto inmediato sobre el horario en la Matriz con Cascada
+  const handleCambiarDuracionCita = async (citaId: string, nuevaDuracion: number) => {
+    const cita = solicitudes.find((s) => s.id === citaId);
+    if (!cita) return;
+
+    const horaFin = calcularHoraFin(cita.horaTexto, nuevaDuracion);
+    const startMins = parseHoraToMinutes(cita.horaTexto);
+
+    setSolicitudes((prev) => {
+      // Reajustar duración de esta cita y si se solapa con citas posteriores en el mismo box y fecha, empujarlas en cascada
+      const delMismoBoxYDia = prev
+        .filter(
+          (s) =>
+            (s.boxSugerido || 1) === (cita.boxSugerido || 1) &&
+            s.fechaIso === cita.fechaIso &&
+            s.horaTexto !== 'Por asignar'
+        )
+        .sort((a, b) => parseHoraToMinutes(a.horaTexto) - parseHoraToMinutes(b.horaTexto));
+
+      let cursor = startMins + nuevaDuracion + 10; // con delay de bioseguridad (10 min)
+      const reajustes: Record<string, string> = {};
+
+      delMismoBoxYDia.forEach((c) => {
+        if (c.id === citaId) return;
+        const cStart = parseHoraToMinutes(c.horaTexto);
+        // Si esta cita empezaba después o en la hora modificada y hay solapamiento
+        if (cStart >= startMins && cStart < cursor) {
+          reajustes[c.id] = formatMinutesToHora(cursor);
+          cursor += (c.duracionMinutos || 30) + 10;
+        } else if (cStart >= cursor) {
+          cursor = cStart + (c.duracionMinutos || 30) + 10;
+        }
+      });
+
+      return prev.map((s) => {
+        if (s.id === citaId) {
+          return { ...s, duracionMinutos: nuevaDuracion };
+        }
+        if (reajustes[s.id]) {
+          return { ...s, horaTexto: reajustes[s.id] };
+        }
+        return s;
+      });
+    });
+
+    await ApiClient.actualizarEstadoCita(
+      citaId,
+      cita.estado === 'confirmada' ? 'confirmada' : 'pendiente',
+      sedeId,
+      cita.boxSugerido,
+      cita.horaTexto
+    );
+    mostrarNotificacion(`⏱ Duración de ${cita.pacienteNombre} ajustada a ${nuevaDuracion}m (${cita.horaTexto} a ${horaFin}) con cascada activa.`);
+  };
+
+  // Desasignar o liberar horario de una cita en la Matriz
+  const handleLiberarSlotCita = async (citaId: string) => {
+    const cita = solicitudes.find((s) => s.id === citaId);
+    if (!cita) return;
+
+    setSolicitudes((prev) =>
+      prev.map((s) =>
+        s.id === citaId
+          ? { ...s, horaTexto: 'Por asignar' }
+          : s
+      )
+    );
+
+    mostrarNotificacion(`🔄 Espacio liberado en sillón. Cita de ${cita.pacienteNombre} disponible para reasignar.`);
+  };
+
+  // Manejar asignación de un hueco libre desde la Matriz Horaria
+  const handleAsignarHuecoLibre = (box: number, hora: string) => {
+    const pendiente = solicitudes.find((s) => s.estado === 'por_confirmar' || s.estado === 'espera' || s.horaTexto === 'Por asignar');
+    if (pendiente) {
+      handleAsignarCitaAHora(pendiente.id, box, hora);
+    } else {
+      mostrarNotificacion(`ℹ️ Box 0${box} disponible a las ${hora}. Seleccione una cita del desplegable.`);
+    }
   };
 
   // Conteo por días para los botones de Ayer, Hoy y Mañana
@@ -674,18 +899,43 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       </section>
 
       {/* =========================================================================
-          2. LISTA DE TARJETAS LIMPIAS (SOLO INFORMACIÓN ESENCIAL)
+          2. MATRIZ HORARIA CLÍNICA POR SILLÓN / BOX POR SEDE (PROPUESTA A)
+         ========================================================================= */}
+      <ClinicalScheduleMatrix
+        solicitudes={solicitudesFiltradas}
+        todasSolicitudes={solicitudes}
+        sedeSeleccionada={sedeMatriz}
+        onCambiarSede={setSedeMatriz}
+        turnoSeleccionado={turnoMatriz}
+        onCambiarTurno={setTurnoMatriz}
+        filtroDia={filtroDia}
+        onSeleccionarCita={handleSeleccionarCitaDesdeMatriz}
+        onAsignarHuecoLibre={handleAsignarHuecoLibre}
+        onAsignarCitaAHora={handleAsignarCitaAHora}
+        onCambiarDuracionCita={handleCambiarDuracionCita}
+        onLiberarSlotCita={handleLiberarSlotCita}
+        onEnviarWhatsApp={handleEnviarWhatsAppConfirmacion}
+        onToggleConfirmacion={handleToggleEstadoConfirmacion}
+        onVerHistoriaClinica={(sol) => setModalHistoriaPaciente(sol)}
+      />
+
+      {/* =========================================================================
+          3. LISTA DE TARJETAS LIMPIAS (SOLO INFORMACIÓN ESENCIAL)
          ========================================================================= */}
       <div className="space-y-3">
         {solicitudesOrdenadas.map((sol) => {
           const horaFin = calcularHoraFin(sol.horaTexto, sol.duracionMinutos);
           const isConfirmada = sol.estado === 'confirmada';
+          const isSelected = citaSeleccionadaId === sol.id;
 
           return (
             <div
               key={sol.id}
-              className={`bg-surface-clean-white rounded-2xl p-4 shadow-sm border transition-all duration-200 relative overflow-hidden flex flex-col gap-2.5 ${
-                sol.tipo === 'urgencia'
+              id={`cita-card-${sol.id}`}
+              className={`bg-surface-clean-white rounded-2xl p-4 shadow-sm border transition-all duration-300 relative overflow-hidden flex flex-col gap-2.5 ${
+                isSelected
+                  ? 'ring-2 ring-primary border-primary shadow-soft-elevated scale-[1.01]'
+                  : sol.tipo === 'urgencia'
                   ? 'border-status-danger/40 ring-1 ring-status-danger/10'
                   : isConfirmada
                   ? 'border-status-success/40'
@@ -795,6 +1045,38 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
                 </div>
               </div>
 
+              {/* Indicadores Financieros / Conciliación de Citas */}
+              {(sol.montoReservaUsd || sol.saldoPendientePrevioUsd) && (
+                <div className="flex items-center gap-2 flex-wrap pl-1 text-[11px]">
+                  {sol.montoReservaUsd && (
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold flex items-center gap-1 shadow-2xs">
+                      <span className="material-symbols-outlined text-[13px] text-emerald-600">payments</span>
+                      <span>Abono Reserva: <strong>${sol.montoReservaUsd} USD</strong></span>
+                      {sol.referenciaReserva && (
+                        <span className="text-[10px] text-emerald-700 font-mono">({sol.referenciaReserva})</span>
+                      )}
+                    </span>
+                  )}
+                  {sol.saldoPendientePrevioUsd && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 font-bold flex items-center gap-1 shadow-2xs">
+                        <span className="material-symbols-outlined text-[13px] text-amber-600">warning</span>
+                        <span>Deuda previa: <strong>${sol.saldoPendientePrevioUsd} USD</strong></span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleEnviarNotificacionSaldoWhatsApp(sol)}
+                        className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                        title="Enviar recordatorio cordial de saldo pendiente por WhatsApp"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">send</span>
+                        <span>Cobro WhatsApp</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Nota de recepción compacta si existe */}
               {sol.notaRecepcion && (
                 <div className="px-2.5 py-1 rounded-lg bg-amber-50/80 border border-amber-200/60 text-[11px] text-amber-900 flex items-center gap-1.5 pl-1.5">
@@ -811,8 +1093,8 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
                   4. Aprobar Cita
                  =================================================================== */}
               <div className="pt-2 border-t border-border-subtle/70 flex items-center justify-between gap-1.5 pl-1">
-                {/* Botón 1 y 2: Canales de contacto */}
-                <div className="flex items-center gap-1.5">
+                {/* Botón 1, 2 y 3: Canales de contacto & Historia Clínica */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                   {/* Botón 1: WhatsApp con Enlace de Confirmación al Paciente */}
                   <button
                     type="button"
@@ -824,7 +1106,18 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
                     <span className="hidden sm:inline text-[11px]">WhatsApp</span>
                   </button>
 
-                  {/* Botón 2: Correo Directo */}
+                  {/* Botón 2: Historia Clínica Digital en esta misma interfaz */}
+                  <button
+                    type="button"
+                    onClick={() => setModalHistoriaPaciente(sol)}
+                    className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-dental-deep-navy hover:bg-primary text-white border border-dental-deep-navy text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                    title="Ver Historia Clínica Digital del paciente"
+                  >
+                    <span className="material-symbols-outlined text-[17px] text-vibrant-cyan">clinical_notes</span>
+                    <span className="hidden sm:inline text-[11px]">Historia</span>
+                  </button>
+
+                  {/* Botón 3: Correo Directo */}
                   <button
                     type="button"
                     onClick={() => handleEnviarCorreo(sol)}
@@ -976,6 +1269,21 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
           </div>
         </div>
       )}
+
+      {/* =========================================================================
+          4. MODAL DE HISTORIA CLÍNICA DIGITAL EN LA MISMA INTERFAZ
+             (ACCESO DIRECTO DESDE LA MATRIZ HORARIA Y DESDE LAS TARJETAS)
+         ========================================================================= */}
+      <PatientClinicalHistoryModal
+        solicitud={modalHistoriaPaciente}
+        onClose={() => setModalHistoriaPaciente(null)}
+        onIrAFichaCompleta={(pacienteId) => {
+          setModalHistoriaPaciente(null);
+          if (onNavigateTab) {
+            onNavigateTab('odontograma');
+          }
+        }}
+      />
     </div>
   );
 };

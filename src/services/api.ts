@@ -1,5 +1,6 @@
 import {
   SedeId,
+  SedeInfo,
   DashboardPulse,
   Cita,
   ToothRecord,
@@ -718,6 +719,8 @@ export class ApiClient {
     liquidados: number;
     referencia: string;
     fechaLiquidacion: string;
+    comprobanteData?: string;
+    sha256Hash?: string;
     mensaje: string;
   }> {
     try {
@@ -734,6 +737,8 @@ export class ApiClient {
         liquidados: request.ids.length,
         referencia: request.referencia,
         fechaLiquidacion: request.fechaLiquidacion || new Date().toISOString(),
+        comprobanteData: request.comprobanteData,
+        sha256Hash: request.sha256Hash,
         mensaje: 'Liquidado en modo contingencia',
       };
     }
@@ -967,5 +972,30 @@ export class ApiClient {
     });
 
     return teeth;
+  }
+
+  // 15. Configuración Maestra de Sedes (Fuente de la Verdad)
+  static async getSedesConfig(): Promise<{ success: boolean; sedes: SedeInfo[] }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/config/sedes`);
+      if (!res.ok) throw new Error('Error al obtener sedes');
+      return await res.json();
+    } catch {
+      return { success: false, sedes: [] };
+    }
+  }
+
+  static async guardarSedeConfig(id: string, config: Partial<SedeInfo>): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/config/sedes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) throw new Error('Error al guardar configuración de sede');
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Error de red' };
+    }
   }
 }

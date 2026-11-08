@@ -1,14 +1,34 @@
 export type SedeId = 'victoria' | 'tovar';
 
+export interface BoxInfo {
+  numero: number;
+  nombre: string;
+  especialidad: string;
+  doctorDefault?: string;
+}
+
 export interface SedeInfo {
   id: SedeId;
   nombre: string;
   subtitulo: string;
   direccion: string;
+  ciudad?: string;
+  estadoVzla?: string;
+  googleMapsUrl?: string;
   telefono: string;
   whatsapp: string;
   email: string;
   totalBoxes: number;
+  boxes?: BoxInfo[];
+  horarioApertura?: string;
+  horarioCierre?: string;
+  turnoManana?: string;
+  turnoTarde?: string;
+  diasAtencion?: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
+  tiktokUrl?: string;
+  webUrl?: string;
 }
 
 export type ToothFace = 'V' | 'M' | 'O' | 'D' | 'L';
@@ -119,6 +139,10 @@ export interface Presupuesto {
   procedimiento?: string;
   estado: 'borrador' | 'en_espera' | 'aprobado_parcial' | 'pagado' | 'anulado';
   createdAt: string;
+  abonoReservaCitaUsd?: number;
+  referenciaReservaCita?: string;
+  esCitaHoy?: boolean;
+  doctorTratante?: string;
 }
 
 export type MetodoPago =
@@ -319,6 +343,8 @@ export interface TratamientoRealizadoItem {
   estadoPagoHonorario: 'pendiente' | 'liquidado';
   fechaLiquidacion?: string;
   referenciaLiquidacion?: string;
+  comprobanteLiquidacion?: string;
+  sha256HashLiquidacion?: string;
   boxNumero?: number;
   sedeId: SedeId;
   fechaRealizacion: string;
@@ -329,6 +355,8 @@ export interface LiquidarHonorariosRequest {
   ids: string[];
   referencia: string;
   fechaLiquidacion?: string;
+  comprobanteData?: string;
+  sha256Hash?: string;
 }
 
 export interface EvolucionClinicaItem {
@@ -426,6 +454,59 @@ export interface EdgeHealthMetrics {
     totalRadiografias: number;
   };
   timestamp: string;
+}
+
+export interface InventarioItem {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria:
+    | 'Restauración / Operatoria'
+    | 'Endodoncia'
+    | 'Bioseguridad & Desinfección'
+    | 'Cirugía & Periodoncia'
+    | 'Ortodoncia'
+    | 'Prótesis & Impresión'
+    | 'Anestesia & Farmacia';
+  stockActual: number;
+  stockMinimo: number;
+  unidadMedida: 'Caja' | 'Tubo / Jeringa' | 'Frasco' | 'Paquete' | 'Unidad' | 'Cartucho (Carpule)' | 'Galón';
+  precioCompraUsd: number;
+  fechaIngreso: string;
+  fechaSalida?: string;
+  lote: string;
+  sedeId: SedeId | 'ambas';
+  estado: 'disponible' | 'bajo_stock' | 'agotado';
+  observaciones?: string;
+}
+
+export interface LaboratorioItem {
+  id: string;
+  ordenCodigo: string;
+  laboratorioNombre: string;
+  tecnicoResponsable: string;
+  telefonoContacto: string;
+  pacienteNombre: string;
+  pacienteCedula: string;
+  doctorTratante: string;
+  tipoTrabajo:
+    | 'Corona Zirconio Monolítico'
+    | 'Corona Metal-Porcelana'
+    | 'Prótesis Parcial Removible'
+    | 'Prótesis Total Acrílica'
+    | 'Carilla Cerámica E-Max'
+    | 'Incrustación Onlay / Inlay'
+    | 'Retenedor Essix / Hawley'
+    | 'Guía Quirúrgica Implantología';
+  piezaDiente?: string;
+  colorGuiaVita: string;
+  costoLaboratorioUsd: number;
+  fechaEnvio: string;
+  fechaPrometidaEntrega: string;
+  fechaPruebaBoca?: string;
+  estado: 'en_laboratorio' | 'en_prueba_bizcocho' | 'listo_en_clinica' | 'instalado_al_paciente';
+  sedeId: SedeId;
+  observaciones?: string;
 }
 
 

@@ -6,6 +6,7 @@ import { ToothEditorModal } from './ToothEditorModal';
 interface QuadrantArchViewProps {
   teeth: ToothRecord[];
   onUpdateTooth: (updatedTooth: ToothRecord) => void;
+  onSaveOdontograma?: () => void;
   ultimaModificacion?: {
     fecha?: string;
     doctor?: string;
@@ -16,6 +17,7 @@ interface QuadrantArchViewProps {
 export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
   teeth,
   onUpdateTooth,
+  onSaveOdontograma,
   ultimaModificacion,
   isNuevoOdontograma = false,
 }) => {
@@ -24,6 +26,10 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [denticionModo, setDenticionModo] = useState<'adulto' | 'pediatrico'>('adulto');
+
+  // Estado de despliegue: en posición inicial OCULTA hasta la etiqueta última modificación
+  const [isDesplegado, setIsDesplegado] = useState<boolean>(false);
+  const [guardandoExito, setGuardandoExito] = useState<boolean>(false);
 
   // Sincronizar selectedTooth cuando teeth cambia externamente
   useEffect(() => {
@@ -98,72 +104,133 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
     <div className="flex flex-col gap-4 animate-in fade-in duration-300">
       {/* Contenedor Odontograma Clínico Interactivo FDI */}
       <div className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="material-symbols-outlined text-primary text-[22px]">dentistry</span>
-              <h3 className="font-display font-extrabold text-base sm:text-lg text-dental-deep-navy">
-                Odontograma FDI Activo
-              </h3>
-              {/* Conmutador Dentición Adulto (11-48) / Pediátrico (51-85) */}
-              <div className="inline-flex items-center bg-surface-subtle-ice p-0.5 rounded-xl border border-border-subtle ml-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDenticionModo('adulto');
-                    handleSelectTooth(16);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all active:scale-95 ${
-                    denticionModo === 'adulto'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'text-dental-deep-navy hover:bg-white/60'
-                  }`}
-                >
-                  Adulto (11–48)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDenticionModo('pediatrico');
-                    handleSelectTooth(55);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all active:scale-95 ${
-                    denticionModo === 'pediatrico'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'text-dental-deep-navy hover:bg-white/60'
-                  }`}
-                >
-                  Pediátrico (51–85)
-                </button>
-              </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle/60 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <span className="material-symbols-outlined text-[20px]">dentistry</span>
             </div>
-            <p className="text-xs text-secondary mt-0.5">
-              Inspección vectorial SVG de 5 caras con Endodoncia, Exodoncia, Prótesis e Implante ({denticionModo === 'adulto' ? '32 piezas permanentes' : '20 piezas temporales FDI 51–85'})
-            </p>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-display font-extrabold text-base text-dental-deep-navy leading-tight">
+                  Odontograma FDI Activo
+                </h3>
+                {/* Conmutador Dentición Adulto (11-48) / Pediátrico (51-85) */}
+                <div className="inline-flex items-center bg-surface-subtle-ice p-0.5 rounded-xl border border-border-subtle ml-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDenticionModo('adulto');
+                      handleSelectTooth(16);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold transition-all active:scale-95 cursor-pointer ${
+                      denticionModo === 'adulto'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-dental-deep-navy hover:bg-white/60'
+                    }`}
+                  >
+                    Adulto (11–48)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDenticionModo('pediatrico');
+                      handleSelectTooth(55);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold transition-all active:scale-95 cursor-pointer ${
+                      denticionModo === 'pediatrico'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-dental-deep-navy hover:bg-white/60'
+                    }`}
+                  >
+                    Pediátrico (51–85)
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-secondary mt-0.5">
+                Inspección vectorial SVG de 5 caras con Endodoncia, Exodoncia, Prótesis e Implante ({denticionModo === 'adulto' ? '32 piezas permanentes' : '20 piezas temporales FDI 51–85'})
+              </p>
+            </div>
           </div>
 
-          {/* Badge de Última Modificación */}
-          <div className="shrink-0 flex items-center gap-1.5">
+          {/* Badge de Última Modificación, Botón Abrir/Guardar & Etiqueta Paso 3 en esquina superior derecha */}
+          <div className="shrink-0 flex items-center gap-2 flex-wrap sm:flex-nowrap self-start sm:self-auto">
             {ultimaModificacion?.fecha ? (
-              <span className="text-[11px] font-bold text-dental-deep-navy bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs">
+              <span className="h-8 sm:h-9 text-[11px] font-bold text-dental-deep-navy bg-primary/10 border border-primary/20 px-2.5 rounded-xl flex items-center gap-1.5 shadow-xs">
                 <span className="material-symbols-outlined text-[14px] text-primary">history</span>
                 <span>Últ. Modificación: {ultimaModificacion.fecha}</span>
                 {ultimaModificacion.doctor && (
-                  <span className="text-secondary font-medium">({ultimaModificacion.doctor})</span>
+                  <span className="text-secondary font-medium hidden sm:inline">({ultimaModificacion.doctor})</span>
                 )}
               </span>
             ) : isNuevoOdontograma ? (
-              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs animate-pulse">
+              <span className="h-8 sm:h-9 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 rounded-xl flex items-center gap-1.5 shadow-xs animate-pulse">
                 <span className="material-symbols-outlined text-[14px] text-emerald-600">new_releases</span>
-                <span>Odontograma Inicial en Blanco</span>
+                <span>Odontograma Inicial</span>
               </span>
             ) : (
-              <span className="text-[11px] font-bold text-secondary bg-surface-subtle-ice px-2.5 py-1 rounded-full border border-border-subtle">
+              <span className="h-8 sm:h-9 text-[11px] font-bold text-secondary bg-surface-subtle-ice px-2.5 rounded-xl border border-border-subtle flex items-center">
                 Sincronizado con D1
               </span>
             )}
+
+            {/* Botón en la esquina superior derecha: altura sincronizada h-8 sm:h-9 */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (!isDesplegado) {
+                  setIsDesplegado(true);
+                } else {
+                  if (onSaveOdontograma) {
+                    onSaveOdontograma();
+                  }
+                  setGuardandoExito(true);
+                  setTimeout(() => setGuardandoExito(false), 2200);
+                }
+              }}
+              title={isDesplegado ? 'Guardar cambios del Odontograma FDI en D1' : 'Desplegar Odontograma FDI Activo'}
+              className={`h-8 sm:h-9 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer select-none ${
+                guardandoExito
+                  ? 'bg-emerald-700 text-white shadow-emerald-700/20'
+                  : isDesplegado
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 ring-2 ring-emerald-500/20'
+                  : 'bg-dental-deep-navy hover:bg-primary text-white shadow-dental-deep-navy/20'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {guardandoExito ? 'check_circle' : isDesplegado ? 'save' : 'visibility'}
+              </span>
+              <span>{guardandoExito ? '¡Guardado!' : isDesplegado ? 'Guardar' : 'Abrir'}</span>
+            </button>
+
+            {/* Etiqueta de Paso 3 de 5 a la misma altura del título */}
+            <span className="h-8 sm:h-9 px-3 rounded-xl text-xs font-black bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1.5 shrink-0 shadow-2xs">
+              <span className="material-symbols-outlined text-[15px]">looks_3</span>
+              <span>Paso 3 de 5</span>
+            </span>
           </div>
         </div>
+
+        {!isDesplegado ? (
+          /* Estado Colapsado Inicial: Oculto a partir de Última Modificación */
+          <div className="bg-surface-subtle-ice/70 border border-dashed border-border-subtle rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-secondary animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">layers</span>
+              <p className="leading-snug">
+                El odontograma FDI vectorial se encuentra en <strong>modo compacto</strong> para optimizar espacio clínico. Pulse <strong>Abrir</strong> para desplegar las arcadas dentales y herramientas de diagnóstico.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsDesplegado(true)}
+              className="px-3 py-1.5 rounded-lg bg-surface-clean-white hover:bg-white text-primary border border-border-subtle font-black text-xs shrink-0 flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+            >
+              <span>Desplegar</span>
+              <span className="material-symbols-outlined text-[16px]">expand_more</span>
+            </button>
+          </div>
+        ) : (
+          /* Estado Desplegado: Leyenda, Arcadas Anatómicas FDI y Herramientas */
+          <>
 
         {/* Leyenda clínica de estados enriquecida con Endodoncia, Exodoncia, Prótesis e Implante */}
         <div className="flex flex-wrap items-center gap-2 bg-surface-subtle-ice p-2.5 rounded-xl border border-border-subtle text-xs">
@@ -457,6 +524,8 @@ export const QuadrantArchView: React.FC<QuadrantArchViewProps> = ({
             </div>
           </div>
         )}
+        </>
+      )}
       </div>
 
       {/* Modal de Edición de Caras */}

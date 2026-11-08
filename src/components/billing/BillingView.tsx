@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSede } from '../../context/SedeContext';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
@@ -12,6 +12,8 @@ import {
 import { compressImage } from '../../utils/imageCompression';
 import { generateForensicSeal } from '../../utils/forensicHash';
 import { triggerClinicalConfetti } from '../../utils/confetti';
+import { scanBankReceipt, BankOcrResult } from '../../utils/bankOcrScanner';
+import { BoxProductivityDashboard } from '../dashboard/BoxProductivityDashboard';
 
 export const BillingView: React.FC = () => {
   const { sedeActiva, sedeId } = useSede();
@@ -23,7 +25,7 @@ export const BillingView: React.FC = () => {
   );
 
   // Pestañas principales de la vista
-  const [activeTab, setActiveTab] = useState<'cobros' | 'honorarios'>('cobros');
+  const [activeTab, setActiveTab] = useState<'cobros' | 'honorarios' | 'productividad_boxes'>('cobros');
 
   // Estado para Presupuestos y Resumen de Cobros en D1
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
@@ -68,8 +70,10 @@ export const BillingView: React.FC = () => {
   const [isLoadingPagos, setIsLoadingPagos] = useState(false);
   const [fotoAmpliadaModal, setFotoAmpliadaModal] = useState<string | null>(null);
 
-  // Estado para Cierre Diario de Caja
+  // Estado para Cierre Diario de Caja por Turnos (Optimización 4)
   const [modalCierreDiario, setModalCierreDiario] = useState(false);
+  const [turnoParaCierre, setTurnoParaCierre] = useState<'manana' | 'tarde' | 'dia_completo'>('manana');
+  const [cajeroNombre, setCajeroNombre] = useState('Recepción Sede Principal');
   const [isSubmittingCierre, setIsSubmittingCierre] = useState(false);
   const [cierreExitoMensaje, setCierreExitoMensaje] = useState<string | null>(null);
   const [observacionesCierre, setObservacionesCierre] = useState('');
@@ -98,7 +102,19 @@ export const BillingView: React.FC = () => {
   const [isLiquidating, setIsLiquidating] = useState<boolean>(false);
   const [modalLiquidacion, setModalLiquidacion] = useState<boolean>(false);
   const [refLiquidacionInput, setRefLiquidacionInput] = useState<string>('');
+  const [fotoComprobanteLiq, setFotoComprobanteLiq] = useState<string | null>(null);
+  const [isCompressingFotoLiq, setIsCompressingFotoLiq] = useState<boolean>(false);
+  const [doctorModalResumen, setDoctorModalResumen] = useState<OdontologoItem | null>(null);
   const [mensajeExitoHonorarios, setMensajeExitoHonorarios] = useState<string | null>(null);
+
+  // Estado para el Carrusel de Selección Rápida en Box (Propuesta 2 / Ciclo Cita-Box-Caja)
+  const [carruselTab, setCarruselTab] = useState<'box_hoy' | 'reservas_citas' | 'saldos_pendientes'>('box_hoy');
+  const [busquedaRapidaCobro, setBusquedaRapidaCobro] = useState('');
+
+  // Estado para OCR de Comprobantes Bancarios (Optimización 1)
+  const [isScanningOcr, setIsScanningOcr] = useState(false);
+  const [ocrProgreso, setOcrProgreso] = useState<number>(0);
+  const [ocrResultado, setOcrResultado] = useState<BankOcrResult | null>(null);
 
   const montoBsCalculado = (montoUsd * tasaBcv).toLocaleString('es-VE', {
     minimumFractionDigits: 2,
@@ -208,24 +224,157 @@ export const BillingView: React.FC = () => {
     }
   };
 
-  const presupuestoSeleccionado = presupuestos.find((p) => p.id === selectedPresupuestoId);
+  // 1. Reservas de citas por conciliar (citas previas con abono anticipado transferido)
+  const reservasCitasPorConciliar = useMemo(() => [
+    {
+      id: 'res-cita-1',
+      presupuestoId: 'pre-res-1',
+      codigo: 'RES-0912',
+      pacienteNombre: 'Patricia Velásquez',
+      pacienteCedula: 'V-19.845.221',
+      procedimiento: 'Abono Reserva Cita • Urgencia Molar',
+      montoTotalUsd: 20,
+      montoAbonadoUsd: 0,
+      saldoPendienteUsd: 20,
+      sedeId: 'victoria' as const,
+      badgeTexto: 'Reserva $20 • Pago Móvil',
+      referenciaSugerida: 'PM-984210',
+      fechaTexto: 'Hoy 08:30 AM',
+      doctorTratante: 'Dra. María Alejandra Domínguez',
+    },
+    {
+      id: 'res-cita-2',
+      presupuestoId: 'pre-res-2',
+      codigo: 'RES-0914',
+      pacienteNombre: 'Valeria Quintana',
+      pacienteCedula: 'V-26.789.012',
+      procedimiento: 'Abono Reserva Cita • Profilaxis & Estética',
+      montoTotalUsd: 15,
+      montoAbonadoUsd: 0,
+      saldoPendienteUsd: 15,
+      sedeId: 'victoria' as const,
+      badgeTexto: 'Reserva $15 • Transferencia',
+      referenciaSugerida: 'TRANS-77812',
+      fechaTexto: 'Hoy 02:00 PM',
+      doctorTratante: 'Dra. Andrea Morales',
+    },
+    {
+      id: 'res-cita-3',
+      presupuestoId: 'pre-res-3',
+      codigo: 'RES-0915',
+      pacienteNombre: 'Ricardo Gómez',
+      pacienteCedula: 'V-15.342.901',
+      procedimiento: 'Abono Reserva • Control de Carillas',
+      montoTotalUsd: 25,
+      montoAbonadoUsd: 0,
+      saldoPendienteUsd: 25,
+      sedeId: 'tovar' as const,
+      badgeTexto: 'Reserva $25 • Pago Móvil',
+      referenciaSugerida: 'PM-551902',
+      fechaTexto: 'Mañana 09:00 AM',
+      doctorTratante: 'Dra. María Alejandra Domínguez',
+    },
+  ], []);
 
-  // Manejar captura o subida de foto del comprobante con compresión en cliente
+  // Manejar selección de una reserva de cita para conciliar en Box
+  const seleccionarReservaParaCobro = (res: any) => {
+    setSelectedPresupuestoId(res.presupuestoId);
+    setTipoPago('completo');
+    setMontoUsd(res.saldoPendienteUsd);
+    setReferencia(res.referenciaSugerida || '');
+    setErrorCobro(null);
+
+    const formElement = document.getElementById('form-cobro-box');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const presupuestoSeleccionado = useMemo(() => {
+    const foundP = presupuestos.find((p) => p.id === selectedPresupuestoId);
+    if (foundP) return foundP;
+    const foundR = reservasCitasPorConciliar.find(
+      (r: any) => r.presupuestoId === selectedPresupuestoId || r.id === selectedPresupuestoId
+    );
+    if (foundR) {
+      return {
+        id: foundR.presupuestoId,
+        codigo: foundR.codigo,
+        pacienteId: foundR.id,
+        pacienteNombre: foundR.pacienteNombre,
+        pacienteCedula: foundR.pacienteCedula,
+        sedeId: foundR.sedeId,
+        montoTotalUsd: foundR.montoTotalUsd,
+        montoAbonadoUsd: 0,
+        saldoPendienteUsd: foundR.saldoPendienteUsd,
+        tasaBcvReferencia: tasaBcv,
+        procedimiento: foundR.procedimiento,
+        estado: 'en_espera' as const,
+        createdAt: new Date().toISOString(),
+        abonoReservaCitaUsd: foundR.montoTotalUsd,
+        referenciaReservaCita: foundR.referenciaSugerida,
+        doctorTratante: foundR.doctorTratante,
+      };
+    }
+    return undefined;
+  }, [presupuestos, selectedPresupuestoId, reservasCitasPorConciliar, tasaBcv]);
+
+  // Manejar captura o subida de foto del comprobante con compresión en cliente y OCR Automático (Optimización 1)
   const handleSubirComprobante = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsCompressingFoto(true);
+    setIsScanningOcr(true);
+    setOcrProgreso(10);
+    setOcrResultado(null);
+
     try {
       const compressed = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
       setFotoComprobante(compressed);
+
+      // Ejecutar escaneo OCR en cliente
+      const ocrData = await scanBankReceipt(file, (p) => setOcrProgreso(p));
+      setOcrResultado(ocrData);
+
+      // Autocompletar referencia si fue detectada y el campo está vacío o es provisional
+      if (ocrData.referencia) {
+        setReferencia(ocrData.referencia);
+      }
+
+      // Si detectó banco y método es pago móvil o transferencia, asegurar método correcto
+      if (ocrData.banco?.toLowerCase().includes('pago móvil') || ocrData.banco?.toLowerCase().includes('venezuela') || ocrData.banco?.toLowerCase().includes('banesco')) {
+        if (metodo === 'efectivo_usd' || metodo === 'efectivo_bs') {
+          setMetodo('pago_movil');
+        }
+      }
     } catch (err) {
-      console.error('Error comprimiendo comprobante:', err);
+      console.error('Error procesando comprobante:', err);
       const reader = new FileReader();
       reader.onload = () => setFotoComprobante(reader.result as string);
       reader.readAsDataURL(file);
     } finally {
       setIsCompressingFoto(false);
+      setIsScanningOcr(false);
+    }
+  };
+
+  // Manejar captura o subida de foto del comprobante de liquidación de honorarios
+  const handleSubirComprobanteLiquidacion = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressingFotoLiq(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
+      setFotoComprobanteLiq(compressed);
+    } catch (err) {
+      console.error('Error comprimiendo comprobante de liquidación:', err);
+      const reader = new FileReader();
+      reader.onload = () => setFotoComprobanteLiq(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setIsCompressingFotoLiq(false);
     }
   };
 
@@ -318,21 +467,22 @@ export const BillingView: React.FC = () => {
     }
   };
 
-  // Registrar Cierre Diario de Caja en D1
+  // Registrar Cierre Diario de Caja en D1 por Turno (Optimización 4)
   const handleEjecutarCierreDiario = async () => {
     setIsSubmittingCierre(true);
     setCierreExitoMensaje(null);
     try {
+      const etiquetaTurno = turnoParaCierre === 'manana' ? 'Turno Mañana (Pre-Cierre)' : turnoParaCierre === 'tarde' ? 'Turno Tarde' : 'Día Completo';
       const res = await ApiClient.registrarCierreDiario({
         sedeId: filtroSedeFinanciera,
         tasaBcv,
-        cerradoPor: 'Caja Central / Recepción',
-        observaciones: observacionesCierre.trim() || 'Cierre de jornada de caja',
+        cerradoPor: `${cajeroNombre} • ${etiquetaTurno}`,
+        observaciones: `[${etiquetaTurno}] ${observacionesCierre.trim() || 'Arqueo de caja conforme'}`,
       });
 
       if (res.success && res.cierre) {
         setCierreExitoMensaje(
-          `¡Cierre de caja registrado exitosamente (${res.cierre.id})! Total: $${res.cierre.totalUsd.toFixed(2)} USD (${res.cierre.totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)`
+          `¡Cierre de caja registrado exitosamente (${res.cierre.id}) para el ${etiquetaTurno}! Total: $${res.cierre.totalUsd.toFixed(2)} USD (${res.cierre.totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)`
         );
         setModalCierreDiario(false);
         setObservacionesCierre('');
@@ -359,6 +509,24 @@ export const BillingView: React.FC = () => {
       (p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd > 0 : p.montoTotalUsd - p.montoAbonadoUsd > 0)
   );
 
+  // 2. Pacientes saliendo de Box Hoy (presupuestos en espera o activos hoy)
+  const itemsBoxHoy = useMemo(() => {
+    const hoyIso = new Date().toISOString().split('T')[0];
+    const matchHoy = presupuestosVigentes.filter(
+      (p) => p.estado === 'en_espera' || (p.createdAt && p.createdAt.includes(hoyIso))
+    );
+    if (matchHoy.length > 0) return matchHoy;
+    return presupuestosVigentes.slice(0, 6);
+  }, [presupuestosVigentes]);
+
+  // 3. Saldos pendientes acumulados
+  const itemsSaldosPendientes = useMemo(() => {
+    return presupuestosVigentes.filter((p) => {
+      const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
+      return saldo > 0;
+    });
+  }, [presupuestosVigentes]);
+
   // Filtrado para la lista general
   const presupuestosFiltrados = presupuestos.filter((p) => {
     if (filtroEstadoPresupuestos !== 'todos' && p.estado !== filtroEstadoPresupuestos) {
@@ -374,6 +542,71 @@ export const BillingView: React.FC = () => {
     }
     return true;
   });
+
+  // Lista procesada para el Carrusel de Selección Rápida en Box (Propuesta 2)
+  const itemsCarruselCobro = useMemo(() => {
+    let baseList: any[] = [];
+    if (carruselTab === 'box_hoy') {
+      baseList = itemsBoxHoy.map((p: any) => {
+        const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
+        return {
+          tipo: 'presupuesto' as const,
+          id: p.id,
+          rawItem: p,
+          nombre: p.pacienteNombre,
+          cedula: p.pacienteCedula || 'Sin Cédula',
+          procedimiento: p.procedimiento || 'Tratamiento en Box',
+          doctor: p.doctorTratante || 'Odontólogo Staff',
+          saldoUsd: saldo,
+          badgeText: '🟢 En Box Hoy',
+          badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+          codigo: p.codigo,
+        };
+      });
+    } else if (carruselTab === 'reservas_citas') {
+      baseList = reservasCitasPorConciliar.map((r: any) => ({
+        tipo: 'reserva' as const,
+        id: r.presupuestoId,
+        rawItem: r,
+        nombre: r.pacienteNombre,
+        cedula: r.pacienteCedula,
+        procedimiento: r.procedimiento,
+        doctor: r.doctorTratante,
+        saldoUsd: r.saldoPendienteUsd,
+        badgeText: `🔵 ${r.badgeTexto}`,
+        badgeColor: 'bg-sky-50 text-sky-800 border-sky-300',
+        codigo: r.codigo,
+      }));
+    } else {
+      baseList = itemsSaldosPendientes.map((p: any) => {
+        const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
+        const porcentaje = p.montoTotalUsd > 0 ? Math.round((p.montoAbonadoUsd / p.montoTotalUsd) * 100) : 0;
+        return {
+          tipo: 'presupuesto' as const,
+          id: p.id,
+          rawItem: p,
+          nombre: p.pacienteNombre,
+          cedula: p.pacienteCedula || 'Sin Cédula',
+          procedimiento: p.procedimiento || 'Tratamiento en Curso',
+          doctor: p.doctorTratante || 'Odontólogo Staff',
+          saldoUsd: saldo,
+          badgeText: porcentaje > 0 ? `🟡 Abono ${porcentaje}%` : '🔴 Saldo Total',
+          badgeColor: porcentaje > 0 ? 'bg-amber-50 text-amber-900 border-amber-300' : 'bg-rose-50 text-rose-900 border-rose-300',
+          codigo: p.codigo,
+        };
+      });
+    }
+
+    if (!busquedaRapidaCobro.trim()) return baseList;
+    const q = busquedaRapidaCobro.toLowerCase().trim();
+    return baseList.filter(
+      (item) =>
+        item.nombre.toLowerCase().includes(q) ||
+        item.cedula.toLowerCase().includes(q) ||
+        item.codigo.toLowerCase().includes(q) ||
+        item.procedimiento.toLowerCase().includes(q)
+    );
+  }, [carruselTab, itemsBoxHoy, reservasCitasPorConciliar, itemsSaldosPendientes, busquedaRapidaCobro]);
 
   // Filtrado de tratamientos para honorarios
   const tratamientosFiltrados = tratamientosHonorarios.filter((t) => {
@@ -403,23 +636,54 @@ export const BillingView: React.FC = () => {
     setSelectedIds(pendientes);
   };
 
+  // Acción rápida desde la sub-tarjeta del doctor en Directorio Facultativo
+  const handleLiquidarDoctorEspecifico = (docId: string) => {
+    setSelectedDoctorId(docId);
+    const pendientes = tratamientosHonorarios
+      .filter((t) => t.odontologoId === docId && t.estadoPagoHonorario === 'pendiente')
+      .map((t) => t.id);
+    setSelectedIds(pendientes);
+    setFotoComprobanteLiq(null);
+    setRefLiquidacionInput(`LIQ-${Date.now().toString().slice(-6)}`);
+    setModalLiquidacion(true);
+  };
+
   const ejecutarLiquidacionLote = async () => {
     if (selectedIds.length === 0) return;
     setIsLiquidating(true);
 
     const ref = refLiquidacionInput.trim() || `LIQ-${Date.now().toString().slice(-6)}`;
     try {
+      let sha256Hash: string | undefined = undefined;
+      if (fotoComprobanteLiq) {
+        const seal = await generateForensicSeal(
+          `${selectedIds.join(',')}|${ref}|${fotoComprobanteLiq}`,
+          {
+            doctorNombre: 'Administración Clínica',
+            tipoDocumento: 'comprobante_liquidacion_honorarios',
+          }
+        );
+        sha256Hash = seal.sha256Hash;
+      }
+
       const res = await ApiClient.liquidarHonorariosLote({
         ids: selectedIds,
         referencia: ref,
+        comprobanteData: fotoComprobanteLiq || undefined,
+        sha256Hash,
       });
 
       if (res.success) {
-        setMensajeExitoHonorarios(`¡Se liquidaron exitosamente ${res.liquidados} honorarios con ref: ${res.referencia}!`);
+        triggerClinicalConfetti();
+        setMensajeExitoHonorarios(
+          `¡Se liquidaron exitosamente ${res.liquidados} honorarios con ref: ${res.referencia}! Comprobante archivado en D1.`
+        );
         setSelectedIds([]);
+        setRefLiquidacionInput('');
+        setFotoComprobanteLiq(null);
         setModalLiquidacion(false);
         await cargarDatosHonorarios();
-        setTimeout(() => setMensajeExitoHonorarios(null), 5000);
+        setTimeout(() => setMensajeExitoHonorarios(null), 6000);
       }
     } catch (err) {
       console.error('Error al liquidar:', err);
@@ -581,7 +845,7 @@ export const BillingView: React.FC = () => {
       </div>
 
       {/* Selector de Pestañas Segmentado */}
-      <div className="bg-surface-clean-white p-1.5 rounded-2xl border border-border-subtle shadow-xs grid grid-cols-2 gap-1.5">
+      <div className="bg-surface-clean-white p-1.5 rounded-2xl border border-border-subtle shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-1.5">
         <button
           type="button"
           onClick={() => setActiveTab('cobros')}
@@ -592,7 +856,7 @@ export const BillingView: React.FC = () => {
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">payments</span>
-          <span>Cobros en Box & Presupuestos ({presupuestos.length})</span>
+          <span>Cobros en Box ({presupuestos.length})</span>
         </button>
 
         <button
@@ -606,6 +870,19 @@ export const BillingView: React.FC = () => {
         >
           <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
           <span>Liquidación de Honorarios</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('productividad_boxes')}
+          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer ${
+            activeTab === 'productividad_boxes'
+              ? 'bg-primary text-white shadow-sm'
+              : 'text-dental-deep-navy hover:bg-surface-subtle-ice'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px]">chair</span>
+          <span>Monitor de Sillones & Box</span>
         </button>
       </div>
 
@@ -640,92 +917,240 @@ export const BillingView: React.FC = () => {
               </div>
             )}
 
-            {/* Selector de Presupuesto Clínico Vigente Creado y Fijado en Cita */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-dental-deep-navy flex items-center justify-between">
-                <span>Presupuesto Clínico Vigente (Paciente & Cita)</span>
-                {selectedPresupuestoId && (
+            {/* =========================================================================
+                CARRUSEL DE SELECCIÓN RÁPIDA: PACIENTES EN ESPERA DE COBRO (PROPUESTA 2)
+                - Operación táctil en 1 toque
+                - Píldoras: Saliendo de Box Hoy | Reservas de Citas | Saldos Pendientes
+               ========================================================================= */}
+            <div className="flex flex-col gap-3 p-3.5 sm:p-4 rounded-3xl bg-surface-subtle-ice border border-border-subtle">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">touch_app</span>
+                  </div>
+                  <div>
+                    <h4 className="font-display font-extrabold text-xs sm:text-sm text-dental-deep-navy">
+                      Pacientes en Espera de Cobro (1 Toque)
+                    </h4>
+                    <p className="text-[10px] text-secondary">
+                      Selecciona una tarjeta para autocompletar el saldo y cobrar en caja
+                    </p>
+                  </div>
+                </div>
+
+                {/* Píldoras de Segmento */}
+                <div className="flex items-center gap-1 bg-surface-clean-white p-1 rounded-xl border border-border-subtle self-start sm:self-auto shadow-2xs flex-wrap">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedPresupuestoId('');
-                      setMontoUsd(0);
-                    }}
-                    className="text-[11px] text-red-600 hover:underline font-normal cursor-pointer"
+                    onClick={() => setCarruselTab('box_hoy')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                      carruselTab === 'box_hoy'
+                        ? 'bg-status-success text-white shadow-xs'
+                        : 'text-secondary hover:text-dental-deep-navy'
+                    }`}
                   >
-                    Deseleccionar
+                    🟢 Box Hoy ({itemsBoxHoy.length})
                   </button>
-                )}
-              </label>
+                  <button
+                    type="button"
+                    onClick={() => setCarruselTab('reservas_citas')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                      carruselTab === 'reservas_citas'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-secondary hover:text-dental-deep-navy'
+                    }`}
+                  >
+                    🔵 Reservas Cita ({reservasCitasPorConciliar.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCarruselTab('saldos_pendientes')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                      carruselTab === 'saldos_pendientes'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-secondary hover:text-dental-deep-navy'
+                    }`}
+                  >
+                    🟡 Saldos ({itemsSaldosPendientes.length})
+                  </button>
+                </div>
+              </div>
 
-              {presupuestoSeleccionado ? (
-                <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col gap-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-dental-deep-navy text-sm">
-                        👤 {presupuestoSeleccionado.pacienteNombre}
+              {/* Buscador Rápido Combobox */}
+              <div className="relative">
+                <span className="material-symbols-outlined text-[16px] text-secondary absolute left-3 top-2.5">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={busquedaRapidaCobro}
+                  onChange={(e) => setBusquedaRapidaCobro(e.target.value)}
+                  placeholder="Buscar paciente en carrusel por nombre, cédula o código..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-surface-clean-white border border-border-subtle focus:outline-none focus:ring-1 focus:ring-primary font-medium text-dental-deep-navy placeholder:text-secondary"
+                />
+              </div>
+
+              {/* Carrusel Deslizante de Tarjetas Táctiles */}
+              <div className="flex gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-thin snap-x">
+                {itemsCarruselCobro.length === 0 ? (
+                  <div className="w-full p-4 text-center text-xs text-secondary bg-surface-clean-white rounded-2xl border border-dashed border-border-subtle">
+                    No hay pacientes en esta categoría con el filtro actual.
+                  </div>
+                ) : (
+                  itemsCarruselCobro.map((item: any) => {
+                    const isSelected = selectedPresupuestoId === item.id;
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (item.tipo === 'reserva') {
+                            seleccionarReservaParaCobro(item.rawItem);
+                          } else {
+                            seleccionarPresupuestoParaCobro(item.rawItem);
+                          }
+                        }}
+                        className={`min-w-[245px] max-w-[270px] p-3 rounded-2xl border transition-all active:scale-95 cursor-pointer flex flex-col justify-between gap-2.5 shadow-2xs select-none snap-start shrink-0 ${
+                          isSelected
+                            ? 'bg-surface-clean-white border-primary ring-2 ring-primary/30 shadow-md'
+                            : 'bg-surface-clean-white border-border-subtle hover:border-primary/40 hover:bg-surface-container/40'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-dental-deep-navy text-white font-display font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                              {item.nombre.replace(/Dra?\.?\s*/i, '').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="font-display font-bold text-xs text-dental-deep-navy truncate leading-tight">
+                                {item.nombre}
+                              </h5>
+                              <span className="text-[10px] font-mono text-secondary truncate block">
+                                {item.cedula}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isSelected ? (
+                            <span className="w-5 h-5 rounded-full bg-status-success text-white flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-mono font-bold text-secondary shrink-0">
+                              {item.codigo}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 text-[10px]">
+                          <span className={`px-2 py-0.5 rounded-full font-bold border ${item.badgeColor}`}>
+                            {item.badgeText}
+                          </span>
+                          <span className="text-secondary truncate max-w-[110px] text-right">
+                            {item.doctor}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-dental-deep-navy font-medium truncate">
+                          {item.procedimiento}
+                        </p>
+
+                        <div className="pt-2 border-t border-border-subtle/70 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] font-black uppercase text-secondary block leading-none">
+                              Por Cobrar
+                            </span>
+                            <span className="font-extrabold text-sm text-status-success font-mono block mt-0.5">
+                              ${item.saldoUsd.toFixed(2)} USD
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-black transition-all flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-primary text-white shadow-xs'
+                                : 'bg-surface-subtle-ice text-primary hover:bg-primary hover:text-white'
+                            }`}
+                          >
+                            <span>{item.tipo === 'reserva' ? 'Conciliar' : 'Cobrar'}</span>
+                            <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Ficha Rica del Paciente / Presupuesto Seleccionado */}
+            {presupuestoSeleccionado && (
+              <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col gap-2 text-xs animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-dental-deep-navy text-sm">
+                      👤 {presupuestoSeleccionado.pacienteNombre}
+                    </span>
+                    {presupuestoSeleccionado.pacienteCedula && (
+                      <span className="font-mono text-[11px] bg-surface-container text-dental-deep-navy px-2 py-0.5 rounded-md font-bold">
+                        {presupuestoSeleccionado.pacienteCedula}
                       </span>
-                      {presupuestoSeleccionado.pacienteCedula && (
-                        <span className="font-mono text-[11px] bg-surface-container text-dental-deep-navy px-2 py-0.5 rounded-md font-bold">
-                          {presupuestoSeleccionado.pacienteCedula}
-                        </span>
-                      )}
-                    </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <span className="font-mono text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-bold">
                       {presupuestoSeleccionado.codigo}
                     </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-secondary">
-                    <span>📅 Cita / Fecha: <strong>{presupuestoSeleccionado.createdAt ? presupuestoSeleccionado.createdAt.split('T')[0] : 'Hoy'}</strong></span>
-                    <span>•</span>
-                    <span>🦷 Procedimiento: <strong className="text-dental-deep-navy">{presupuestoSeleccionado.procedimiento}</strong></span>
-                    <span>•</span>
-                    <span>📍 Sede: <strong className="capitalize">{presupuestoSeleccionado.sedeId}</strong></span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-primary/10 text-xs">
-                    <span className="text-secondary">
-                      Total: <strong className="text-dental-deep-navy">${presupuestoSeleccionado.montoTotalUsd} USD</strong> | Ya Abonado: <strong className="text-status-success">${presupuestoSeleccionado.montoAbonadoUsd} USD</strong>
-                    </span>
-                    <div className="text-right">
-                      <span className="text-[10px] text-secondary block font-semibold">Saldo Pendiente</span>
-                      <span className="font-extrabold text-sm text-primary">
-                        ${presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)} USD
-                        <span className="text-[11px] font-normal text-secondary ml-1">
-                          (≈ {((presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
-                        </span>
-                      </span>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPresupuestoId('');
+                        setMontoUsd(0);
+                        setReferencia('');
+                      }}
+                      className="text-[11px] text-red-600 hover:underline font-bold cursor-pointer"
+                    >
+                      Cambiar
+                    </button>
                   </div>
                 </div>
-              ) : (
-                <select
-                  value={selectedPresupuestoId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const found = presupuestos.find((p) => p.id === id);
-                    if (found) {
-                      seleccionarPresupuestoParaCobro(found);
-                    } else {
-                      setSelectedPresupuestoId('');
-                    }
-                  }}
-                  className="w-full h-12 px-3.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-                >
-                  <option value="">-- Seleccionar Presupuesto Vigente Fijado en Cita --</option>
-                  {presupuestosVigentes.map((p) => {
-                    const saldo = p.saldoPendienteUsd !== undefined ? p.saldoPendienteUsd : Math.max(0, p.montoTotalUsd - p.montoAbonadoUsd);
-                    const fecha = p.createdAt ? p.createdAt.split('T')[0] : 'Hoy';
-                    return (
-                      <option key={p.id} value={p.id}>
-                        👤 {p.pacienteNombre} ({p.pacienteCedula || 'S/C'}) • 📅 {fecha} • 🦷 {p.procedimiento} • Saldo: ${saldo} USD
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
-            </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-secondary">
+                  <span>📅 Cita: <strong>{presupuestoSeleccionado.createdAt ? presupuestoSeleccionado.createdAt.split('T')[0] : 'Hoy'}</strong></span>
+                  <span>•</span>
+                  <span>🦷 Tratamiento: <strong className="text-dental-deep-navy">{presupuestoSeleccionado.procedimiento}</strong></span>
+                  <span>•</span>
+                  <span>📍 Sede: <strong className="capitalize">{presupuestoSeleccionado.sedeId}</strong></span>
+                </div>
+
+                {presupuestoSeleccionado.referenciaReservaCita && (
+                  <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-[11px] flex items-center justify-between">
+                    <span className="flex items-center gap-1 font-bold">
+                      <span className="material-symbols-outlined text-[14px] text-sky-600">info</span>
+                      <span>Abono de Reserva registrado en solicitud de cita</span>
+                    </span>
+                    <span className="font-mono font-bold text-sky-700">Ref: {presupuestoSeleccionado.referenciaReservaCita}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-primary/10 text-xs">
+                  <span className="text-secondary">
+                    Total: <strong className="text-dental-deep-navy">${presupuestoSeleccionado.montoTotalUsd} USD</strong> | Ya Abonado: <strong className="text-status-success">${presupuestoSeleccionado.montoAbonadoUsd} USD</strong>
+                  </span>
+                  <div className="text-right">
+                    <span className="text-[10px] text-secondary block font-semibold">Saldo Neto a Cobrar</span>
+                    <span className="font-extrabold text-sm sm:text-base text-primary font-mono">
+                      ${presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)} USD
+                      <span className="text-[11px] font-normal text-secondary ml-1">
+                        (≈ {((presupuestoSeleccionado.saldoPendienteUsd !== undefined ? presupuestoSeleccionado.saldoPendienteUsd : Math.max(0, presupuestoSeleccionado.montoTotalUsd - presupuestoSeleccionado.montoAbonadoUsd)) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Selector de Modalidad: Pago Completo vs Abono */}
             <div className="flex flex-col gap-1.5">
@@ -873,6 +1298,46 @@ export const BillingView: React.FC = () => {
               <p className="text-[11px] text-secondary">
                 Captura con la cámara del teléfono o sube el voucher para verificación contable y resguardo comprimido.
               </p>
+
+              {/* Estado de Escaneo OCR en Cliente */}
+              {isScanningOcr && (
+                <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-2 animate-pulse">
+                  <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                    <span className="material-symbols-outlined text-[18px] animate-spin">sync</span>
+                    <span>Escaneando voucher con OCR en cliente ({ocrProgreso}%)...</span>
+                  </div>
+                  <span className="text-[10px] font-black text-primary">Cero Servidor</span>
+                </div>
+              )}
+
+              {ocrResultado && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-xs font-black text-emerald-900">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                      Datos extraídos automáticamente (OCR)
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-200/80 text-emerald-800 uppercase">
+                      {ocrResultado.banco || 'Bancario'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-emerald-800 font-semibold flex-wrap gap-2 pt-0.5">
+                    {ocrResultado.referencia && (
+                      <span>
+                        Ref: <strong className="font-mono font-black">{ocrResultado.referencia}</strong>
+                      </span>
+                    )}
+                    {ocrResultado.monto && (
+                      <span>
+                        Monto: <strong className="font-mono font-black">{ocrResultado.monto.toFixed(2)} {ocrResultado.moneda || 'Bs'}</strong>
+                      </span>
+                    )}
+                    <span className="text-[10px] text-emerald-700 font-bold ml-auto">
+                      ✓ Autocompletado en formulario
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {fotoComprobante ? (
                 <div className="relative rounded-xl overflow-hidden border border-primary/30 max-h-48 bg-dental-deep-navy/5 flex items-center justify-center p-2">
@@ -1442,6 +1907,15 @@ export const BillingView: React.FC = () => {
       )}
 
       {/* =========================================================================
+          PESTAÑA 3: MONITOR DE RENDIMIENTO & RENTABILIDAD POR SILLÓN / BOX (OPT. 5)
+         ========================================================================= */}
+      {activeTab === 'productividad_boxes' && (
+        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+          <BoxProductivityDashboard sedeInicial={filtroSedeFinanciera === 'tovar' ? 'tovar' : 'victoria'} />
+        </div>
+      )}
+
+      {/* =========================================================================
           MODAL: REGISTRAR CIERRE DIARIO DE CAJA
          ========================================================================= */}
       {modalCierreDiario && (
@@ -1459,6 +1933,60 @@ export const BillingView: React.FC = () => {
                   Consolidación de ingresos y resguardo contable en D1
                 </p>
               </div>
+            </div>
+
+            {/* Selector de Turno para el Cierre (Optimización 4) */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-dental-deep-navy">
+                Turno a Cerrar / Arqueo
+              </label>
+              <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-surface-subtle-ice border border-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => setTurnoParaCierre('manana')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                    turnoParaCierre === 'manana'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-dental-deep-navy hover:bg-white/80'
+                  }`}
+                >
+                  🌅 Mañana (Pre-Cierre)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTurnoParaCierre('tarde')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                    turnoParaCierre === 'tarde'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-dental-deep-navy hover:bg-white/80'
+                  }`}
+                >
+                  🌆 Tarde
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTurnoParaCierre('dia_completo')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                    turnoParaCierre === 'dia_completo'
+                      ? 'bg-dental-deep-navy text-white shadow-xs'
+                      : 'text-dental-deep-navy hover:bg-white/80'
+                  }`}
+                >
+                  📅 Día Completo
+                </button>
+              </div>
+            </div>
+
+            {/* Responsable de Caja */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-dental-deep-navy">Cajero / Recepcionista Responsable</label>
+              <input
+                type="text"
+                value={cajeroNombre}
+                onChange={(e) => setCajeroNombre(e.target.value)}
+                placeholder="Nombre del personal en caja"
+                className="w-full h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+              />
             </div>
 
             <div className="bg-surface-subtle-ice p-3.5 rounded-2xl border border-border-subtle flex flex-col gap-2 text-xs">

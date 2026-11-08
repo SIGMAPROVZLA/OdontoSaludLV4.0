@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTasaCambio } from '../../context/TasaCambioContext';
+import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { normalizarFechaInput } from '../booking/BookingFlow';
 import {
@@ -10,9 +11,225 @@ import {
   CondicionMedicaItem,
   TratamientoRealizadoItem,
   CierreDiarioItem,
+  InventarioItem,
+  LaboratorioItem,
   Cita,
   SedeId,
+  SedeInfo,
+  BoxInfo,
 } from '../../types/clinical';
+
+const INITIAL_INVENTARIO: InventarioItem[] = [
+  {
+    id: 'inv-1',
+    codigo: 'MAT-RES-01',
+    nombre: 'Resina Filtek Z350 XT 3M ESPE (Tono A2)',
+    categoria: 'Restauración / Operatoria',
+    stockActual: 14,
+    stockMinimo: 5,
+    unidadMedida: 'Tubo / Jeringa',
+    precioCompraUsd: 38.5,
+    fechaIngreso: '2026-10-15',
+    fechaSalida: '2026-11-04',
+    lote: '3M-88910',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: 'Nanopartículas cerámicas para sector anterior y posterior',
+  },
+  {
+    id: 'inv-2',
+    codigo: 'MAT-ANE-02',
+    nombre: 'Lidocaína 2% con Epinefrina 1:100.000 (New Sticaine)',
+    categoria: 'Anestesia & Farmacia',
+    stockActual: 22,
+    stockMinimo: 8,
+    unidadMedida: 'Caja',
+    precioCompraUsd: 28.0,
+    fechaIngreso: '2026-10-20',
+    fechaSalida: '2026-11-06',
+    lote: 'LIDO-2026-11',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: 'Caja de 50 carpules odontológicos de vidrio',
+  },
+  {
+    id: 'inv-3',
+    codigo: 'MAT-AGU-03',
+    nombre: 'Agujas Dentales Desechables Cortas 30G (Septodont)',
+    categoria: 'Anestesia & Farmacia',
+    stockActual: 18,
+    stockMinimo: 6,
+    unidadMedida: 'Caja',
+    precioCompraUsd: 14.0,
+    fechaIngreso: '2026-10-18',
+    fechaSalida: '2026-11-05',
+    lote: 'SEP-4401',
+    sedeId: 'tovar',
+    estado: 'disponible',
+    observaciones: 'Caja de 100 unidades esterilizadas con gas EO',
+  },
+  {
+    id: 'inv-4',
+    codigo: 'MAT-BIO-04',
+    nombre: 'Guantes de Nitrilo Quirúrgico Talla M (Cranberry)',
+    categoria: 'Bioseguridad & Desinfección',
+    stockActual: 35,
+    stockMinimo: 10,
+    unidadMedida: 'Caja',
+    precioCompraUsd: 9.5,
+    fechaIngreso: '2026-10-25',
+    fechaSalida: '2026-11-07',
+    lote: 'CRAN-992',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: 'Caja de 100 unidades sin talco, hipoalergénicos',
+  },
+  {
+    id: 'inv-5',
+    codigo: 'MAT-ALG-05',
+    nombre: 'Alginato Cromático Jeltrate Plus (Dentsply Sirona)',
+    categoria: 'Prótesis & Impresión',
+    stockActual: 4,
+    stockMinimo: 5,
+    unidadMedida: 'Paquete',
+    precioCompraUsd: 16.5,
+    fechaIngreso: '2026-10-12',
+    fechaSalida: '2026-11-03',
+    lote: 'DENT-3108',
+    sedeId: 'victoria',
+    estado: 'bajo_stock',
+    observaciones: 'Bolsa de 454g polvo hidrocoloide con cambio de fase',
+  },
+  {
+    id: 'inv-6',
+    codigo: 'MAT-GUT-06',
+    nombre: 'Conos de Gutapercha 0.04 Taper Surtidos 15-40 (Meta Biomed)',
+    categoria: 'Endodoncia',
+    stockActual: 12,
+    stockMinimo: 4,
+    unidadMedida: 'Caja',
+    precioCompraUsd: 22.0,
+    fechaIngreso: '2026-10-05',
+    fechaSalida: '2026-11-02',
+    lote: 'META-7721',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: 'Caja de 60 puntas calibradas milimétricamente',
+  },
+  {
+    id: 'inv-7',
+    codigo: 'MAT-ION-07',
+    nombre: 'Cemento de Ionómero de Vidrio Ionoseal (VOCO)',
+    categoria: 'Restauración / Operatoria',
+    stockActual: 2,
+    stockMinimo: 3,
+    unidadMedida: 'Tubo / Jeringa',
+    precioCompraUsd: 42.0,
+    fechaIngreso: '2026-10-08',
+    fechaSalida: '2026-11-01',
+    lote: 'VOCO-1290',
+    sedeId: 'tovar',
+    estado: 'bajo_stock',
+    observaciones: 'Liner cavitario fotopolimerizable listo para usar',
+  },
+  {
+    id: 'inv-8',
+    codigo: 'MAT-GLU-08',
+    nombre: 'Glutaraldehído 2% para Esterilización en Frío (Korsolex)',
+    categoria: 'Bioseguridad & Desinfección',
+    stockActual: 4,
+    stockMinimo: 2,
+    unidadMedida: 'Galón',
+    precioCompraUsd: 35.0,
+    fechaIngreso: '2026-10-01',
+    fechaSalida: '2026-10-28',
+    lote: 'KORS-552',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: 'Galón de 3.8 Litros con solución activadora de esporas',
+  },
+];
+
+const INITIAL_LABORATORIOS: LaboratorioItem[] = [
+  {
+    id: 'lab-1',
+    ordenCodigo: 'LAB-2026-081',
+    laboratorioNombre: 'DentalTech Protesistas La Victoria',
+    tecnicoResponsable: 'T.D. Roberto Benítez',
+    telefonoContacto: '+58 412-8819022',
+    pacienteNombre: 'Patricia Velásquez',
+    pacienteCedula: 'V-18.490.112',
+    doctorTratante: 'Dra. María Alejandra Domínguez',
+    tipoTrabajo: 'Corona Zirconio Monolítico',
+    piezaDiente: '16',
+    colorGuiaVita: 'A2 (Vita Classical)',
+    costoLaboratorioUsd: 65.0,
+    fechaEnvio: '2026-11-02',
+    fechaPrometidaEntrega: '2026-11-09',
+    fechaPruebaBoca: '2026-11-07',
+    estado: 'en_prueba_bizcocho',
+    sedeId: 'victoria',
+    observaciones: 'Estructura ajustada en modelo digital, requiere prueba de punto de contacto',
+  },
+  {
+    id: 'lab-2',
+    ordenCodigo: 'LAB-2026-082',
+    laboratorioNombre: 'Laboratorio Protésico El Ávila',
+    tecnicoResponsable: 'T.D. Luisana Morales',
+    telefonoContacto: '+58 414-2390119',
+    pacienteNombre: 'Elena Blanco',
+    pacienteCedula: 'V-15.892.401',
+    doctorTratante: 'Dr. Carlos Mendoza Rivas',
+    tipoTrabajo: 'Prótesis Parcial Removible',
+    piezaDiente: '34-37',
+    colorGuiaVita: 'A3 (Vita Classical)',
+    costoLaboratorioUsd: 90.0,
+    fechaEnvio: '2026-10-28',
+    fechaPrometidaEntrega: '2026-11-08',
+    estado: 'listo_en_clinica',
+    sedeId: 'victoria',
+    observaciones: 'Estructura metálica cromo-cobalto con dientes acrílicos prensados',
+  },
+  {
+    id: 'lab-3',
+    ordenCodigo: 'LAB-2026-083',
+    laboratorioNombre: 'Centro Dental DentArt Caracas',
+    tecnicoResponsable: 'T.D. Marcos Padrón',
+    telefonoContacto: '+58 424-1198421',
+    pacienteNombre: 'Carlos Mendoza',
+    pacienteCedula: 'V-21.309.845',
+    doctorTratante: 'Dra. Valentina Páez Gómez',
+    tipoTrabajo: 'Carilla Cerámica E-Max',
+    piezaDiente: '21',
+    colorGuiaVita: 'BL2 (Bleach)',
+    costoLaboratorioUsd: 75.0,
+    fechaEnvio: '2026-11-04',
+    fechaPrometidaEntrega: '2026-11-11',
+    estado: 'en_laboratorio',
+    sedeId: 'tovar',
+    observaciones: 'Carilla estética ultra delgada 0.3mm con estratificación de esmalte',
+  },
+  {
+    id: 'lab-4',
+    ordenCodigo: 'LAB-2026-084',
+    laboratorioNombre: 'OrthoLab Express Maracay',
+    tecnicoResponsable: 'T.D. Jenny Rangel',
+    telefonoContacto: '+58 412-5501923',
+    pacienteNombre: 'Sofía Valentina Gómez',
+    pacienteCedula: 'V-27.104.992',
+    doctorTratante: 'Dr. Carlos Mendoza Rivas',
+    tipoTrabajo: 'Retenedor Essix / Hawley',
+    piezaDiente: 'Arcada Superior',
+    colorGuiaVita: 'Transparente',
+    costoLaboratorioUsd: 35.0,
+    fechaEnvio: '2026-10-25',
+    fechaPrometidaEntrega: '2026-10-31',
+    fechaPruebaBoca: '2026-10-31',
+    estado: 'instalado_al_paciente',
+    sedeId: 'victoria',
+    observaciones: 'Retenedor termoplástico 1mm post-tratamiento de ortodoncia',
+  },
+];
 
 const INITIAL_ODONTOLOGOS: OdontologoItem[] = [
   {
@@ -438,7 +655,7 @@ const NIVELES_RIESGO: CondicionMedicaItem['nivelRiesgo'][] = [
   'Crítico',
 ];
 
-type DataTabKey = 'odontologos' | 'higienistas' | 'pacientes' | 'citas' | 'tratamientos' | 'condiciones' | 'cierres';
+type DataTabKey = 'sedes' | 'odontologos' | 'higienistas' | 'pacientes' | 'citas' | 'tratamientos' | 'condiciones' | 'cierres' | 'inventario' | 'laboratorios';
 
 // Clase utilitaria para iluminar bordes de campos cuando se están llenando o ya contienen valor
 const getIlluminatedFieldClass = (isFilled: boolean) =>
@@ -450,9 +667,102 @@ const getIlluminatedFieldClass = (isFilled: boolean) =>
 
 export const ControlDataView: React.FC = () => {
   const { tasaBcv } = useTasaCambio();
+  const { sedesDisponibles, actualizarConfigSede, recargarConfigSedes } = useSede();
 
   // Pestaña activa del selector animado
-  const [activeTab, setActiveTab] = useState<DataTabKey>('odontologos');
+  const [activeTab, setActiveTab] = useState<DataTabKey>('sedes');
+
+  // Estado del Módulo 00: Configuración Maestra de Sedes (Fuente de la Verdad)
+  const [sedeEditandoId, setSedeEditandoId] = useState<SedeId>('victoria');
+  const [sedeFormData, setSedeFormData] = useState<SedeInfo>(() => sedesDisponibles.victoria);
+  const [guardandoSede, setGuardandoSede] = useState(false);
+
+  // Sincronizar formulario al cambiar de sede seleccionada
+  const seleccionarSedeParaEditar = (id: SedeId) => {
+    setSedeEditandoId(id);
+    if (sedesDisponibles[id]) {
+      setSedeFormData({ ...sedesDisponibles[id] });
+    }
+  };
+
+  useEffect(() => {
+    if (sedesDisponibles[sedeEditandoId]) {
+      setSedeFormData({ ...sedesDisponibles[sedeEditandoId] });
+    }
+  }, [sedesDisponibles, sedeEditandoId]);
+
+  // Estados Módulo 08: Inventario de Insumos & Materiales Odontológicos
+  const [inventario, setInventario] = useState<InventarioItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('odontosalud_data_inventario');
+      return saved ? JSON.parse(saved) : INITIAL_INVENTARIO;
+    } catch {
+      return INITIAL_INVENTARIO;
+    }
+  });
+  const [filtroCategoriaInventario, setFiltroCategoriaInventario] = useState<string>('todas');
+  const [filtroSedeInventario, setFiltroSedeInventario] = useState<string>('todas');
+  const [busquedaInventario, setBusquedaInventario] = useState<string>('');
+  const [showModalInsumo, setShowModalInsumo] = useState<boolean>(false);
+  const [insumoEditando, setInsumoEditando] = useState<InventarioItem | null>(null);
+  const [formInsumo, setFormInsumo] = useState<Partial<InventarioItem>>({
+    codigo: '',
+    nombre: '',
+    categoria: 'Restauración / Operatoria',
+    stockActual: 10,
+    stockMinimo: 3,
+    unidadMedida: 'Tubo / Jeringa',
+    precioCompraUsd: 25,
+    fechaIngreso: new Date().toISOString().slice(0, 10),
+    fechaSalida: '',
+    lote: '',
+    sedeId: 'victoria',
+    estado: 'disponible',
+    observaciones: '',
+  });
+
+  // Guardar inventario en localStorage
+  useEffect(() => {
+    localStorage.setItem('odontosalud_data_inventario', JSON.stringify(inventario));
+  }, [inventario]);
+
+  // Estados Módulo 09: Laboratorios Dentales & Prótesis Externas (10ª Pestaña)
+  const [laboratorios, setLaboratorios] = useState<LaboratorioItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('odontosalud_data_laboratorios');
+      return saved ? JSON.parse(saved) : INITIAL_LABORATORIOS;
+    } catch {
+      return INITIAL_LABORATORIOS;
+    }
+  });
+  const [filtroEstadoLab, setFiltroEstadoLab] = useState<string>('todos');
+  const [busquedaLab, setBusquedaLab] = useState<string>('');
+  const [showModalLab, setShowModalLab] = useState<boolean>(false);
+  const [labEditando, setLabEditando] = useState<LaboratorioItem | null>(null);
+  const [formLab, setFormLab] = useState<Partial<LaboratorioItem>>({
+    ordenCodigo: `LAB-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+    laboratorioNombre: '',
+    tecnicoResponsable: '',
+    telefonoContacto: '+58 ',
+    pacienteNombre: '',
+    pacienteCedula: 'V-',
+    doctorTratante: 'Dra. María Alejandra Domínguez',
+    tipoTrabajo: 'Corona Zirconio Monolítico',
+    piezaDiente: '',
+    colorGuiaVita: 'A2 (Vita Classical)',
+    costoLaboratorioUsd: 50,
+    fechaEnvio: new Date().toISOString().slice(0, 10),
+    fechaPrometidaEntrega: '',
+    fechaPruebaBoca: '',
+    estado: 'en_laboratorio',
+    sedeId: 'victoria',
+    observaciones: '',
+  });
+
+  // Guardar laboratorios en localStorage
+  useEffect(() => {
+    localStorage.setItem('odontosalud_data_laboratorios', JSON.stringify(laboratorios));
+  }, [laboratorios]);
 
   // Estados de listas principales (con respaldo en localStorage + Cloudflare D1)
   const [odontologos, setOdontologos] = useState<OdontologoItem[]>(() => {
@@ -706,6 +1016,7 @@ export const ControlDataView: React.FC = () => {
     tratamientos: TratamientoRealizadoItem[];
   } | null>(null);
   const [loadingDoctorHonorarios, setLoadingDoctorHonorarios] = useState(false);
+  const [fotoComprobanteModal, setFotoComprobanteModal] = useState<string | null>(null);
 
   const abrirHistorialHonorariosDoctor = async (doc: OdontologoItem) => {
     setDoctorModalHonorarios(doc);
@@ -1338,8 +1649,61 @@ export const ControlDataView: React.FC = () => {
     return condicionesMedicas.filter((c) => c.nivelRiesgo === 'Crítico' || c.nivelRiesgo === 'Alto').length;
   }, [condicionesMedicas]);
 
-  // Configuración estandarizada de los 7 módulos de segmentación de datos
+  // Manejadores de cambios para el Módulo 00 (Datos OdontoSalud La Victoria)
+  const handleSedeFieldChange = (field: keyof SedeInfo, value: any) => {
+    setSedeFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleBoxFieldChange = (boxIndex: number, field: keyof BoxInfo, value: any) => {
+    setSedeFormData((prev) => {
+      const currentBoxes = prev.boxes ? [...prev.boxes] : [];
+      if (!currentBoxes[boxIndex]) return prev;
+      currentBoxes[boxIndex] = {
+        ...currentBoxes[boxIndex],
+        [field]: value,
+      };
+      return {
+        ...prev,
+        boxes: currentBoxes,
+      };
+    });
+  };
+
+  const handleGuardarConfigSede = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setGuardandoSede(true);
+    try {
+      const totalBoxes = sedeEditandoId === 'victoria' ? 2 : 1;
+      const res = await actualizarConfigSede(sedeEditandoId, {
+        ...sedeFormData,
+        totalBoxes,
+      });
+      if (res.success) {
+        showToast(`¡Configuración de ${sedeFormData.nombre || sedeEditandoId} guardada exitosamente en Cloudflare D1!`);
+        await recargarConfigSedes();
+      } else {
+        showToast(`Error al guardar: ${res.message || 'Intente nuevamente'}`);
+      }
+    } catch (err: any) {
+      showToast('Error de conexión con Cloudflare D1');
+    } finally {
+      setGuardandoSede(false);
+    }
+  };
+
+  // Configuración estandarizada de los 8 módulos de segmentación de datos
   const tabs: { key: DataTabKey; label: string; shortLabel: string; icon: string; count: number; badgeExtra?: string }[] = [
+    {
+      key: 'sedes',
+      label: 'Módulo 00 • Datos OdontoSalud La Victoria',
+      shortLabel: 'Datos OdontoSalud',
+      icon: 'domain',
+      count: 2,
+      badgeExtra: 'Fuente Verdad',
+    },
     {
       key: 'odontologos',
       label: 'Módulo 01 • Odontólogos',
@@ -1390,6 +1754,22 @@ export const ControlDataView: React.FC = () => {
       icon: 'point_of_sale',
       count: cierresDiarios.length,
     },
+    {
+      key: 'inventario',
+      label: 'Módulo 08 • Inventario de Insumos & Materiales',
+      shortLabel: 'Inventario',
+      icon: 'inventory_2',
+      count: inventario.length,
+      badgeExtra: inventario.filter((i) => i.stockActual <= i.stockMinimo).length > 0 ? `${inventario.filter((i) => i.stockActual <= i.stockMinimo).length} alerta` : undefined,
+    },
+    {
+      key: 'laboratorios',
+      label: 'Módulo 09 • Laboratorios Dentales & Prótesis',
+      shortLabel: 'Laboratorios',
+      icon: 'precision_manufacturing',
+      count: laboratorios.length,
+      badgeExtra: laboratorios.filter((l) => l.estado === 'listo_en_clinica').length > 0 ? `${laboratorios.filter((l) => l.estado === 'listo_en_clinica').length} en clínica` : undefined,
+    },
   ];
 
   return (
@@ -1433,7 +1813,7 @@ export const ControlDataView: React.FC = () => {
           <div className="flex items-center gap-2 self-start md:self-auto">
             <div className="px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-xs text-white font-bold flex items-center gap-2">
               <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">layers</span>
-              <span>7 Módulos Sincronizados</span>
+              <span>8 Módulos Sincronizados</span>
             </div>
           </div>
         </div>
@@ -1442,7 +1822,33 @@ export const ControlDataView: React.FC = () => {
       {/* =====================================================================
           PANEL DE KPIS EJECUTIVOS • MÁXIMA LEGIBILIDAD Y ALTO CONTRASTE
          ===================================================================== */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3">
+        {/* KPI 0: Datos OdontoSalud La Victoria (Fuente de la Verdad) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('sedes')}
+          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
+            activeTab === 'sedes'
+              ? 'bg-surface-clean-white border-primary ring-2 ring-primary/40 shadow-md -translate-y-0.5'
+              : 'bg-surface-clean-white border-border-subtle hover:border-primary/50 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
+              Sedes & Boxes
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-dental-deep-navy text-white flex items-center justify-center">
+              <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">domain</span>
+            </div>
+          </div>
+          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
+            2 / 3
+          </span>
+          <span className="text-[11px] font-semibold text-primary block mt-1 truncate">
+            Sedes / Sillones
+          </span>
+        </button>
+
         {/* KPI 1: Padrón de Pacientes */}
         <button
           type="button"
@@ -1646,7 +2052,7 @@ export const ControlDataView: React.FC = () => {
               Módulos de Segmentación de Datos
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy">
-              7 Módulos
+              10 Módulos de Gestión
             </span>
           </div>
           <span className="text-[11px] font-medium text-secondary hidden md:inline">
@@ -1654,8 +2060,8 @@ export const ControlDataView: React.FC = () => {
           </span>
         </div>
 
-        {/* Selector unificado de 7 pestañas en grid responsivo: 2 en móvil, 4 en tablet, 7 en desktop */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 sm:gap-2">
+        {/* Selector unificado de 10 pestañas en grid responsivo: 2 en móvil, 5 en tablet/desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -1708,6 +2114,544 @@ export const ControlDataView: React.FC = () => {
       {/* =====================================================================
           RENDERIZADO SEGMENTADO POR PESTAÑAS (MÁXIMA CLARIDAD Y RESPONSIVIDAD)
          ===================================================================== */}
+
+      {/* ---------------------------------------------------------------------
+          MÓDULO 00: DATOS ODONTOSALUD LA VICTORIA (FUENTE DE LA VERDAD D1)
+         --------------------------------------------------------------------- */}
+      {activeTab === 'sedes' && (
+        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-6 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-primary via-vibrant-cyan to-dental-deep-navy" />
+
+          {/* Header Módulo 00 • Datos OdontoSalud La Victoria */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-dental-deep-navy text-white flex items-center justify-center shadow-sm shrink-0">
+                <span className="material-symbols-outlined text-[26px] text-vibrant-cyan">domain</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-dental-deep-navy text-white">
+                    Módulo 00
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Fuente Única de la Verdad (Cloudflare D1)
+                  </span>
+                  <span className="text-xs text-secondary font-medium">
+                    • Ingesta y Parámetros Operativos
+                  </span>
+                </div>
+                <h2 className="font-display font-black text-lg sm:text-xl text-dental-deep-navy mt-1 tracking-tight">
+                  Datos OdontoSalud La Victoria • Sedes, Horarios, Boxes & Redes
+                </h2>
+                <p className="text-xs text-secondary mt-0.5 font-medium">
+                  Estos datos alimentan reactivamente la coordinación de citas, asignación de sillones, encabezados, presupuestos y geolocalización.
+                </p>
+              </div>
+            </div>
+
+            {/* Selector de Sede para Edición */}
+            <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-surface-subtle-ice border border-border-subtle self-start lg:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => seleccionarSedeParaEditar('victoria')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  sedeEditandoId === 'victoria'
+                    ? 'bg-dental-deep-navy text-white shadow-xs'
+                    : 'text-dental-deep-navy hover:bg-white/80'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
+                <span>La Victoria (2 Boxes)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => seleccionarSedeParaEditar('tovar')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  sedeEditandoId === 'tovar'
+                    ? 'bg-dental-deep-navy text-white shadow-xs'
+                    : 'text-dental-deep-navy hover:bg-white/80'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px] text-amber-500">terrain</span>
+                <span>Colonia Tovar (1 Box)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Formulario Principal de Configuración */}
+          <form onSubmit={handleGuardarConfigSede} className="flex flex-col gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Bloque 1: Identidad & Ubicación Física */}
+              <div className="bg-surface-subtle-ice rounded-2xl p-4 sm:p-5 border border-border-subtle flex flex-col gap-3.5">
+                <div className="flex items-center gap-2 border-b border-border-subtle pb-2.5">
+                  <span className="material-symbols-outlined text-primary text-[20px]">pin_drop</span>
+                  <h3 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                    1. Identidad & Ubicación Física
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Nombre Comercial de la Sede
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.nombre || ''}
+                      onChange={(e) => handleSedeFieldChange('nombre', e.target.value)}
+                      placeholder="Ej: OdontoSalud La Victoria"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.nombre))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Subtítulo o Especialidad de la Sede
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.subtitulo || ''}
+                      onChange={(e) => handleSedeFieldChange('subtitulo', e.target.value)}
+                      placeholder="Ej: Sede Principal • Boxes 1 y 2 & Cirugía RVG"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.subtitulo))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Ciudad
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.ciudad || (sedeEditandoId === 'victoria' ? 'La Victoria' : 'Colonia Tovar')}
+                      onChange={(e) => handleSedeFieldChange('ciudad', e.target.value)}
+                      placeholder="Ej: La Victoria"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.ciudad))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Estado / Entidad Federal
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.estadoVzla || 'Estado Aragua'}
+                      onChange={(e) => handleSedeFieldChange('estadoVzla', e.target.value)}
+                      placeholder="Ej: Estado Aragua"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.estadoVzla))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Dirección Física Completa
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={sedeFormData.direccion || ''}
+                    onChange={(e) => handleSedeFieldChange('direccion', e.target.value)}
+                    placeholder="Av. Francisco de Miranda, Centro Profesional La Victoria, Piso 2, Consultorio 2-A..."
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.direccion))}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-secondary">
+                      Enlace Google Maps (Para Ubicación de Pacientes)
+                    </label>
+                    {sedeFormData.googleMapsUrl && (
+                      <a
+                        href={sedeFormData.googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5"
+                      >
+                        <span>Abrir mapa</span>
+                        <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={sedeFormData.googleMapsUrl || ''}
+                    onChange={(e) => handleSedeFieldChange('googleMapsUrl', e.target.value)}
+                    placeholder="https://maps.google.com/?q=..."
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.googleMapsUrl))}
+                  />
+                </div>
+              </div>
+
+              {/* Bloque 2: Horarios de Atención & Turnos */}
+              <div className="bg-surface-subtle-ice rounded-2xl p-4 sm:p-5 border border-border-subtle flex flex-col gap-3.5">
+                <div className="flex items-center gap-2 border-b border-border-subtle pb-2.5">
+                  <span className="material-symbols-outlined text-primary text-[20px]">schedule</span>
+                  <h3 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                    2. Horarios de Atención & Turnos Clínicos
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Hora de Apertura General
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.horarioApertura || '08:00'}
+                      onChange={(e) => handleSedeFieldChange('horarioApertura', e.target.value)}
+                      placeholder="08:00 AM"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.horarioApertura))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Hora de Cierre General
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.horarioCierre || '17:00'}
+                      onChange={(e) => handleSedeFieldChange('horarioCierre', e.target.value)}
+                      placeholder="05:00 PM"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.horarioCierre))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Franja Turno Mañana
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.turnoManana || '08:00 - 12:00'}
+                      onChange={(e) => handleSedeFieldChange('turnoManana', e.target.value)}
+                      placeholder="08:00 AM - 12:00 PM"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.turnoManana))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-secondary mb-1">
+                      Franja Turno Tarde
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.turnoTarde || '13:00 - 17:00'}
+                      onChange={(e) => handleSedeFieldChange('turnoTarde', e.target.value)}
+                      placeholder="01:00 PM - 05:00 PM"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.turnoTarde))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Días de Atención Clínica
+                  </label>
+                  <input
+                    type="text"
+                    value={sedeFormData.diasAtencion || 'Lunes a Sábado'}
+                    onChange={(e) => handleSedeFieldChange('diasAtencion', e.target.value)}
+                    placeholder="Lunes a Sábado (Previa Cita)"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.diasAtencion))}
+                  />
+                </div>
+
+                <div className="p-3 rounded-xl bg-white border border-border-subtle flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-amber-500 shrink-0 mt-0.5">info</span>
+                  <p className="text-[11px] text-secondary leading-snug">
+                    Los turnos configurados aquí determinan automáticamente las franjas horarias y la disponibilidad en el módulo de coordinación de citas <strong className="text-dental-deep-navy">#coordinacion</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloque 3: Cantidad & Configuración de Sillones Clínicos (Boxes) */}
+            <div className="bg-surface-subtle-ice rounded-2xl p-4 sm:p-5 border border-border-subtle flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[20px]">chair</span>
+                  <h3 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                    3. Capacidad & Configuración de Sillones Clínicos (Boxes)
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-dental-deep-navy text-white text-[11px] font-black self-start sm:self-auto">
+                  <span className="material-symbols-outlined text-[14px] text-vibrant-cyan">check_circle</span>
+                  <span>
+                    {sedeEditandoId === 'victoria' ? 'Capacidad Estricta: 2 Boxes' : 'Capacidad Estricta: 1 Box'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Grid de Boxes según la capacidad estricta de la sede */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Box 01 (Disponible en ambas sedes) */}
+                <div className="p-4 rounded-xl bg-white border-2 border-primary/20 shadow-xs flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 rounded-md bg-dental-deep-navy text-white text-xs font-black">
+                      Sillón Box 01
+                    </span>
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Operativo 100%
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-secondary mb-1">
+                      Nombre o Identificador del Box
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.boxes?.[0]?.nombre || 'Box 01 (Principal / Rx)'}
+                      onChange={(e) => handleBoxFieldChange(0, 'nombre', e.target.value)}
+                      placeholder="Ej: Box 01 (Principal / Rx)"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[0]?.nombre))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-secondary mb-1">
+                      Especialidad / Equipamiento Principal
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.boxes?.[0]?.especialidad || 'Operatoria, Diagnóstico & Radiología RVG'}
+                      onChange={(e) => handleBoxFieldChange(0, 'especialidad', e.target.value)}
+                      placeholder="Ej: Operatoria, Diagnóstico & Radiología RVG"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[0]?.especialidad))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-secondary mb-1">
+                      Doctor Responsable Predeterminado
+                    </label>
+                    <input
+                      type="text"
+                      value={sedeFormData.boxes?.[0]?.doctorDefault || 'Dra. María Alejandra Domínguez'}
+                      onChange={(e) => handleBoxFieldChange(0, 'doctorDefault', e.target.value)}
+                      placeholder="Ej: Dra. María Alejandra Domínguez"
+                      className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[0]?.doctorDefault))}
+                    />
+                  </div>
+                </div>
+
+                {/* Box 02 (Solo aplica para La Victoria) */}
+                {sedeEditandoId === 'victoria' ? (
+                  <div className="p-4 rounded-xl bg-white border-2 border-primary/20 shadow-xs flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-md bg-dental-deep-navy text-white text-xs font-black">
+                        Sillón Box 02
+                      </span>
+                      <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Operativo 100%
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-secondary mb-1">
+                        Nombre o Identificador del Box
+                      </label>
+                      <input
+                        type="text"
+                        value={sedeFormData.boxes?.[1]?.nombre || 'Box 02 (Ortodoncia & Integral)'}
+                        onChange={(e) => handleBoxFieldChange(1, 'nombre', e.target.value)}
+                        placeholder="Ej: Box 02 (Ortodoncia & Integral)"
+                        className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[1]?.nombre))}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-secondary mb-1">
+                        Especialidad / Equipamiento Principal
+                      </label>
+                      <input
+                        type="text"
+                        value={sedeFormData.boxes?.[1]?.especialidad || 'Ortodoncia, Prótesis & Estética'}
+                        onChange={(e) => handleBoxFieldChange(1, 'especialidad', e.target.value)}
+                        placeholder="Ej: Ortodoncia, Prótesis & Estética"
+                        className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[1]?.especialidad))}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-secondary mb-1">
+                        Doctor Responsable Predeterminado
+                      </label>
+                      <input
+                        type="text"
+                        value={sedeFormData.boxes?.[1]?.doctorDefault || 'Dra. Carmen Elena Silva'}
+                        onChange={(e) => handleBoxFieldChange(1, 'doctorDefault', e.target.value)}
+                        placeholder="Ej: Dra. Carmen Elena Silva"
+                        className={getIlluminatedFieldClass(Boolean(sedeFormData.boxes?.[1]?.doctorDefault))}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-surface-clean-white border border-dashed border-border-subtle flex flex-col items-center justify-center text-center gap-2 text-secondary">
+                    <span className="material-symbols-outlined text-[32px] text-secondary/40">meeting_room</span>
+                    <p className="text-xs font-bold text-dental-deep-navy">Capacidad Limitada a 1 Box</p>
+                    <p className="text-[11px] max-w-xs text-secondary/80">
+                      La sede de Colonia Tovar opera actualmente con 1 Box de atención clínica integral de montaña.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bloque 4: Canales de Comunicación & Redes Sociales */}
+            <div className="bg-surface-subtle-ice rounded-2xl p-4 sm:p-5 border border-border-subtle flex flex-col gap-3.5">
+              <div className="flex items-center gap-2 border-b border-border-subtle pb-2.5">
+                <span className="material-symbols-outlined text-primary text-[20px]">contact_support</span>
+                <h3 className="font-display font-extrabold text-sm text-dental-deep-navy">
+                  4. Canales de Contacto & Redes Sociales Oficiales
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Teléfono Máster / Fijo
+                  </label>
+                  <input
+                    type="text"
+                    value={sedeFormData.telefono || ''}
+                    onChange={(e) => handleSedeFieldChange('telefono', e.target.value)}
+                    placeholder="+58 244-3221144"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.telefono))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    WhatsApp Oficial de Citas
+                  </label>
+                  <input
+                    type="text"
+                    value={sedeFormData.whatsapp || ''}
+                    onChange={(e) => handleSedeFieldChange('whatsapp', e.target.value)}
+                    placeholder="+58 412-8365687"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.whatsapp))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Correo Electrónico de la Sede
+                  </label>
+                  <input
+                    type="email"
+                    value={sedeFormData.email || ''}
+                    onChange={(e) => handleSedeFieldChange('email', e.target.value)}
+                    placeholder="Clinica@OdontosaludLV.com"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.email))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Instagram URL
+                  </label>
+                  <input
+                    type="url"
+                    value={sedeFormData.instagramUrl || ''}
+                    onChange={(e) => handleSedeFieldChange('instagramUrl', e.target.value)}
+                    placeholder="https://instagram.com/odontosaludlv"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.instagramUrl))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Facebook URL
+                  </label>
+                  <input
+                    type="url"
+                    value={sedeFormData.facebookUrl || ''}
+                    onChange={(e) => handleSedeFieldChange('facebookUrl', e.target.value)}
+                    placeholder="https://facebook.com/odontosaludlv"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.facebookUrl))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    TikTok URL
+                  </label>
+                  <input
+                    type="url"
+                    value={sedeFormData.tiktokUrl || ''}
+                    onChange={(e) => handleSedeFieldChange('tiktokUrl', e.target.value)}
+                    placeholder="https://tiktok.com/@odontosaludlv"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.tiktokUrl))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-secondary mb-1">
+                    Sitio Web Oficial
+                  </label>
+                  <input
+                    type="url"
+                    value={sedeFormData.webUrl || ''}
+                    onChange={(e) => handleSedeFieldChange('webUrl', e.target.value)}
+                    placeholder="https://odontosaludlv.com"
+                    className={getIlluminatedFieldClass(Boolean(sedeFormData.webUrl))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Barra de Acciones y Guardado en D1 */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border-subtle">
+              <div className="flex items-center gap-2 text-xs font-semibold text-secondary">
+                <span className="material-symbols-outlined text-[18px] text-emerald-600">verified_user</span>
+                <span>Al guardar, los datos se sincronizan con Cloudflare D1 y el almacenamiento local.</span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => seleccionarSedeParaEditar(sedeEditandoId)}
+                  className="px-4 py-2.5 rounded-xl border border-border-subtle bg-white text-secondary hover:text-dental-deep-navy font-bold text-xs transition-all cursor-pointer flex-1 sm:flex-none"
+                >
+                  Restablecer
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={guardandoSede}
+                  className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 flex-1 sm:flex-none disabled:opacity-50"
+                >
+                  {guardandoSede ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                      <span>Guardando en Edge D1...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">save</span>
+                      <span>Guardar Datos de la Sede en Cloudflare D1</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </section>
+      )}
 
       {/* ---------------------------------------------------------------------
           SECCIÓN 01: INGESTA DE DATOS • ODONTÓLOGOS
@@ -4284,18 +5228,41 @@ export const ControlDataView: React.FC = () => {
                             +${t.montoHonorarioUsd?.toFixed(2)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-secondary">
+                        <div className="flex items-center justify-between text-[11px] text-secondary flex-wrap gap-1">
                           <span>👤 {t.pacienteNombre}</span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded-full font-bold text-[9px] ${
-                              t.estadoPagoHonorario === 'liquidado'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {t.estadoPagoHonorario === 'liquidado' ? 'Liquidado' : 'Pendiente'}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {t.estadoPagoHonorario === 'liquidado' ? (
+                              <>
+                                <span className="px-1.5 py-0.2 rounded-full font-bold text-[9px] bg-emerald-100 text-emerald-800 flex items-center gap-0.5">
+                                  <span className="material-symbols-outlined text-[11px]">verified</span>
+                                  <span>Ref: {t.referenciaLiquidacion || 'LIQ'}</span>
+                                </span>
+                                {t.comprobanteLiquidacion ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setFotoComprobanteModal(t.comprobanteLiquidacion!)}
+                                    className="px-1.5 py-0.2 rounded-md bg-primary/10 hover:bg-primary hover:text-white text-primary font-bold text-[9px] flex items-center gap-0.5 border border-primary/20 transition-all cursor-pointer"
+                                    title="Ver foto del comprobante de liquidación"
+                                  >
+                                    <span className="material-symbols-outlined text-[11px]">receipt_long</span>
+                                    <span>Comprobante</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[9px] text-secondary italic">Sin foto</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded-full font-bold text-[9px] bg-amber-100 text-amber-800">
+                                Pendiente
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {t.fechaLiquidacion && (
+                          <span className="text-[10px] text-secondary font-mono">
+                            Liquidado el: {t.fechaLiquidacion}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -4306,10 +5273,1115 @@ export const ControlDataView: React.FC = () => {
             <button
               type="button"
               onClick={() => setDoctorModalHonorarios(null)}
-              className="w-full py-2.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-secondary font-bold text-xs transition-all active:scale-95"
+              className="w-full py-2.5 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-secondary font-bold text-xs transition-all active:scale-95 cursor-pointer"
             >
               Cerrar
             </button>
+          </div>
+        </div>
+      )}
+
+
+      {/* ---------------------------------------------------------------------
+          MÓDULO 08: INVENTARIO DE INSUMOS & MATERIALES ODONTOLÓGICOS (D1)
+         --------------------------------------------------------------------- */}
+      {activeTab === 'inventario' && (
+        <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-teal-500 via-primary to-emerald-500" />
+
+          {/* Cabecera del Módulo 08 */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[22px]">inventory_2</span>
+              </div>
+              <div>
+                <h3 className="font-display font-black text-base text-dental-deep-navy leading-tight">
+                  Inventario de Materiales & Insumos Odontológicos
+                </h3>
+                <p className="text-xs text-secondary mt-0.5">
+                  Control de existencias, precios de compra en divisas, fechas de ingreso y salidas a sillón
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones y Métricas Resumidas */}
+            <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+              <div className="px-3 py-1.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs flex items-center gap-2">
+                <span className="text-secondary font-semibold">Valor Total Stock:</span>
+                <strong className="text-dental-deep-navy font-black">
+                  ${inventario.reduce((acc, i) => acc + (i.precioCompraUsd * i.stockActual), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </strong>
+                <span className="text-[10px] text-teal-700 font-mono">
+                  (~ {(inventario.reduce((acc, i) => acc + (i.precioCompraUsd * i.stockActual), 0) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setInsumoEditando(null);
+                  setFormInsumo({
+                    codigo: `MAT-OD-${Math.floor(100 + Math.random() * 900)}`,
+                    nombre: '',
+                    categoria: 'Restauración / Operatoria',
+                    stockActual: 10,
+                    stockMinimo: 3,
+                    unidadMedida: 'Tubo / Jeringa',
+                    precioCompraUsd: 25,
+                    fechaIngreso: new Date().toISOString().slice(0, 10),
+                    fechaSalida: '',
+                    lote: '',
+                    sedeId: 'victoria',
+                    estado: 'disponible',
+                    observaciones: '',
+                  });
+                  setShowModalInsumo(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>+ Registrar Insumo</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filtros de Búsqueda, Categoría y Sede */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-surface-subtle-ice/60 p-2.5 rounded-2xl border border-border-subtle">
+            {/* Buscador */}
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-secondary text-[17px]">search</span>
+              <input
+                type="text"
+                placeholder="Buscar por nombre, código o lote..."
+                value={busquedaInventario}
+                onChange={(e) => setBusquedaInventario(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-2xs"
+              />
+            </div>
+
+            {/* Filtro por Categoría */}
+            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-border-subtle shadow-2xs">
+              <span className="text-[11px] font-bold text-secondary">Categoría:</span>
+              <select
+                value={filtroCategoriaInventario}
+                onChange={(e) => setFiltroCategoriaInventario(e.target.value)}
+                className="w-full bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
+              >
+                <option value="todas">Todas las Categorías</option>
+                <option value="Restauración / Operatoria">Restauración / Operatoria</option>
+                <option value="Endodoncia">Endodoncia</option>
+                <option value="Bioseguridad & Desinfección">Bioseguridad & Desinfección</option>
+                <option value="Cirugía & Periodoncia">Cirugía & Periodoncia</option>
+                <option value="Ortodoncia">Ortodoncia</option>
+                <option value="Prótesis & Impresión">Prótesis & Impresión</option>
+                <option value="Anestesia & Farmacia">Anestesia & Farmacia</option>
+              </select>
+            </div>
+
+            {/* Filtro por Sede */}
+            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-border-subtle shadow-2xs">
+              <span className="text-[11px] font-bold text-secondary">Sede:</span>
+              <select
+                value={filtroSedeInventario}
+                onChange={(e) => setFiltroSedeInventario(e.target.value)}
+                className="w-full bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
+              >
+                <option value="todas">Todas las Sedes</option>
+                <option value="victoria">Sede La Victoria</option>
+                <option value="tovar">Sede Colonia Tovar</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Tabla de Insumos y Materiales */}
+          <div className="w-full overflow-x-auto rounded-2xl border border-border-subtle bg-white shadow-2xs">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="bg-surface-subtle-ice border-b border-border-subtle text-[10px] font-black uppercase text-secondary tracking-wider">
+                  <th className="p-2.5">Código / Insumo</th>
+                  <th className="p-2.5">Categoría</th>
+                  <th className="p-2.5 text-center">Stock Actual</th>
+                  <th className="p-2.5 text-center">Mínimo</th>
+                  <th className="p-2.5 text-right">Precio Compra ($ USD / Bs.)</th>
+                  <th className="p-2.5">Fecha Ingreso</th>
+                  <th className="p-2.5">Fecha Salida</th>
+                  <th className="p-2.5">Lote / Sede</th>
+                  <th className="p-2.5 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle/70">
+                {inventario
+                  .filter((item) => {
+                    const matchBusqueda =
+                      !busquedaInventario ||
+                      item.nombre.toLowerCase().includes(busquedaInventario.toLowerCase()) ||
+                      item.codigo.toLowerCase().includes(busquedaInventario.toLowerCase()) ||
+                      item.lote.toLowerCase().includes(busquedaInventario.toLowerCase());
+                    const matchCat =
+                      filtroCategoriaInventario === 'todas' || item.categoria === filtroCategoriaInventario;
+                    const matchSede =
+                      filtroSedeInventario === 'todas' || item.sedeId === filtroSedeInventario || item.sedeId === 'ambas';
+                    return matchBusqueda && matchCat && matchSede;
+                  })
+                  .map((item) => {
+                    const isBajoStock = item.stockActual <= item.stockMinimo;
+                    const isAgotado = item.stockActual === 0;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="p-2.5 font-bold text-dental-deep-navy">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-[10px] text-primary">{item.codigo}</span>
+                            <span className="font-display font-black text-xs text-dental-deep-navy">{item.nombre}</span>
+                            {item.observaciones && (
+                              <span className="text-[10px] text-secondary line-clamp-1">{item.observaciones}</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="p-2.5">
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-surface-subtle-ice border border-border-subtle text-secondary whitespace-nowrap">
+                            {item.categoria}
+                          </span>
+                        </td>
+
+                        <td className="p-2.5 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xs ${
+                              isAgotado
+                                ? 'bg-rose-100 text-rose-900 border border-rose-300 animate-pulse'
+                                : isBajoStock
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            }`}
+                          >
+                            <span>{item.stockActual}</span>
+                            <span className="text-[9px] font-semibold opacity-80">{item.unidadMedida}</span>
+                          </span>
+                        </td>
+
+                        <td className="p-2.5 text-center font-mono font-bold text-secondary text-[11px]">
+                          {item.stockMinimo}
+                        </td>
+
+                        <td className="p-2.5 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="font-black text-teal-700">${item.precioCompraUsd.toFixed(2)} USD</span>
+                            <span className="text-[10px] font-mono text-secondary">
+                              {(item.precioCompraUsd * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="p-2.5 font-mono text-[11px] text-dental-deep-navy whitespace-nowrap">
+                          {item.fechaIngreso || '—'}
+                        </td>
+
+                        <td className="p-2.5 font-mono text-[11px] text-secondary whitespace-nowrap">
+                          {item.fechaSalida ? (
+                            <span className="text-amber-700 font-bold">{item.fechaSalida}</span>
+                          ) : (
+                            <span className="text-slate-400 italic">Sin salida</span>
+                          )}
+                        </td>
+
+                        <td className="p-2.5 text-[11px]">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-secondary">Lote: {item.lote || 'N/A'}</span>
+                            <span className="font-semibold text-dental-deep-navy capitalize">
+                              {item.sedeId === 'victoria' ? 'La Victoria' : item.sedeId === 'tovar' ? 'Colonia Tovar' : 'Ambas Sedes'}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="p-2.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {/* Botón Salida Rápida a Sillón (-1) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (item.stockActual > 0) {
+                                  const todayIso = new Date().toISOString().slice(0, 10);
+                                  setInventario((prev) =>
+                                    prev.map((i) =>
+                                      i.id === item.id
+                                        ? {
+                                            ...i,
+                                            stockActual: i.stockActual - 1,
+                                            fechaSalida: todayIso,
+                                            estado: i.stockActual - 1 <= i.stockMinimo ? 'bajo_stock' : 'disponible',
+                                          }
+                                        : i
+                                    )
+                                  );
+                                }
+                              }}
+                              disabled={item.stockActual <= 0}
+                              className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-black transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
+                              title="Registrar salida de 1 unidad al sillón clínico (actualiza fecha de salida a hoy)"
+                            >
+                              -1 Salida
+                            </button>
+
+                            {/* Botón Entrada Rápida (+1) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const todayIso = new Date().toISOString().slice(0, 10);
+                                setInventario((prev) =>
+                                  prev.map((i) =>
+                                    i.id === item.id
+                                      ? {
+                                          ...i,
+                                          stockActual: i.stockActual + 1,
+                                          fechaIngreso: todayIso,
+                                          estado: i.stockActual + 1 > i.stockMinimo ? 'disponible' : 'bajo_stock',
+                                        }
+                                      : i
+                                  )
+                                );
+                              }}
+                              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-[10px] font-black transition-all active:scale-95 cursor-pointer"
+                              title="Registrar entrada de 1 unidad al almacén (actualiza fecha de ingreso a hoy)"
+                            >
+                              +1 Entrada
+                            </button>
+
+                            {/* Botón Editar Insumo */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInsumoEditando(item);
+                                setFormInsumo({ ...item });
+                                setShowModalInsumo(true);
+                              }}
+                              className="p-1 rounded-lg bg-surface-subtle-ice hover:bg-border-subtle text-secondary hover:text-dental-deep-navy cursor-pointer"
+                              title="Editar ficha completa del insumo"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">edit</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ---------------------------------------------------------------------
+          MÓDULO 09: LABORATORIOS DENTALES & PRÓTESIS EXTERNAS (10ª PESTAÑA)
+         --------------------------------------------------------------------- */}
+      {activeTab === 'laboratorios' && (
+        <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-purple-500 via-indigo-600 to-dental-deep-navy" />
+
+          {/* Cabecera del Módulo 09 */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[22px]">precision_manufacturing</span>
+              </div>
+              <div>
+                <h3 className="font-display font-black text-base text-dental-deep-navy leading-tight">
+                  Laboratorios Dentales & Trabajos Protésicos Externos
+                </h3>
+                <p className="text-xs text-secondary mt-0.5">
+                  Control de órdenes protésicas, fechas de envío, pruebas en boca, costos de laboratorio y entrega al paciente
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones y Métricas Resumidas */}
+            <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+              <div className="px-3 py-1.5 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs flex items-center gap-2">
+                <span className="text-secondary font-semibold">Costo en Proceso:</span>
+                <strong className="text-dental-deep-navy font-black">
+                  ${laboratorios.filter((l) => l.estado !== 'instalado_al_paciente').reduce((acc, l) => acc + l.costoLaboratorioUsd, 0).toFixed(2)} USD
+                </strong>
+                <span className="text-[10px] text-purple-800 font-mono">
+                  (~ {(laboratorios.filter((l) => l.estado !== 'instalado_al_paciente').reduce((acc, l) => acc + l.costoLaboratorioUsd, 0) * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.)
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLabEditando(null);
+                  setFormLab({
+                    ordenCodigo: `LAB-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+                    laboratorioNombre: '',
+                    tecnicoResponsable: '',
+                    telefonoContacto: '+58 ',
+                    pacienteNombre: '',
+                    pacienteCedula: 'V-',
+                    doctorTratante: 'Dra. María Alejandra Domínguez',
+                    tipoTrabajo: 'Corona Zirconio Monolítico',
+                    piezaDiente: '',
+                    colorGuiaVita: 'A2 (Vita Classical)',
+                    costoLaboratorioUsd: 50,
+                    fechaEnvio: new Date().toISOString().slice(0, 10),
+                    fechaPrometidaEntrega: '',
+                    fechaPruebaBoca: '',
+                    estado: 'en_laboratorio',
+                    sedeId: 'victoria',
+                    observaciones: '',
+                  });
+                  setShowModalLab(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>+ Nueva Orden de Lab</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filtros de Búsqueda y Estado */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-surface-subtle-ice/60 p-2.5 rounded-2xl border border-border-subtle">
+            {/* Buscador */}
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-secondary text-[17px]">search</span>
+              <input
+                type="text"
+                placeholder="Buscar por paciente, laboratorio, orden o técnico..."
+                value={busquedaLab}
+                onChange={(e) => setBusquedaLab(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+              />
+            </div>
+
+            {/* Filtro por Estado */}
+            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-border-subtle shadow-2xs">
+              <span className="text-[11px] font-bold text-secondary">Estado de Orden:</span>
+              <select
+                value={filtroEstadoLab}
+                onChange={(e) => setFiltroEstadoLab(e.target.value)}
+                className="w-full bg-transparent text-xs font-bold text-dental-deep-navy focus:outline-none cursor-pointer"
+              >
+                <option value="todos">Todos los Estados</option>
+                <option value="en_laboratorio">En Confección (Laboratorio)</option>
+                <option value="en_prueba_bizcocho">En Prueba en Boca / Bizcocho</option>
+                <option value="listo_en_clinica">Listo en Clínica (Por Instalar)</option>
+                <option value="instalado_al_paciente">Instalado al Paciente</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Tabla de Órdenes de Laboratorio */}
+          <div className="w-full overflow-x-auto rounded-2xl border border-border-subtle bg-white shadow-2xs">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="bg-surface-subtle-ice border-b border-border-subtle text-[10px] font-black uppercase text-secondary tracking-wider">
+                  <th className="p-2.5">Orden # / Paciente</th>
+                  <th className="p-2.5">Laboratorio & Técnico</th>
+                  <th className="p-2.5">Trabajo Protésico & Color</th>
+                  <th className="p-2.5">Doctor Tratante</th>
+                  <th className="p-2.5 text-right">Costo Lab ($ / Bs.)</th>
+                  <th className="p-2.5">Envío / Entrega Prometida</th>
+                  <th className="p-2.5">Prueba en Boca</th>
+                  <th className="p-2.5 text-center">Estado</th>
+                  <th className="p-2.5 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle/70">
+                {laboratorios
+                  .filter((item) => {
+                    const matchBusqueda =
+                      !busquedaLab ||
+                      item.pacienteNombre.toLowerCase().includes(busquedaLab.toLowerCase()) ||
+                      item.pacienteCedula.toLowerCase().includes(busquedaLab.toLowerCase()) ||
+                      item.ordenCodigo.toLowerCase().includes(busquedaLab.toLowerCase()) ||
+                      item.laboratorioNombre.toLowerCase().includes(busquedaLab.toLowerCase()) ||
+                      item.tecnicoResponsable.toLowerCase().includes(busquedaLab.toLowerCase());
+                    const matchEstado = filtroEstadoLab === 'todos' || item.estado === filtroEstadoLab;
+                    return matchBusqueda && matchEstado;
+                  })
+                  .map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="p-2.5 font-bold text-dental-deep-navy">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-[10px] text-purple-700 font-extrabold">{item.ordenCodigo}</span>
+                          <span className="font-display font-black text-xs text-dental-deep-navy">{item.pacienteNombre}</span>
+                          <span className="font-mono text-[10px] text-secondary">{item.pacienteCedula}</span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-dental-deep-navy">{item.laboratorioNombre}</span>
+                          <span className="text-[10px] text-secondary">Téc. {item.tecnicoResponsable}</span>
+                          <span className="text-[10px] text-primary font-mono">{item.telefonoContacto}</span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5">
+                        <div className="flex flex-col">
+                          <span className="font-black text-dental-deep-navy text-xs">
+                            {item.tipoTrabajo} {item.piezaDiente ? `(#${item.piezaDiente})` : ''}
+                          </span>
+                          <span className="text-[10px] font-semibold text-amber-700">Guía: {item.colorGuiaVita}</span>
+                          {item.observaciones && (
+                            <span className="text-[9px] text-secondary line-clamp-1">{item.observaciones}</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-2.5 font-medium text-secondary text-[11px]">
+                        {item.doctorTratante}
+                      </td>
+
+                      <td className="p-2.5 text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-black text-purple-800">${item.costoLaboratorioUsd.toFixed(2)} USD</span>
+                          <span className="text-[10px] font-mono text-secondary">
+                            {(item.costoLaboratorioUsd * tasaBcv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5 text-[11px] whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-secondary font-mono">Env: {item.fechaEnvio}</span>
+                          <span className="font-bold text-dental-deep-navy font-mono">Entr: {item.fechaPrometidaEntrega || '—'}</span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5 text-[11px] font-mono whitespace-nowrap">
+                        {item.fechaPruebaBoca ? (
+                          <span className="text-teal-700 font-bold">{item.fechaPruebaBoca}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">Pendiente</span>
+                        )}
+                      </td>
+
+                      <td className="p-2.5 text-center">
+                        <select
+                          value={item.estado}
+                          onChange={(e) => {
+                            const nuevoEstado = e.target.value as any;
+                            setLaboratorios((prev) =>
+                              prev.map((l) => (l.id === item.id ? { ...l, estado: nuevoEstado } : l))
+                            );
+                          }}
+                          className={`px-2 py-1 rounded-xl text-[10px] font-black border cursor-pointer outline-none shadow-2xs ${
+                            item.estado === 'listo_en_clinica'
+                              ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
+                              : item.estado === 'en_prueba_bizcocho'
+                              ? 'bg-amber-100 text-amber-950 border-amber-300'
+                              : item.estado === 'instalado_al_paciente'
+                              ? 'bg-slate-100 text-slate-700 border-slate-300'
+                              : 'bg-purple-100 text-purple-950 border-purple-300'
+                          }`}
+                        >
+                          <option value="en_laboratorio">En Confección</option>
+                          <option value="en_prueba_bizcocho">Prueba Bizcocho</option>
+                          <option value="listo_en_clinica">Listo en Clínica</option>
+                          <option value="instalado_al_paciente">Instalado</option>
+                        </select>
+                      </td>
+
+                      <td className="p-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLabEditando(item);
+                            setFormLab({ ...item });
+                            setShowModalLab(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-surface-subtle-ice hover:bg-border-subtle text-secondary hover:text-dental-deep-navy cursor-pointer"
+                          title="Editar orden de laboratorio"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">edit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* =====================================================================
+          MODAL: REGISTRAR / EDITAR INSUMO DE INVENTARIO (MÓDULO 08)
+         ===================================================================== */}
+      {showModalInsumo && (
+        <div
+          className="fixed inset-0 z-50 bg-dental-deep-navy/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setShowModalInsumo(false)}
+        >
+          <div
+            className="bg-surface-clean-white w-full max-w-lg rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xl border border-border-subtle max-h-[90vh] overflow-y-auto animate-in zoom-in-95 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                  <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+                </div>
+                <div>
+                  <h4 className="font-display font-extrabold text-base text-dental-deep-navy">
+                    {insumoEditando ? 'Editar Insumo Odontológico' : 'Registrar Nuevo Insumo'}
+                  </h4>
+                  <p className="text-xs text-secondary">
+                    Gestión de existencias, precios de compra y trazabilidad de ingresos/salidas
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowModalInsumo(false)}
+                className="w-8 h-8 rounded-full bg-surface-subtle-ice flex items-center justify-center text-secondary hover:text-dental-deep-navy cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!formInsumo.nombre || !formInsumo.codigo) return;
+
+                const stock = Number(formInsumo.stockActual) || 0;
+                const min = Number(formInsumo.stockMinimo) || 1;
+                const estadoCalculado: 'disponible' | 'bajo_stock' | 'agotado' =
+                  stock === 0 ? 'agotado' : stock <= min ? 'bajo_stock' : 'disponible';
+
+                if (insumoEditando) {
+                  setInventario((prev) =>
+                    prev.map((i) =>
+                      i.id === insumoEditando.id
+                        ? ({
+                            ...i,
+                            ...formInsumo,
+                            stockActual: stock,
+                            stockMinimo: min,
+                            precioCompraUsd: Number(formInsumo.precioCompraUsd) || 0,
+                            estado: estadoCalculado,
+                          } as InventarioItem)
+                        : i
+                    )
+                  );
+                } else {
+                  const nuevo: InventarioItem = {
+                    id: `inv-${Date.now()}`,
+                    codigo: formInsumo.codigo!,
+                    nombre: formInsumo.nombre!,
+                    categoria: formInsumo.categoria as any,
+                    stockActual: stock,
+                    stockMinimo: min,
+                    unidadMedida: formInsumo.unidadMedida as any,
+                    precioCompraUsd: Number(formInsumo.precioCompraUsd) || 0,
+                    fechaIngreso: formInsumo.fechaIngreso || new Date().toISOString().slice(0, 10),
+                    fechaSalida: formInsumo.fechaSalida || undefined,
+                    lote: formInsumo.lote || 'LOTE-GEN',
+                    sedeId: formInsumo.sedeId as any,
+                    estado: estadoCalculado,
+                    observaciones: formInsumo.observaciones,
+                  };
+                  setInventario((prev) => [nuevo, ...prev]);
+                }
+                setShowModalInsumo(false);
+              }}
+              className="flex flex-col gap-3 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Código Insumo</label>
+                  <input
+                    type="text"
+                    required
+                    value={formInsumo.codigo || ''}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, codigo: e.target.value })}
+                    placeholder="Ej. MAT-RES-01"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Categoría</label>
+                  <select
+                    value={formInsumo.categoria}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, categoria: e.target.value as any })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="Restauración / Operatoria">Restauración / Operatoria</option>
+                    <option value="Endodoncia">Endodoncia</option>
+                    <option value="Bioseguridad & Desinfección">Bioseguridad & Desinfección</option>
+                    <option value="Cirugía & Periodoncia">Cirugía & Periodoncia</option>
+                    <option value="Ortodoncia">Ortodoncia</option>
+                    <option value="Prótesis & Impresión">Prótesis & Impresión</option>
+                    <option value="Anestesia & Farmacia">Anestesia & Farmacia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-dental-deep-navy">Nombre Comercial del Material</label>
+                <input
+                  type="text"
+                  required
+                  value={formInsumo.nombre || ''}
+                  onChange={(e) => setFormInsumo({ ...formInsumo, nombre: e.target.value })}
+                  placeholder="Ej. Resina Filtek Z350 XT 3M ESPE (Tono A2)"
+                  className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Stock Actual</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={formInsumo.stockActual}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, stockActual: Number(e.target.value) })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-black text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Stock Mínimo</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={formInsumo.stockMinimo}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, stockMinimo: Number(e.target.value) })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Unidad Medida</label>
+                  <select
+                    value={formInsumo.unidadMedida}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, unidadMedida: e.target.value as any })}
+                    className="h-10 px-2 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="Caja">Caja</option>
+                    <option value="Tubo / Jeringa">Tubo / Jeringa</option>
+                    <option value="Frasco">Frasco</option>
+                    <option value="Paquete">Paquete</option>
+                    <option value="Unidad">Unidad</option>
+                    <option value="Cartucho (Carpule)">Carpule</option>
+                    <option value="Galón">Galón</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Precio Compra ($ USD)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={formInsumo.precioCompraUsd}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, precioCompraUsd: Number(e.target.value) })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-teal-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Lote de Fabricación</label>
+                  <input
+                    type="text"
+                    value={formInsumo.lote || ''}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, lote: e.target.value })}
+                    placeholder="Ej. 3M-88910"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* Fechas de Ingreso y Fecha de Salida (Requerimiento explícito) */}
+              <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-surface-subtle-ice/70 border border-border-subtle">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[15px] text-teal-600">login</span>
+                    <span>Fecha de Ingreso</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formInsumo.fechaIngreso || ''}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, fechaIngreso: e.target.value })}
+                    className="h-9 px-2.5 rounded-xl bg-white border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[15px] text-amber-600">logout</span>
+                    <span>Fecha de Salida (Opcional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formInsumo.fechaSalida || ''}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, fechaSalida: e.target.value })}
+                    className="h-9 px-2.5 rounded-xl bg-white border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Sede Asignada</label>
+                  <select
+                    value={formInsumo.sedeId}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, sedeId: e.target.value as any })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="victoria">Sede La Victoria</option>
+                    <option value="tovar">Sede Colonia Tovar</option>
+                    <option value="ambas">Almacén Central (Ambas)</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Observaciones</label>
+                  <input
+                    type="text"
+                    value={formInsumo.observaciones || ''}
+                    onChange={(e) => setFormInsumo({ ...formInsumo, observaciones: e.target.value })}
+                    placeholder="Instrucciones o especificaciones..."
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-medium text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => setShowModalInsumo(false)}
+                  className="px-4 py-2 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-secondary font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md cursor-pointer active:scale-95 transition-all"
+                >
+                  {insumoEditando ? 'Actualizar Insumo' : 'Guardar en Inventario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: REGISTRAR / EDITAR ORDEN DE LABORATORIO (MÓDULO 09)
+         ===================================================================== */}
+      {showModalLab && (
+        <div
+          className="fixed inset-0 z-50 bg-dental-deep-navy/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setShowModalLab(false)}
+        >
+          <div
+            className="bg-surface-clean-white w-full max-w-xl rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xl border border-border-subtle max-h-[90vh] overflow-y-auto animate-in zoom-in-95 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-700 text-white flex items-center justify-center shadow-xs">
+                  <span className="material-symbols-outlined text-[20px]">precision_manufacturing</span>
+                </div>
+                <div>
+                  <h4 className="font-display font-extrabold text-base text-dental-deep-navy">
+                    {labEditando ? 'Editar Orden de Laboratorio' : 'Nueva Orden Protésica de Laboratorio'}
+                  </h4>
+                  <p className="text-xs text-secondary">
+                    Gestión de trabajos externos, fechas de prueba y costos de técnico dental
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowModalLab(false)}
+                className="w-8 h-8 rounded-full bg-surface-subtle-ice flex items-center justify-center text-secondary hover:text-dental-deep-navy cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!formLab.pacienteNombre || !formLab.laboratorioNombre) return;
+
+                if (labEditando) {
+                  setLaboratorios((prev) =>
+                    prev.map((l) =>
+                      l.id === labEditando.id
+                        ? ({
+                            ...l,
+                            ...formLab,
+                            costoLaboratorioUsd: Number(formLab.costoLaboratorioUsd) || 0,
+                          } as LaboratorioItem)
+                        : l
+                    )
+                  );
+                } else {
+                  const nuevo: LaboratorioItem = {
+                    id: `lab-${Date.now()}`,
+                    ordenCodigo: formLab.ordenCodigo || `LAB-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+                    laboratorioNombre: formLab.laboratorioNombre!,
+                    tecnicoResponsable: formLab.tecnicoResponsable || 'T.D. Encargado',
+                    telefonoContacto: formLab.telefonoContacto || '+58 412-0000000',
+                    pacienteNombre: formLab.pacienteNombre!,
+                    pacienteCedula: formLab.pacienteCedula || 'V-00.000.000',
+                    doctorTratante: formLab.doctorTratante || 'Dra. María Alejandra Domínguez',
+                    tipoTrabajo: formLab.tipoTrabajo as any,
+                    piezaDiente: formLab.piezaDiente,
+                    colorGuiaVita: formLab.colorGuiaVita || 'A2',
+                    costoLaboratorioUsd: Number(formLab.costoLaboratorioUsd) || 0,
+                    fechaEnvio: formLab.fechaEnvio || new Date().toISOString().slice(0, 10),
+                    fechaPrometidaEntrega: formLab.fechaPrometidaEntrega || '',
+                    fechaPruebaBoca: formLab.fechaPruebaBoca || undefined,
+                    estado: formLab.estado as any,
+                    sedeId: formLab.sedeId as any,
+                    observaciones: formLab.observaciones,
+                  };
+                  setLaboratorios((prev) => [nuevo, ...prev]);
+                }
+                setShowModalLab(false);
+              }}
+              className="flex flex-col gap-3 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Orden Código</label>
+                  <input
+                    type="text"
+                    required
+                    value={formLab.ordenCodigo || ''}
+                    onChange={(e) => setFormLab({ ...formLab, ordenCodigo: e.target.value })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-purple-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Doctor Tratante</label>
+                  <input
+                    type="text"
+                    required
+                    value={formLab.doctorTratante || ''}
+                    onChange={(e) => setFormLab({ ...formLab, doctorTratante: e.target.value })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Nombre del Paciente</label>
+                  <input
+                    type="text"
+                    required
+                    value={formLab.pacienteNombre || ''}
+                    onChange={(e) => setFormLab({ ...formLab, pacienteNombre: e.target.value })}
+                    placeholder="Ej. Patricia Velásquez"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Cédula del Paciente</label>
+                  <input
+                    type="text"
+                    required
+                    value={formLab.pacienteCedula || ''}
+                    onChange={(e) => setFormLab({ ...formLab, pacienteCedula: e.target.value })}
+                    placeholder="V-18.490.112"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Laboratorio Dental</label>
+                  <input
+                    type="text"
+                    required
+                    value={formLab.laboratorioNombre || ''}
+                    onChange={(e) => setFormLab({ ...formLab, laboratorioNombre: e.target.value })}
+                    placeholder="Ej. DentalTech Protesistas La Victoria"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Técnico / Teléfono</label>
+                  <input
+                    type="text"
+                    value={formLab.tecnicoResponsable || ''}
+                    onChange={(e) => setFormLab({ ...formLab, tecnicoResponsable: e.target.value })}
+                    placeholder="T.D. Roberto Benítez (+58 412...)"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-semibold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Tipo de Trabajo</label>
+                  <select
+                    value={formLab.tipoTrabajo}
+                    onChange={(e) => setFormLab({ ...formLab, tipoTrabajo: e.target.value as any })}
+                    className="h-10 px-2 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="Corona Zirconio Monolítico">Corona Zirconio Monolítico</option>
+                    <option value="Corona Metal-Porcelana">Corona Metal-Porcelana</option>
+                    <option value="Prótesis Parcial Removible">Prótesis Removible</option>
+                    <option value="Prótesis Total Acrílica">Prótesis Total</option>
+                    <option value="Carilla Cerámica E-Max">Carilla Cerámica E-Max</option>
+                    <option value="Incrustación Onlay / Inlay">Incrustación Onlay / Inlay</option>
+                    <option value="Retenedor Essix / Hawley">Retenedor Essix / Hawley</option>
+                    <option value="Guía Quirúrgica Implantología">Guía Quirúrgica</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Pieza FDI</label>
+                  <input
+                    type="text"
+                    value={formLab.piezaDiente || ''}
+                    onChange={(e) => setFormLab({ ...formLab, piezaDiente: e.target.value })}
+                    placeholder="Ej. 16, 21, 34-37"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Guía de Color Vita</label>
+                  <input
+                    type="text"
+                    value={formLab.colorGuiaVita || ''}
+                    onChange={(e) => setFormLab({ ...formLab, colorGuiaVita: e.target.value })}
+                    placeholder="Ej. A1, A2, BL2"
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Costo Lab ($ USD)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={formLab.costoLaboratorioUsd}
+                    onChange={(e) => setFormLab({ ...formLab, costoLaboratorioUsd: Number(e.target.value) })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-black text-purple-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Fecha Envío</label>
+                  <input
+                    type="date"
+                    required
+                    value={formLab.fechaEnvio || ''}
+                    onChange={(e) => setFormLab({ ...formLab, fechaEnvio: e.target.value })}
+                    className="h-10 px-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Entrega Prometida</label>
+                  <input
+                    type="date"
+                    required
+                    value={formLab.fechaPrometidaEntrega || ''}
+                    onChange={(e) => setFormLab({ ...formLab, fechaPrometidaEntrega: e.target.value })}
+                    className="h-10 px-2.5 rounded-xl bg-surface-subtle-ice border border-border-subtle font-mono text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Estado de la Orden</label>
+                  <select
+                    value={formLab.estado}
+                    onChange={(e) => setFormLab({ ...formLab, estado: e.target.value as any })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="en_laboratorio">En Confección (Laboratorio)</option>
+                    <option value="en_prueba_bizcocho">En Prueba en Boca / Bizcocho</option>
+                    <option value="listo_en_clinica">Listo en Clínica (Por Instalar)</option>
+                    <option value="instalado_al_paciente">Instalado al Paciente</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-dental-deep-navy">Sede</label>
+                  <select
+                    value={formLab.sedeId}
+                    onChange={(e) => setFormLab({ ...formLab, sedeId: e.target.value as any })}
+                    className="h-10 px-3 rounded-xl bg-surface-subtle-ice border border-border-subtle text-xs font-bold text-dental-deep-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="victoria">Sede La Victoria</option>
+                    <option value="tovar">Sede Colonia Tovar</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => setShowModalLab(false)}
+                  className="px-4 py-2 rounded-xl bg-surface-subtle-ice hover:bg-border-subtle text-secondary font-bold text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-md cursor-pointer active:scale-95 transition-all"
+                >
+                  {labEditando ? 'Actualizar Orden' : 'Guardar Orden de Laboratorio'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Comprobante Ampliado */}
+      {fotoComprobanteModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setFotoComprobanteModal(null)}
+        >
+          <div className="relative max-w-2xl max-h-[85vh] bg-surface-clean-white p-3 rounded-3xl shadow-2xl flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setFotoComprobanteModal(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+            <img
+              src={fotoComprobanteModal}
+              alt="Comprobante de Liquidación"
+              className="max-h-[75vh] object-contain rounded-2xl"
+            />
+            <span className="text-xs font-mono text-secondary mt-2">
+              Comprobante de Liquidación de Honorarios Profesionales • D1 Edge
+            </span>
           </div>
         </div>
       )}
