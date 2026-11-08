@@ -2098,6 +2098,8 @@ async function _initControlDataTablesInternal(db: D1Database) {
   try { await db.prepare("ALTER TABLE pacientes ADD COLUMN condicion_medica_id TEXT DEFAULT 'ninguna'").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE pacientes ADD COLUMN fecha_nacimiento TEXT").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE pacientes ADD COLUMN email TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE staff_odontologos ADD COLUMN avatar TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE staff_higienistas ADD COLUMN avatar TEXT").run(); } catch (_) {}
 
   try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN sexo TEXT DEFAULT 'Femenino'").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE registro_pacientes_reserva ADD COLUMN fecha_nacimiento TEXT").run(); } catch (_) {}
@@ -2752,6 +2754,7 @@ app.get('/api/control-data', async (c) => {
         estado: r.estado,
         diasVictoria: diasVictoria || [],
         diasTovar: diasTovar || [],
+        avatar: r.avatar || undefined,
       };
     }),
     higienistas: (higienistasRes.results || []).map((r: any) => ({
@@ -2766,6 +2769,7 @@ app.get('/api/control-data', async (c) => {
       doctorAsignado: r.doctor_asignado,
       turno: r.turno,
       estado: r.estado,
+      avatar: r.avatar || undefined,
     })),
     tratamientos: (tratamientosRes.results || []).map((r: any) => ({
       id: r.id,
@@ -2830,11 +2834,15 @@ app.post('/api/control-data/odontologos', async (c) => {
   const b = await c.req.json();
   const id = b.id || `odo-${Date.now()}`;
 
-  // Comprobar si ya existe por cédula para evitar duplicados
+  // Comprobar si ya existe por cédula o ID para evitar duplicados
   const { canonical: cedulaDoc, cleanDigits: cleanDoc } = formatearCedulaVenezolana(b.cedula);
   const docExistente: any = await db
-    .prepare(`SELECT id FROM staff_odontologos WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`)
-    .bind(cleanDoc)
+    .prepare(
+      `SELECT id FROM staff_odontologos 
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), 'v', ''), 'e', ''), 'j', ''), 'g', ''), ' ', '') = ?
+          OR id = ?`
+    )
+    .bind(cleanDoc, id)
     .first();
 
   const finalId = docExistente ? docExistente.id : id;
@@ -2845,8 +2853,8 @@ app.post('/api/control-data/odontologos', async (c) => {
   await db
     .prepare(
       `INSERT INTO staff_odontologos (
-        id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado, dias_victoria, dias_tovar, avatar, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         nombres = excluded.nombres,
         cedula = excluded.cedula,
@@ -2861,6 +2869,7 @@ app.post('/api/control-data/odontologos', async (c) => {
         estado = excluded.estado,
         dias_victoria = excluded.dias_victoria,
         dias_tovar = excluded.dias_tovar,
+        avatar = COALESCE(excluded.avatar, staff_odontologos.avatar),
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
@@ -2877,7 +2886,8 @@ app.post('/api/control-data/odontologos', async (c) => {
       b.porcentajeHonorarios ?? 40,
       b.estado || 'activo',
       diasVictoriaJson,
-      diasTovarJson
+      diasTovarJson,
+      b.avatar || null
     )
     .run();
 
@@ -2898,11 +2908,15 @@ app.post('/api/control-data/higienistas', async (c) => {
   const b = await c.req.json();
   const id = b.id || `hig-${Date.now()}`;
 
-  // Comprobar si ya existe por cédula o MPPS para evitar duplicados en el staff
+  // Comprobar si ya existe por cédula o ID para evitar duplicados en el staff
   const { canonical: cedulaHig, cleanDigits: cleanHig } = formatearCedulaVenezolana(b.cedula);
   const higExistente: any = await db
-    .prepare(`SELECT id FROM staff_higienistas WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`)
-    .bind(cleanHig)
+    .prepare(
+      `SELECT id FROM staff_higienistas 
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), 'v', ''), 'e', ''), 'j', ''), 'g', ''), ' ', '') = ?
+          OR id = ?`
+    )
+    .bind(cleanHig, id)
     .first();
 
   const finalId = higExistente ? higExistente.id : id;
@@ -2910,8 +2924,8 @@ app.post('/api/control-data/higienistas', async (c) => {
   await db
     .prepare(
       `INSERT INTO staff_higienistas (
-        id, nombres, cedula, registro_mpps, area_especialidad, telefono, sede_id, box_apoyo, doctor_asignado, turno, estado, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        id, nombres, cedula, registro_mpps, area_especialidad, telefono, sede_id, box_apoyo, doctor_asignado, turno, estado, avatar, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         nombres = excluded.nombres,
         cedula = excluded.cedula,
@@ -2923,6 +2937,7 @@ app.post('/api/control-data/higienistas', async (c) => {
         doctor_asignado = excluded.doctor_asignado,
         turno = excluded.turno,
         estado = excluded.estado,
+        avatar = COALESCE(excluded.avatar, staff_higienistas.avatar),
         updated_at = CURRENT_TIMESTAMP`
     )
     .bind(
@@ -2936,7 +2951,8 @@ app.post('/api/control-data/higienistas', async (c) => {
       b.boxApoyo || 1,
       b.doctorAsignado || 'Dra. María Alejandra Domínguez',
       b.turno || 'Completo',
-      b.estado || 'activo'
+      b.estado || 'activo',
+      b.avatar || null
     )
     .run();
 

@@ -270,6 +270,7 @@ export interface HigienistaItem {
   doctorAsignado: string;
   turno: 'Mañana' | 'Tarde' | 'Completo';
   estado: 'activo' | 'esterilizacion' | 'descanso';
+  avatar?: string;
 }
 
 export interface TratamientoItem {
@@ -513,5 +514,29 @@ export interface LaboratorioItem {
   sedeId: SedeId;
   observaciones?: string;
 }
+
+export type RolUsuarioSistema =
+  | 'superadmin'
+  | 'directora_clinica'
+  | 'odontologo'
+  | 'higienista'
+  | 'recepcion';
+
+export interface UsuarioSistemaItem {
+  id: string;
+  nombres: string;
+  cedula: string;
+  email: string;
+  telefono: string;
+  rol: RolUsuarioSistema;
+  sedeAsignada: SedeId | 'ambas';
+  pinAcceso: string;
+  passwordHash?: string;
+  avatar?: string;
+  activo: boolean;
+  permisosModulos: string[];
+  ultimoAcceso?: string;
+}
+
 
 

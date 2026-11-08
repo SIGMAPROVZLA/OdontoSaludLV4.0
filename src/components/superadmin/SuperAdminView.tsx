@@ -5,6 +5,7 @@ import { AuditoriaAccionItem, CorporatePaletteId, EdgeHealthMetrics } from '../.
 import { LiveApiMotionGraphic } from './LiveApiMotionGraphic';
 import { ArchitectureMotionDiagram } from './ArchitectureMotionDiagram';
 import { NovedadesReportSection } from './NovedadesReportSection';
+import { UserAuthenticationCard } from './UserAuthenticationCard';
 import { TabId } from '../layout/BottomNavigation';
 
 interface SuperAdminViewProps {
@@ -13,7 +14,7 @@ interface SuperAdminViewProps {
 
 export const SuperAdminView: React.FC<SuperAdminViewProps> = ({ onNavigateTab }) => {
   const { activePaletteId, palettes, setPalette } = useThemePalette();
-  const [subTab, setSubTab] = useState<'paletas' | 'motion_apis' | 'novedades' | 'auditoria'>('paletas');
+  const [subTab, setSubTab] = useState<'usuarios_auth' | 'paletas' | 'motion_apis' | 'novedades' | 'auditoria'>('usuarios_auth');
   const [health, setHealth] = useState<EdgeHealthMetrics | null>(null);
   const [auditorias, setAuditorias] = useState<AuditoriaAccionItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -146,6 +147,19 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({ onNavigateTab })
         <div className="flex items-center gap-1.5 min-w-max">
           <button
             type="button"
+            onClick={() => setSubTab('usuarios_auth')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+              subTab === 'usuarios_auth'
+                ? 'bg-dental-deep-navy text-white shadow-md'
+                : 'text-secondary hover:text-dental-deep-navy hover:bg-surface-subtle-ice'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[17px] text-emerald-400">shield_person</span>
+            <span>Autenticación de Usuarios & RBAC</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setSubTab('paletas')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
               subTab === 'paletas'
@@ -201,6 +215,14 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({ onNavigateTab })
       {/* =========================================================================
           CONTENIDO DINÁMICO POR PESTAÑAS
          ========================================================================= */}
+
+      {/* 0. Tarjeta del Módulo de Autenticación de Usuarios, Roles RBAC & Sesiones Clínicas */}
+      {subTab === 'usuarios_auth' && (
+        <UserAuthenticationCard
+          onNavigateTab={onNavigateTab}
+          onAuditEvent={cargarTelemetriaYAuditoria}
+        />
+      )}
 
       {/* 1. Motion Graphics de APIs y Diagrama de Funcionamiento */}
       {subTab === 'motion_apis' && (

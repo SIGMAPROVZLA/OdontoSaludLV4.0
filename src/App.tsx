@@ -30,7 +30,7 @@ const parseTabFromLocation = (): TabId => {
   if (target === 'odontograma' || target === 'ficha') return 'odontograma';
   if (target === 'cobros') return 'cobros';
   if (target === 'data' || target === 'control-data' || target === 'controldata') return 'data';
-  if (target === 'superadmin' || target === 'gobernanza' || target === 'citadel' || target === 'telemetria') return 'superadmin';
+  if (target === 'superadmin' || target === 'admin' || target === 'usuarios' || target === 'auth' || target === 'gobernanza' || target === 'citadel' || target === 'telemetria') return 'superadmin';
   if (target === 'dashboard' || target === 'inicio') return 'dashboard';
 
   const params = new URLSearchParams(window.location.search);
@@ -41,7 +41,7 @@ const parseTabFromLocation = (): TabId => {
   if (tabParam === 'odontograma') return 'odontograma';
   if (tabParam === 'cobros') return 'cobros';
   if (tabParam === 'data' || tabParam === 'control-data') return 'data';
-  if (tabParam === 'superadmin' || tabParam === 'gobernanza') return 'superadmin';
+  if (tabParam === 'superadmin' || tabParam === 'admin' || tabParam === 'usuarios' || tabParam === 'gobernanza') return 'superadmin';
 
   return 'dashboard';
 };

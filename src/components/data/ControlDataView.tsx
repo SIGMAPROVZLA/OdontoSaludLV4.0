@@ -3,6 +3,7 @@ import { useTasaCambio } from '../../context/TasaCambioContext';
 import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
 import { normalizarFechaInput } from '../../utils/dateNormalization';
+import { compressImage } from '../../utils/imageCompression';
 import {
   DIAS_SEMANA_CLINICOS,
   normalizarDisponibilidadOdontologo,
@@ -633,8 +634,11 @@ export const ControlDataView: React.FC = () => {
   const { tasaBcv } = useTasaCambio();
   const { sedesDisponibles, actualizarConfigSede, recargarConfigSedes } = useSede();
 
-  // Pestaña activa del selector animado
-  const [activeTab, setActiveTab] = useState<DataTabKey>('sedes');
+  // Pestaña activa del selector animado (oculta por defecto hasta seleccionar una pestaña)
+  const [activeTab, setActiveTab] = useState<DataTabKey | null>(null);
+  const handleSelectModuleTab = (key: DataTabKey) => {
+    setActiveTab((prev) => (prev === key ? null : key));
+  };
 
   // Estado del Módulo 00: Configuración Maestra de Sedes (Fuente de la Verdad)
   const [sedeEditandoId, setSedeEditandoId] = useState<SedeId>('victoria');
@@ -938,6 +942,21 @@ export const ControlDataView: React.FC = () => {
     'SÁB',
   ]);
   const [odoDiasTovar, setOdoDiasTovar] = useState<DiaSemanaClinico[]>([]);
+  const [odoAvatar, setOdoAvatar] = useState<string>('');
+
+  const handleSubirFotoOdontologo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, { maxWidth: 420, maxHeight: 420, quality: 0.82 });
+      setOdoAvatar(compressed);
+      showToast('📸 Fotografía de odontóloga(o) optimizada y lista para guardar.');
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => setOdoAvatar(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    }
+  };
 
   const toggleDiaFormSede = (sede: 'victoria' | 'tovar', dia: DiaSemanaClinico) => {
     if (sede === 'victoria') {
@@ -1056,9 +1075,15 @@ export const ControlDataView: React.FC = () => {
     setOdoEstado('activo');
     setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']);
     setOdoDiasTovar([]);
+    setOdoAvatar('');
   };
 
   const handleEditarOdontologo = (o: OdontologoItem) => {
+    if (showOdoForm && editOdoId === o.id) {
+      limpiarFormOdontologo();
+      setShowOdoForm(false);
+      return;
+    }
     const norm = normalizarDisponibilidadOdontologo(o);
     setEditOdoId(norm.id);
     setOdoNombres(norm.nombres);
@@ -1074,6 +1099,7 @@ export const ControlDataView: React.FC = () => {
     setOdoEstado(norm.estado);
     setOdoDiasVictoria(norm.diasVictoria || []);
     setOdoDiasTovar(norm.diasTovar || []);
+    setOdoAvatar(norm.avatar || '');
     setShowOdoForm(true);
   };
 
@@ -1132,6 +1158,7 @@ export const ControlDataView: React.FC = () => {
       estado: odoEstado,
       diasVictoria: finalDiasVictoria,
       diasTovar: finalDiasTovar,
+      avatar: odoAvatar || undefined,
     };
 
     if (editOdoId) {
@@ -1183,6 +1210,21 @@ export const ControlDataView: React.FC = () => {
   );
   const [higTurno, setHigTurno] = useState<'Mañana' | 'Tarde' | 'Completo'>('Completo');
   const [higEstado, setHigEstado] = useState<'activo' | 'esterilizacion' | 'descanso'>('activo');
+  const [higAvatar, setHigAvatar] = useState<string>('');
+
+  const handleSubirFotoHigienista = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, { maxWidth: 420, maxHeight: 420, quality: 0.82 });
+      setHigAvatar(compressed);
+      showToast('📸 Fotografía de higienista optimizada y lista para guardar.');
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => setHigAvatar(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    }
+  };
 
   const isHigFormComplete =
     higNombres.trim().length > 0 &&
@@ -1204,9 +1246,15 @@ export const ControlDataView: React.FC = () => {
     setHigDoctor(odontologos[0]?.nombres || 'Dra. María Alejandra Domínguez');
     setHigTurno('Completo');
     setHigEstado('activo');
+    setHigAvatar('');
   };
 
   const handleEditarHigienista = (h: HigienistaItem) => {
+    if (showHigForm && editHigId === h.id) {
+      limpiarFormHigienista();
+      setShowHigForm(false);
+      return;
+    }
     setEditHigId(h.id);
     setHigNombres(h.nombres);
     setHigCedula(h.cedula);
@@ -1218,6 +1266,7 @@ export const ControlDataView: React.FC = () => {
     setHigDoctor(h.doctorAsignado);
     setHigTurno(h.turno);
     setHigEstado(h.estado);
+    setHigAvatar(h.avatar || '');
     setShowHigForm(true);
   };
 
@@ -1237,6 +1286,7 @@ export const ControlDataView: React.FC = () => {
       doctorAsignado: higDoctor,
       turno: higTurno,
       estado: higEstado,
+      avatar: higAvatar || undefined,
     };
 
     if (editHigId) {
@@ -1306,6 +1356,11 @@ export const ControlDataView: React.FC = () => {
   };
 
   const handleEditarPaciente = (p: PacienteItem) => {
+    if (showPacForm && editPacId === p.id) {
+      limpiarFormPaciente();
+      setShowPacForm(false);
+      return;
+    }
     setEditPacId(p.id);
     setPacNombres(p.nombres);
 
@@ -1517,6 +1572,11 @@ export const ControlDataView: React.FC = () => {
   };
 
   const handleEditarTratamiento = (t: TratamientoItem) => {
+    if (showTratForm && editTratId === t.id) {
+      limpiarFormTratamiento();
+      setShowTratForm(false);
+      return;
+    }
     setEditTratId(t.id);
     setTratCodigo(t.codigo);
     setTratNombre(t.nombre);
@@ -1635,6 +1695,11 @@ export const ControlDataView: React.FC = () => {
   };
 
   const handleEditarCondicionMedica = (item: CondicionMedicaItem) => {
+    if (showMedForm && editMedId === item.id) {
+      limpiarFormCondicionMedica();
+      setShowMedForm(false);
+      return;
+    }
     setEditMedId(item.id);
     setMedCodigoCie(item.codigoCie);
     setMedNombre(item.nombre);
@@ -1895,240 +1960,386 @@ export const ControlDataView: React.FC = () => {
           <div className="flex items-center gap-2 self-start md:self-auto">
             <div className="px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-xs text-white font-bold flex items-center gap-2">
               <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">layers</span>
-              <span>8 Módulos Sincronizados</span>
+              <span>10 Módulos Sincronizados</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* =====================================================================
-          PANEL DE KPIS EJECUTIVOS • MÁXIMA LEGIBILIDAD Y ALTO CONTRASTE
+          PANEL EJECUTIVO COMBINADO EN 3 COLUMNAS • KPIS VISUALES Y ACCIONABLES
          ===================================================================== */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3">
-        {/* KPI 0: Datos OdontoSalud La Victoria (Fuente de la Verdad) */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('sedes')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'sedes'
-              ? 'bg-surface-clean-white border-primary ring-2 ring-primary/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-primary/50 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Sedes & Boxes
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-dental-deep-navy text-white flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">domain</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* COLUMNA 1: CAPACIDAD OPERATIVA, SEDES & STAFF CLÍNICO */}
+        <div className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 border border-border-subtle shadow-soft-elevated flex flex-col justify-between gap-3.5 relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-dental-deep-navy via-primary to-emerald-500" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-dental-deep-navy text-white flex items-center justify-center shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[20px] text-vibrant-cyan">clinical_notes</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-primary block">
+                  Columna 01 • Capacidad & Staff
+                </span>
+                <h3 className="font-display font-black text-sm text-dental-deep-navy leading-tight">
+                  Infraestructura, Odontólogos & Higienistas
+                </h3>
+              </div>
             </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black shrink-0">
+              100% Operativo
+            </span>
           </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            2 / 3
-          </span>
-          <span className="text-[11px] font-semibold text-primary block mt-1 truncate">
-            Sedes / Sillones
-          </span>
-        </button>
 
-        {/* KPI 1: Padrón de Pacientes */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('pacientes')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'pacientes'
-              ? 'bg-surface-clean-white border-primary ring-2 ring-primary/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-primary/50 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Pacientes
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">groups</span>
-            </div>
-          </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {pacientes.length}
-          </span>
-          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
-            Expedientes en padrón
-          </span>
-        </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('sedes')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'sedes'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-primary/40'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'sedes' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Sedes / Boxes
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-primary">domain</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'sedes' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                2 / 3
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'sedes' ? 'text-white/80' : 'text-secondary'}`}>
+                2 LV • 1 Tovar
+              </span>
+            </button>
 
-        {/* KPI 2: Citas Programadas */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('citas')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'citas'
-              ? 'bg-surface-clean-white border-sky-600 ring-2 ring-sky-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-sky-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Agenda Citas
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">event_available</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('odontologos')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'odontologos'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-emerald-400'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'odontologos' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Odontólogos
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-emerald-600">stethoscope</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'odontologos' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {odontologos.length}
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'odontologos' ? 'text-white/80' : 'text-emerald-700'}`}>
+                {odontologos.filter((o) => o.estado !== 'descanso').length} en guardia
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('higienistas')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'higienistas'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-indigo-400'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'higienistas' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Higienistas
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-indigo-600">clean_hands</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'higienistas' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {higienistas.length}
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'higienistas' ? 'text-white/80' : 'text-indigo-700'}`}>
+                Asistencia 4M
+              </span>
+            </button>
           </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {citas.length}
-          </span>
-          <div className="flex items-center gap-1 mt-1">
+
+          <div className="flex items-center justify-between pt-2 border-t border-border-subtle/70 text-[11px]">
+            <div className="flex items-center -space-x-2 overflow-hidden">
+              {odontologos.slice(0, 4).map((o) => (
+                <div
+                  key={o.id}
+                  title={o.nombres}
+                  className="w-6 h-6 rounded-full border-2 border-white bg-dental-deep-navy text-white text-[9px] font-black flex items-center justify-center overflow-hidden shrink-0"
+                >
+                  {o.avatar ? (
+                    <img src={o.avatar} alt={o.nombres} className="w-full h-full object-cover" />
+                  ) : (
+                    o.nombres.replace(/Dra?\.?\s*/i, '').slice(0, 2).toUpperCase()
+                  )}
+                </div>
+              ))}
+              {higienistas.slice(0, 2).map((h) => (
+                <div
+                  key={h.id}
+                  title={h.nombres}
+                  className="w-6 h-6 rounded-full border-2 border-white bg-indigo-600 text-white text-[9px] font-black flex items-center justify-center overflow-hidden shrink-0"
+                >
+                  {h.avatar ? (
+                    <img src={h.avatar} alt={h.nombres} className="w-full h-full object-cover" />
+                  ) : (
+                    h.nombres.replace(/(Lic|T\.S\.U\.)\.?\s*/i, '').slice(0, 2).toUpperCase()
+                  )}
+                </div>
+              ))}
+            </div>
+            <span className="text-[10px] font-bold text-secondary">
+              Total equipo clínico: <strong className="text-dental-deep-navy">{odontologos.length + higienistas.length} profesionales</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* COLUMNA 2: PADRÓN DE PACIENTES, FLUJO DE AGENDA & BIOSEGURIDAD CIE */}
+        <div className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 border border-border-subtle shadow-soft-elevated flex flex-col justify-between gap-3.5 relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-sky-500 to-rose-500" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[20px]">groups</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-sky-600 block">
+                  Columna 02 • Pacientes & Agenda
+                </span>
+                <h3 className="font-display font-black text-sm text-dental-deep-navy leading-tight">
+                  Expedientes, Citas & Alertas Médicas CIE
+                </h3>
+              </div>
+            </div>
             {citasPendientesCount > 0 ? (
-              <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1 truncate">
+              <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black flex items-center gap-1 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                {citasPendientesCount} por confirmar
+                {citasPendientesCount} por aprobar
               </span>
             ) : (
-              <span className="text-[11px] font-semibold text-emerald-600 truncate">
-                Todas confirmadas
+              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black shrink-0">
+                Agenda al día
               </span>
             )}
           </div>
-        </button>
 
-        {/* KPI 3: Odontólogos */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('odontologos')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'odontologos'
-              ? 'bg-surface-clean-white border-emerald-600 ring-2 ring-emerald-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-emerald-500/50 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Odontólogos
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">clinical_notes</span>
-            </div>
-          </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {odontologos.length}
-          </span>
-          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
-            Especialistas en staff
-          </span>
-        </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('pacientes')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'pacientes'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-primary/40'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'pacientes' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Pacientes
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-primary">badge</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'pacientes' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {pacientes.length}
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'pacientes' ? 'text-white/80' : 'text-secondary'}`}>
+                Padrón activo
+              </span>
+            </button>
 
-        {/* KPI 4: Higienistas */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('higienistas')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'higienistas'
-              ? 'bg-surface-clean-white border-indigo-600 ring-2 ring-indigo-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-indigo-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Higienistas
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">clean_hands</span>
-            </div>
-          </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {higienistas.length}
-          </span>
-          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
-            Soporte clínico activo
-          </span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('citas')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'citas'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-sky-400'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'citas' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Agenda Citas
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-sky-600">event_available</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'citas' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {citas.length}
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'citas' ? 'text-white/80' : 'text-sky-700'}`}>
+                {citas.length - citasPendientesCount} confirmadas
+              </span>
+            </button>
 
-        {/* KPI 5: Catálogo Tratamientos */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('tratamientos')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'tratamientos'
-              ? 'bg-surface-clean-white border-amber-600 ring-2 ring-amber-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-amber-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Tratamientos
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">table_chart</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('condiciones')}
+              className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'condiciones'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-rose-400'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-black uppercase ${activeTab === 'condiciones' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                  Alertas CIE
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-rose-600">health_and_safety</span>
+              </div>
+              <span className={`text-xl font-display font-black block leading-none ${activeTab === 'condiciones' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {condicionesMedicas.length}
+              </span>
+              <span className={`text-[10px] font-semibold block mt-1 truncate ${activeTab === 'condiciones' ? 'text-white/80' : 'text-rose-700'}`}>
+                {condicionesCriticasCount} críticas
+              </span>
+            </button>
           </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {tratamientos.length}
-          </span>
-          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
-            Promedio: ${promedioArancelUsd.toFixed(0)} USD
-          </span>
-        </button>
 
-        {/* KPI 6: Condiciones Médicas */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('condiciones')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'condiciones'
-              ? 'bg-surface-clean-white border-rose-600 ring-2 ring-rose-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-rose-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Condiciones CIE
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">health_and_safety</span>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-border-subtle/70">
+            <div className="flex-1 bg-surface-subtle-ice rounded-full h-2 overflow-hidden border border-border-subtle">
+              <div
+                className="bg-gradient-to-r from-primary to-emerald-500 h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${citas.length > 0 ? Math.round(((citas.length - citasPendientesCount) / citas.length) * 100) : 100}%`,
+                }}
+              />
             </div>
+            <span className="text-[10px] font-bold text-secondary shrink-0">
+              Confirmación: <strong className="text-dental-deep-navy">{citas.length > 0 ? Math.round(((citas.length - citasPendientesCount) / citas.length) * 100) : 100}%</strong>
+            </span>
           </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {condicionesMedicas.length}
-          </span>
-          <span className="text-[11px] font-semibold text-rose-700 block mt-1 truncate">
-            {condicionesCriticasCount} alertas de riesgo
-          </span>
-        </button>
+        </div>
 
-        {/* KPI 7: Cierres Diarios */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('cierres')}
-          className={`p-3.5 rounded-2xl text-left transition-all duration-200 border cursor-pointer group relative overflow-hidden ${
-            activeTab === 'cierres'
-              ? 'bg-surface-clean-white border-emerald-600 ring-2 ring-emerald-500/40 shadow-md -translate-y-0.5'
-              : 'bg-surface-clean-white border-border-subtle hover:border-emerald-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-secondary">
-              Cierres Caja
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[16px]">point_of_sale</span>
+        {/* COLUMNA 3: FINANZAS, ARANCELES, INVENTARIO & LABORATORIO */}
+        <div className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 border border-border-subtle shadow-soft-elevated flex flex-col justify-between gap-3.5 relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 via-teal-600 to-purple-600" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[20px]">account_balance</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">
+                  Columna 03 • Finanzas & Logística
+                </span>
+                <h3 className="font-display font-black text-sm text-dental-deep-navy leading-tight">
+                  Aranceles, Cierres D1, Stock & Laboratorio
+                </h3>
+              </div>
             </div>
+            <span className="px-2.5 py-1 rounded-full bg-surface-subtle-ice text-dental-deep-navy border border-border-subtle text-[10px] font-mono font-black shrink-0">
+              BCV: {tasaBcv.toFixed(2)} Bs.
+            </span>
           </div>
-          <span className="text-2xl sm:text-3xl font-display font-black text-dental-deep-navy block tracking-tight">
-            {cierresDiarios.length}
-          </span>
-          <span className="text-[11px] font-semibold text-secondary block mt-1 truncate">
-            Arqueos D1 guardados
-          </span>
-        </button>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('tratamientos')}
+              className={`p-2 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'tratamientos'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-amber-400'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase block truncate ${activeTab === 'tratamientos' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                Aranceles
+              </span>
+              <span className={`text-lg font-display font-black block leading-tight mt-0.5 ${activeTab === 'tratamientos' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {tratamientos.length}
+              </span>
+              <span className={`text-[9.5px] font-semibold block truncate ${activeTab === 'tratamientos' ? 'text-white/80' : 'text-amber-700'}`}>
+                ~${promedioArancelUsd.toFixed(0)} USD
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('cierres')}
+              className={`p-2 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'cierres'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-emerald-400'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase block truncate ${activeTab === 'cierres' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                Cierres D1
+              </span>
+              <span className={`text-lg font-display font-black block leading-tight mt-0.5 ${activeTab === 'cierres' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {cierresDiarios.length}
+              </span>
+              <span className={`text-[9.5px] font-semibold block truncate ${activeTab === 'cierres' ? 'text-white/80' : 'text-emerald-700'}`}>
+                Arqueos
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('inventario')}
+              className={`p-2 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'inventario'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-teal-400'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase block truncate ${activeTab === 'inventario' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                Inventario
+              </span>
+              <span className={`text-lg font-display font-black block leading-tight mt-0.5 ${activeTab === 'inventario' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {inventario.length}
+              </span>
+              <span className={`text-[9.5px] font-semibold block truncate ${activeTab === 'inventario' ? 'text-white/80' : 'text-teal-700'}`}>
+                {inventario.filter((i) => i.stockActual <= i.stockMinimo).length} alertas
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectModuleTab('laboratorios')}
+              className={`p-2 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                activeTab === 'laboratorios'
+                  ? 'bg-dental-deep-navy text-white border-dental-deep-navy shadow-md'
+                  : 'bg-surface-subtle-ice border-border-subtle hover:border-purple-400'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase block truncate ${activeTab === 'laboratorios' ? 'text-vibrant-cyan' : 'text-secondary'}`}>
+                Laboratorio
+              </span>
+              <span className={`text-lg font-display font-black block leading-tight mt-0.5 ${activeTab === 'laboratorios' ? 'text-white' : 'text-dental-deep-navy'}`}>
+                {laboratorios.length}
+              </span>
+              <span className={`text-[9.5px] font-semibold block truncate ${activeTab === 'laboratorios' ? 'text-white/80' : 'text-purple-700'}`}>
+                Prótesis
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-border-subtle/70 text-[10px] font-bold text-secondary">
+            <span>
+              Valor Stock:{' '}
+              <strong className="text-dental-deep-navy">
+                ${inventario.reduce((acc, i) => acc + i.precioCompraUsd * i.stockActual, 0).toFixed(0)} USD
+              </strong>
+            </span>
+            <span>
+              Lab en curso:{' '}
+              <strong className="text-purple-800">
+                ${laboratorios.filter((l) => l.estado !== 'instalado_al_paciente').reduce((acc, l) => acc + l.costoLaboratorioUsd, 0).toFixed(0)} USD
+              </strong>
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* =====================================================================
-          TARJETA SELECTOR ANIMADO DE PESTAÑAS (COMPACTA Y DE ALTA VISIBILIDAD)
+          TARJETA SELECTOR ANIMADO DE PESTAÑAS (OCULTA CONTENIDO HASTA SELECCIONAR)
          ===================================================================== */}
-      <section className="bg-surface-clean-white rounded-2xl p-2.5 sm:p-3 shadow-soft-elevated border border-border-subtle relative overflow-hidden">
-        <div className="flex items-center justify-between gap-3 mb-2 px-1">
-          <div className="flex items-center gap-2">
+      <section className="bg-surface-clean-white rounded-2xl p-3 sm:p-4 shadow-soft-elevated border border-border-subtle relative overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5 px-1">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="material-symbols-outlined text-primary text-[18px]">view_quilt</span>
             <span className="text-xs font-black uppercase tracking-wider text-dental-deep-navy">
               Módulos de Segmentación de Datos
@@ -2137,9 +2348,23 @@ export const ControlDataView: React.FC = () => {
               10 Módulos de Gestión
             </span>
           </div>
-          <span className="text-[11px] font-medium text-secondary hidden md:inline">
-            Selecciona un módulo para visualizar y gestionar
-          </span>
+          <div className="flex items-center gap-2">
+            {activeTab ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab(null)}
+                className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 text-[11px] font-extrabold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[14px]">expand_less</span>
+                <span>Ocultar Tarjeta Activa</span>
+              </button>
+            ) : (
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px] animate-bounce">touch_app</span>
+                <span>Pulsa un módulo para desplegar su tarjeta</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Selector unificado de 10 pestañas en grid responsivo: 2 en móvil, 5 en tablet/desktop */}
@@ -2150,11 +2375,11 @@ export const ControlDataView: React.FC = () => {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer border text-left min-w-0 ${
+                onClick={() => handleSelectModuleTab(tab.key)}
+                className={`flex items-center gap-2 px-2.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer border text-left min-w-0 ${
                   isActive
-                    ? 'bg-dental-deep-navy text-white shadow-md border-dental-deep-navy ring-2 ring-primary/40'
-                    : 'bg-surface-subtle-ice text-dental-deep-navy hover:bg-surface-container border-border-subtle'
+                    ? 'bg-dental-deep-navy text-white shadow-md border-dental-deep-navy ring-2 ring-primary/40 -translate-y-0.5'
+                    : 'bg-surface-subtle-ice text-dental-deep-navy hover:bg-surface-container border-border-subtle hover:border-primary/40'
                 }`}
               >
                 <div
@@ -2738,1297 +2963,1437 @@ export const ControlDataView: React.FC = () => {
       {/* ---------------------------------------------------------------------
           SECCIÓN 01: INGESTA DE DATOS • ODONTÓLOGOS
          --------------------------------------------------------------------- */}
-      {activeTab === 'odontologos' && (
-        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
-
-          {/* Header Módulo 01 • Odontólogos */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">clinical_notes</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 01
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
-                    Staff Facultativo
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {odontologos.length} especialistas registrados
-                  </span>
-                </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Directorio Facultativo • Odontólogos & Especialistas
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {showOdoForm ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormOdontologo();
-                    setShowOdoForm(false);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
-                  <span>Ocultar formulario</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormOdontologo();
-                    setShowOdoForm(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">person_add</span>
-                  <span>Registrar Odontólogo</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 1. Directorio Activo de Odontólogos Registrados (Arriba) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
-              <span>ODONTÓLOGOS REGISTRADOS ({odontologos.length})</span>
-              <span>Toque para editar o eliminar</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[34rem] overflow-y-auto pr-1">
-              {odontologos.map((o) => {
-                const norm = normalizarDisponibilidadOdontologo(o);
-                const diasVic = norm.diasVictoria || [];
-                const diasTov = norm.diasTovar || [];
-                return (
-                  <div
-                    key={o.id}
-                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2.5 ${
-                      editOdoId === o.id
-                        ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-bold text-sm flex items-center justify-center shrink-0">
-                        {o.nombres
-                          .replace(/Dra?\.?\s*/i, '')
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-xs text-dental-deep-navy truncate">
-                            {o.nombres}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                              o.estado === 'activo'
-                                ? 'bg-status-success/15 text-status-success'
-                                : o.estado === 'en_guardia'
-                                ? 'bg-primary/20 text-dental-deep-navy'
-                                : 'bg-secondary/15 text-secondary'
-                            }`}
-                          >
-                            {o.estado === 'activo'
-                              ? 'Activo'
-                              : o.estado === 'en_guardia'
-                              ? 'En Guardia'
-                              : 'Descanso'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-secondary truncate mt-0.5">{o.especialidad}</p>
-                        <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
-                          <span className="font-mono font-bold text-dental-deep-navy">{o.cedula}</span>
-                          <span>•</span>
-                          <span>{o.cov}</span>
-                          <span>•</span>
-                          <span>Box {o.boxAsignado} ({o.turno})</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Disponibilidad de Días por Sede (Interactiva en vivo con #Reserva) */}
-                    <div className="bg-white/80 rounded-xl p-2 border border-border-subtle/70 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-[9.5px] font-extrabold uppercase tracking-wider text-dental-deep-navy">
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px] text-primary">calendar_month</span>
-                          Disponibilidad Semanal por Sede
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-black ${
-                            norm.sedeId === 'ambas'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : norm.sedeId === 'tovar'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-primary/10 text-primary border border-primary/20'
-                          }`}
-                        >
-                          {norm.sedeId === 'ambas'
-                            ? '🏢🌲 Ambas Sedes'
-                            : norm.sedeId === 'tovar'
-                            ? '🌲 Colonia Tovar'
-                            : '🏢 La Victoria'}
-                        </span>
-                      </div>
-
-                      {/* Fila Sede La Victoria */}
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-[9.5px] font-bold text-primary shrink-0 w-20 truncate">
-                          🏢 La Victoria:
-                        </span>
-                        <div className="flex items-center gap-1 flex-wrap justify-end">
-                          {DIAS_SEMANA_CLINICOS.map((dia) => {
-                            const activo = diasVic.includes(dia);
-                            return (
-                              <button
-                                key={`vic-${o.id}-${dia}`}
-                                type="button"
-                                onClick={() => handleQuickToggleDiaDoctor(o, 'victoria', dia)}
-                                title={`Alternar ${dia} en Sede La Victoria para ${o.nombres}`}
-                                className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
-                                  activo
-                                    ? 'bg-primary text-white border-primary shadow-2xs'
-                                    : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
-                                }`}
-                              >
-                                {dia}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Fila Sede Colonia Tovar */}
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-[9.5px] font-bold text-emerald-700 shrink-0 w-20 truncate">
-                          🌲 Col. Tovar:
-                        </span>
-                        <div className="flex items-center gap-1 flex-wrap justify-end">
-                          {DIAS_SEMANA_CLINICOS.map((dia) => {
-                            const activo = diasTov.includes(dia);
-                            return (
-                              <button
-                                key={`tov-${o.id}-${dia}`}
-                                type="button"
-                                onClick={() => handleQuickToggleDiaDoctor(o, 'tovar', dia)}
-                                title={`Alternar ${dia} en Sede Colonia Tovar para ${o.nombres}`}
-                                className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
-                                  activo
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                    : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
-                                }`}
-                              >
-                                {dia}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
-                      <span className="text-[10px] font-bold text-secondary">
-                        Honorarios: <strong className="text-dental-deep-navy">{o.porcentajeHonorarios}%</strong>
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => abrirHistorialHonorariosDoctor(o)}
-                          title="Ver Procedimientos y Honorarios en D1"
-                          className="h-7 px-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-1 text-[11px] font-bold text-primary hover:bg-primary hover:text-white active:scale-90 transition-all cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">receipt_long</span>
-                          <span>Honorarios</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleOdontologoEstado(o)}
-                          title="Cambiar estado"
-                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">sync_alt</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEditarOdontologo(o)}
-                          title="Editar datos y disponibilidad"
-                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">edit</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEliminarOdontologo(o.id, o.nombres)}
-                          title="Eliminar de plantilla"
-                          className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Botón para Desplegar Formulario */}
-            {!showOdoForm && (
+      {activeTab === 'odontologos' && (() => {
+        const renderOdoFormContent = () => (
+          <form
+            onSubmit={handleGuardarOdontologo}
+            className="mt-2 pt-3 border-t-2 border-dashed border-primary/30 flex flex-col gap-3 bg-white p-4 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
+                {editOdoId ? 'Modificar Odontóloga(o) Seleccionada(o)' : 'Nuevo Registro de Odontóloga(o)'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormOdontologo();
-                  setShowOdoForm(true);
+                  setShowOdoForm(false);
                 }}
-                className="w-full mt-3 py-3 px-4 rounded-2xl bg-primary hover:bg-dental-deep-navy text-white font-bold text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-rose-50 text-secondary hover:text-rose-700 text-[10px] font-bold border border-border-subtle cursor-pointer flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-[18px]">person_add</span>
-                <span>Registrar Odontólogo</span>
+                <span className="material-symbols-outlined text-[13px]">close</span>
+                <span>Cerrar</span>
               </button>
-            )}
-          </div>
+            </div>
 
-          {/* 2. Formulario Desplegable de Ingesta (Oculto debajo de la lista) */}
-          {showOdoForm && (
-            <form
-              onSubmit={handleGuardarOdontologo}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice/60 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
-                  {editOdoId ? 'Modificar Odontólogo Seleccionado' : 'Nuevo Registro de Odontólogo'}
-                </span>
-                <span className="text-[10px] text-secondary font-semibold">
-                  * Campos requeridos se iluminan al escribir
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Nombres y Apellidos *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={odoNombres}
-                    onChange={(e) => setOdoNombres(e.target.value)}
-                    placeholder="Ej. Dra. Carmen Elena Silva"
-                    className={`h-10 ${getIlluminatedFieldClass(odoNombres.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Cédula de Identidad *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={odoCedula}
-                    onChange={(e) => setOdoCedula(e.target.value)}
-                    placeholder="V-18.234.567"
-                    className={`h-10 ${getIlluminatedFieldClass(odoCedula.trim().length > 0)}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Colegio Odontológico (C.O.V.) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={odoCov}
-                    onChange={(e) => setOdoCov(e.target.value)}
-                    placeholder="C.O.V. 28.401"
-                    className={`h-10 ${getIlluminatedFieldClass(odoCov.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Especialidad Odontológica *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={odoEspecialidad}
-                    onChange={(e) => setOdoEspecialidad(e.target.value)}
-                    placeholder="Ej. Periodoncia e Implantología"
-                    className={`h-10 ${getIlluminatedFieldClass(odoEspecialidad.trim().length > 0)}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Teléfono Móvil (WhatsApp) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={odoTelefono}
-                    onChange={(e) => setOdoTelefono(e.target.value)}
-                    placeholder="+58 412-0000000"
-                    className={`h-10 ${getIlluminatedFieldClass(odoTelefono.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Correo Electrónico *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={odoEmail}
-                    onChange={(e) => setOdoEmail(e.target.value)}
-                    placeholder="doctor@odontosalud.ve"
-                    className={`h-10 ${getIlluminatedFieldClass(odoEmail.trim().length > 0)}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
-                  <select
-                    value={odoSede}
-                    onChange={(e) => handleCambioSedeForm(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(odoSede))}`}
-                  >
-                    <option value="victoria">La Victoria</option>
-                    <option value="tovar">Colonia Tovar</option>
-                    <option value="ambas">Ambas Sedes</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Box Sillón</label>
-                  <select
-                    value={odoBox}
-                    onChange={(e) => setOdoBox(Number(e.target.value))}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(odoBox))}`}
-                  >
-                    <option value={1}>Box 01</option>
-                    <option value={2}>Box 02</option>
-                    <option value={3}>Box 03</option>
-                    <option value={4}>Box 04</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Turno</label>
-                  <select
-                    value={odoTurno}
-                    onChange={(e) => setOdoTurno(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(odoTurno))}`}
-                  >
-                    <option value="Completo">Completo</option>
-                    <option value="Mañana">Mañana</option>
-                    <option value="Tarde">Tarde</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">% Honorarios</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={90}
-                    value={odoHonorarios}
-                    onChange={(e) => setOdoHonorarios(Number(e.target.value))}
-                    className={`h-9 ${getIlluminatedFieldClass(Number(odoHonorarios) > 0)}`}
-                  />
-                </div>
-              </div>
-
-              {/* Panel de Disponibilidad de Días por Sede (Filtra Calendario en #Reserva) */}
-              <div className="p-3.5 rounded-2xl bg-white border border-border-subtle flex flex-col gap-3 shadow-2xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle/70 pb-2">
-                  <div>
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-primary">event_available</span>
-                      Disponibilidad de Días por Sede (Filtra #Reserva)
+            {/* Campo de Fotografía de Perfil para Odontólogas / Odontólogos */}
+            <div className="p-3 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-dental-deep-navy text-white font-display font-black text-base flex items-center justify-center overflow-hidden border-2 border-primary/30 shrink-0 shadow-xs">
+                  {odoAvatar ? (
+                    <img src={odoAvatar} alt="Foto Odontóloga" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>
+                      {(odoNombres || 'OD')
+                        .replace(/Dra?\.?\s*/i, '')
+                        .slice(0, 2)
+                        .toUpperCase()}
                     </span>
-                    <p className="text-[10px] text-secondary mt-0.5">
-                      Fija qué días de la semana atiende el especialista en cada sede para filtrar fechas en Selecciona Fecha y Turno.
-                    </p>
-                  </div>
-
-                  {odoSede === 'ambas' && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE']);
-                          setOdoDiasTovar(['VIE', 'SÁB']);
-                        }}
-                        className="px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white text-primary text-[9.5px] font-bold border border-primary/20 transition-all cursor-pointer"
-                      >
-                        Lun-Jue LV / Vie-Sáb CT
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOdoDiasVictoria(['MAR', 'JUE', 'SÁB']);
-                          setOdoDiasTovar(['LUN', 'MIÉ', 'VIE']);
-                        }}
-                        className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 text-[9.5px] font-bold border border-emerald-200 transition-all cursor-pointer"
-                      >
-                        Mar-Jue-Sáb LV / Lun-Mié-Vie CT
-                      </button>
-                    </div>
                   )}
                 </div>
+                <div>
+                  <span className="text-xs font-extrabold text-dental-deep-navy block">
+                    Fotografía Profesional de la Odontóloga / Especialista
+                  </span>
+                  <span className="text-[10px] text-secondary block mt-0.5">
+                    Se muestra en su ficha clínica, selector de #Reserva y directorio de staff (Compresión automática Edge).
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="px-3 py-2 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">photo_camera</span>
+                  <span>{odoAvatar ? 'Cambiar Foto' : 'Subir Foto'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSubirFotoOdontologo}
+                    className="hidden"
+                  />
+                </label>
+                {odoAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => setOdoAvatar('')}
+                    className="px-2.5 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-border-subtle text-xs font-bold cursor-pointer"
+                    title="Quitar fotografía"
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
 
-                <div className={`grid grid-cols-1 ${odoSede === 'ambas' ? 'sm:grid-cols-2' : ''} gap-3`}>
-                  {/* Selector Sede La Victoria */}
-                  {(odoSede === 'victoria' || odoSede === 'ambas') && (
-                    <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
-                          <span>🏢 Sede La Victoria</span>
-                          <span className="text-[9.5px] font-bold text-primary">
-                            ({odoDiasVictoria.length} {odoDiasVictoria.length === 1 ? 'día' : 'días'})
-                          </span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOdoDiasVictoria(
-                              odoDiasVictoria.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
-                            )
-                          }
-                          className="text-[9.5px] font-bold text-primary hover:underline cursor-pointer"
-                        >
-                          {odoDiasVictoria.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-6 gap-1.5">
-                        {DIAS_SEMANA_CLINICOS.map((dia) => {
-                          const active = odoDiasVictoria.includes(dia);
-                          return (
-                            <button
-                              key={`form-vic-${dia}`}
-                              type="button"
-                              onClick={() => toggleDiaFormSede('victoria', dia)}
-                              className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
-                                active
-                                  ? 'bg-primary text-white border-primary shadow-xs'
-                                  : 'bg-white text-secondary border-border-subtle hover:border-primary/40'
-                              }`}
-                            >
-                              {dia}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Nombres y Apellidos *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={odoNombres}
+                  onChange={(e) => setOdoNombres(e.target.value)}
+                  placeholder="Ej. Dra. Carmen Elena Silva"
+                  className={`h-10 ${getIlluminatedFieldClass(odoNombres.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Cédula de Identidad *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={odoCedula}
+                  onChange={(e) => setOdoCedula(e.target.value)}
+                  placeholder="V-18.234.567"
+                  className={`h-10 ${getIlluminatedFieldClass(odoCedula.trim().length > 0)}`}
+                />
+              </div>
+            </div>
 
-                  {/* Selector Sede Colonia Tovar */}
-                  {(odoSede === 'tovar' || odoSede === 'ambas') && (
-                    <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
-                          <span>🌲 Sede Colonia Tovar</span>
-                          <span className="text-[9.5px] font-bold text-emerald-700">
-                            ({odoDiasTovar.length} {odoDiasTovar.length === 1 ? 'día' : 'días'})
-                          </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Colegio Odontológico (C.O.V.) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={odoCov}
+                  onChange={(e) => setOdoCov(e.target.value)}
+                  placeholder="C.O.V. 28.401"
+                  className={`h-10 ${getIlluminatedFieldClass(odoCov.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Especialidad Odontológica *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={odoEspecialidad}
+                  onChange={(e) => setOdoEspecialidad(e.target.value)}
+                  placeholder="Ej. Periodoncia e Implantología"
+                  className={`h-10 ${getIlluminatedFieldClass(odoEspecialidad.trim().length > 0)}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Teléfono Móvil (WhatsApp) *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={odoTelefono}
+                  onChange={(e) => setOdoTelefono(e.target.value)}
+                  placeholder="+58 412-0000000"
+                  className={`h-10 ${getIlluminatedFieldClass(odoTelefono.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Correo Electrónico *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={odoEmail}
+                  onChange={(e) => setOdoEmail(e.target.value)}
+                  placeholder="doctor@odontosalud.ve"
+                  className={`h-10 ${getIlluminatedFieldClass(odoEmail.trim().length > 0)}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
+                <select
+                  value={odoSede}
+                  onChange={(e) => handleCambioSedeForm(e.target.value as any)}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(odoSede))}`}
+                >
+                  <option value="victoria">La Victoria</option>
+                  <option value="tovar">Colonia Tovar</option>
+                  <option value="ambas">Ambas Sedes</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Box Sillón</label>
+                <select
+                  value={odoBox}
+                  onChange={(e) => setOdoBox(Number(e.target.value))}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(odoBox))}`}
+                >
+                  <option value={1}>Box 01</option>
+                  <option value={2}>Box 02</option>
+                  <option value={3}>Box 03</option>
+                  <option value={4}>Box 04</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Turno</label>
+                <select
+                  value={odoTurno}
+                  onChange={(e) => setOdoTurno(e.target.value as any)}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(odoTurno))}`}
+                >
+                  <option value="Completo">Completo</option>
+                  <option value="Mañana">Mañana</option>
+                  <option value="Tarde">Tarde</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">% Honorarios</label>
+                <input
+                  type="number"
+                  min={10}
+                  max={90}
+                  value={odoHonorarios}
+                  onChange={(e) => setOdoHonorarios(Number(e.target.value))}
+                  className={`h-9 ${getIlluminatedFieldClass(Number(odoHonorarios) > 0)}`}
+                />
+              </div>
+            </div>
+
+            {/* Panel de Disponibilidad de Días por Sede (Filtra Calendario en #Reserva) */}
+            <div className="p-3.5 rounded-2xl bg-surface-subtle-ice/60 border border-border-subtle flex flex-col gap-3 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle/70 pb-2">
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-primary">event_available</span>
+                    Disponibilidad de Días por Sede (Filtra #Reserva)
+                  </span>
+                  <p className="text-[10px] text-secondary mt-0.5">
+                    Fija qué días de la semana atiende el especialista en cada sede para filtrar fechas en Selecciona Fecha y Turno.
+                  </p>
+                </div>
+
+                {odoSede === 'ambas' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOdoDiasVictoria(['LUN', 'MAR', 'MIÉ', 'JUE']);
+                        setOdoDiasTovar(['VIE', 'SÁB']);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white text-primary text-[9.5px] font-bold border border-primary/20 transition-all cursor-pointer"
+                    >
+                      Lun-Jue LV / Vie-Sáb CT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOdoDiasVictoria(['MAR', 'JUE', 'SÁB']);
+                        setOdoDiasTovar(['LUN', 'MIÉ', 'VIE']);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 text-[9.5px] font-bold border border-emerald-200 transition-all cursor-pointer"
+                    >
+                      Mar-Jue-Sáb LV / Lun-Mié-Vie CT
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className={`grid grid-cols-1 ${odoSede === 'ambas' ? 'sm:grid-cols-2' : ''} gap-3`}>
+                {(odoSede === 'victoria' || odoSede === 'ambas') && (
+                  <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
+                        <span>🏢 Sede La Victoria</span>
+                        <span className="text-[9.5px] font-bold text-primary">
+                          ({odoDiasVictoria.length} {odoDiasVictoria.length === 1 ? 'día' : 'días'})
                         </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOdoDiasTovar(
-                              odoDiasTovar.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
-                            )
-                          }
-                          className="text-[9.5px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                        >
-                          {odoDiasTovar.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-6 gap-1.5">
-                        {DIAS_SEMANA_CLINICOS.map((dia) => {
-                          const active = odoDiasTovar.includes(dia);
-                          return (
-                            <button
-                              key={`form-tov-${dia}`}
-                              type="button"
-                              onClick={() => toggleDiaFormSede('tovar', dia)}
-                              className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
-                                active
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : 'bg-white text-secondary border-border-subtle hover:border-emerald-400'
-                              }`}
-                            >
-                              {dia}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOdoDiasVictoria(
+                            odoDiasVictoria.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
+                          )
+                        }
+                        className="text-[9.5px] font-bold text-primary hover:underline cursor-pointer"
+                      >
+                        {odoDiasVictoria.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
+                      </button>
                     </div>
-                  )}
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {DIAS_SEMANA_CLINICOS.map((dia) => {
+                        const active = odoDiasVictoria.includes(dia);
+                        return (
+                          <button
+                            key={`form-vic-${dia}`}
+                            type="button"
+                            onClick={() => toggleDiaFormSede('victoria', dia)}
+                            className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
+                              active
+                                ? 'bg-primary text-white border-primary shadow-xs'
+                                : 'bg-white text-secondary border-border-subtle hover:border-primary/40'
+                            }`}
+                          >
+                            {dia}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {(odoSede === 'tovar' || odoSede === 'ambas') && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold text-dental-deep-navy flex items-center gap-1">
+                        <span>🌲 Sede Colonia Tovar</span>
+                        <span className="text-[9.5px] font-bold text-emerald-700">
+                          ({odoDiasTovar.length} {odoDiasTovar.length === 1 ? 'día' : 'días'})
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOdoDiasTovar(
+                            odoDiasTovar.length === 6 ? [] : [...DIAS_SEMANA_CLINICOS]
+                          )
+                        }
+                        className="text-[9.5px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                      >
+                        {odoDiasTovar.length === 6 ? 'Limpiar' : 'Todos (Lun-Sáb)'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {DIAS_SEMANA_CLINICOS.map((dia) => {
+                        const active = odoDiasTovar.includes(dia);
+                        return (
+                          <button
+                            key={`form-tov-${dia}`}
+                            type="button"
+                            onClick={() => toggleDiaFormSede('tovar', dia)}
+                            className={`py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer active:scale-95 border ${
+                              active
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : 'bg-white text-secondary border-border-subtle hover:border-emerald-400'
+                            }`}
+                          >
+                            {dia}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                isOdoFormComplete
+                  ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
+                  : 'bg-primary hover:bg-dental-deep-navy shadow-md'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {isOdoFormComplete ? 'verified' : 'person_add'}
+              </span>
+              <span>
+                {editOdoId ? 'Guardar Cambios de Odontóloga(o)' : 'Registrar Odontóloga(o)'}
+              </span>
+            </button>
+          </form>
+        );
+
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
+
+            {/* Header Módulo 01 • Odontólogos */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">clinical_notes</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 01
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                      Staff Facultativo
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {odontologos.length} especialistas registrados
+                    </span>
+                  </div>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Directorio Facultativo • Odontólogos & Especialistas
+                  </h2>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                  isOdoFormComplete
-                    ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
-                    : 'bg-primary hover:bg-dental-deep-navy shadow-md'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {isOdoFormComplete ? 'verified' : 'person_add'}
-                </span>
-                <span>
-                  {isOdoFormComplete ? 'Confirmar Odontólogo' : 'Registrar Odontólogo'}
-                </span>
-              </button>
-            </form>
-          )}
-        </section>
-      )}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {showOdoForm && !editOdoId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormOdontologo();
+                      setShowOdoForm(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                    <span>Ocultar formulario</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormOdontologo();
+                      setShowOdoForm(true);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">person_add</span>
+                    <span>Registrar Odontólogo</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Formulario para Nuevo Odontólogo (arriba de las tarjetas cuando no se está editando una sub-tarjeta) */}
+            {showOdoForm && !editOdoId && renderOdoFormContent()}
+
+            {/* 1. Directorio Activo de Odontólogos Registrados */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
+                <span>ODONTÓLOGOS REGISTRADOS ({odontologos.length})</span>
+                <span>Pulsa Editar en una sub-tarjeta para desplegar su formulario justo debajo</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {odontologos.map((o) => {
+                  const norm = normalizarDisponibilidadOdontologo(o);
+                  const diasVic = norm.diasVictoria || [];
+                  const diasTov = norm.diasTovar || [];
+                  const isEditingThis = showOdoForm && editOdoId === o.id;
+                  return (
+                    <div
+                      key={o.id}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2.5 ${
+                        isEditingThis
+                          ? 'col-span-full bg-surface-container border-primary ring-2 ring-primary/30 shadow-md'
+                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-11 h-11 rounded-xl bg-dental-deep-navy text-white font-display font-bold text-sm flex items-center justify-center shrink-0 overflow-hidden border border-primary/20">
+                          {o.avatar ? (
+                            <img src={o.avatar} alt={o.nombres} className="w-full h-full object-cover" />
+                          ) : (
+                            o.nombres
+                              .replace(/Dra?\.?\s*/i, '')
+                              .slice(0, 2)
+                              .toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-dental-deep-navy truncate">
+                              {o.nombres}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                                o.estado === 'activo'
+                                  ? 'bg-status-success/15 text-status-success'
+                                  : o.estado === 'en_guardia'
+                                  ? 'bg-primary/20 text-dental-deep-navy'
+                                  : 'bg-secondary/15 text-secondary'
+                              }`}
+                            >
+                              {o.estado === 'activo'
+                                ? 'Activo'
+                                : o.estado === 'en_guardia'
+                                ? 'En Guardia'
+                                : 'Descanso'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-secondary truncate mt-0.5">{o.especialidad}</p>
+                          <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
+                            <span className="font-mono font-bold text-dental-deep-navy">{o.cedula}</span>
+                            <span>•</span>
+                            <span>{o.cov}</span>
+                            <span>•</span>
+                            <span>Box {o.boxAsignado} ({o.turno})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Disponibilidad de Días por Sede (Interactiva en vivo con #Reserva) */}
+                      <div className="bg-white/80 rounded-xl p-2 border border-border-subtle/70 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-[9.5px] font-extrabold uppercase tracking-wider text-dental-deep-navy">
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px] text-primary">calendar_month</span>
+                            Disponibilidad Semanal por Sede
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-black ${
+                              norm.sedeId === 'ambas'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : norm.sedeId === 'tovar'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-primary/10 text-primary border border-primary/20'
+                            }`}
+                          >
+                            {norm.sedeId === 'ambas'
+                              ? '🏢🌲 Ambas Sedes'
+                              : norm.sedeId === 'tovar'
+                              ? '🌲 Colonia Tovar'
+                              : '🏢 La Victoria'}
+                          </span>
+                        </div>
+
+                        {/* Fila Sede La Victoria */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="text-[9.5px] font-bold text-primary shrink-0 w-20 truncate">
+                            🏢 La Victoria:
+                          </span>
+                          <div className="flex items-center gap-1 flex-wrap justify-end">
+                            {DIAS_SEMANA_CLINICOS.map((dia) => {
+                              const activo = diasVic.includes(dia);
+                              return (
+                                <button
+                                  key={`vic-${o.id}-${dia}`}
+                                  type="button"
+                                  onClick={() => handleQuickToggleDiaDoctor(o, 'victoria', dia)}
+                                  title={`Alternar ${dia} en Sede La Victoria para ${o.nombres}`}
+                                  className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
+                                    activo
+                                      ? 'bg-primary text-white border-primary shadow-2xs'
+                                      : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
+                                  }`}
+                                >
+                                  {dia}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Fila Sede Colonia Tovar */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="text-[9.5px] font-bold text-emerald-700 shrink-0 w-20 truncate">
+                            🌲 Col. Tovar:
+                          </span>
+                          <div className="flex items-center gap-1 flex-wrap justify-end">
+                            {DIAS_SEMANA_CLINICOS.map((dia) => {
+                              const activo = diasTov.includes(dia);
+                              return (
+                                <button
+                                  key={`tov-${o.id}-${dia}`}
+                                  type="button"
+                                  onClick={() => handleQuickToggleDiaDoctor(o, 'tovar', dia)}
+                                  title={`Alternar ${dia} en Sede Colonia Tovar para ${o.nombres}`}
+                                  className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all cursor-pointer active:scale-90 border ${
+                                    activo
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                      : 'bg-slate-100 text-slate-400 border-slate-200/80 hover:text-dental-deep-navy'
+                                  }`}
+                                >
+                                  {dia}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
+                        <span className="text-[10px] font-bold text-secondary">
+                          Honorarios: <strong className="text-dental-deep-navy">{o.porcentajeHonorarios}%</strong>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => abrirHistorialHonorariosDoctor(o)}
+                            title="Ver Procedimientos y Honorarios en D1"
+                            className="h-7 px-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-1 text-[11px] font-bold text-primary hover:bg-primary hover:text-white active:scale-90 transition-all cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">receipt_long</span>
+                            <span>Honorarios</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleOdontologoEstado(o)}
+                            title="Cambiar estado"
+                            className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditarOdontologo(o)}
+                            title={isEditingThis ? 'Ocultar formulario' : 'Modificar debajo de esta tarjeta'}
+                            className={`h-7 px-2 rounded-lg border flex items-center gap-1 text-[10px] font-bold active:scale-90 cursor-pointer transition-all ${
+                              isEditingThis
+                                ? 'bg-dental-deep-navy text-white border-dental-deep-navy'
+                                : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-primary hover:text-white'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {isEditingThis ? 'expand_less' : 'edit'}
+                            </span>
+                            <span>{isEditingThis ? 'Ocultar' : 'Editar'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarOdontologo(o.id, o.nombres)}
+                            title="Eliminar de plantilla"
+                            className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Formulario desplegado inmediatamente debajo de la sub-tarjeta a modificar */}
+                      {isEditingThis && renderOdoFormContent()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ---------------------------------------------------------------------
           SECCIÓN 02: INGESTA DE DATOS • HIGIENISTAS DENTALES
          --------------------------------------------------------------------- */}
-      {activeTab === 'higienistas' && (
-        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
-
-          {/* Header Módulo 02 • Higienistas */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">clean_hands</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 02
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
-                    Asistencia Clínica
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {higienistas.length} higienistas en plantilla
-                  </span>
-                </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Directorio Clínico • Higienistas Dentales
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {showHigForm ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormHigienista();
-                    setShowHigForm(false);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
-                  <span>Ocultar formulario</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormHigienista();
-                    setShowHigForm(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-dental-deep-navy hover:bg-primary text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">group_add</span>
-                  <span>Registrar Higienista</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 1. Lista de Higienistas Registradas (Arriba) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
-              <span>HIGIENISTAS REGISTRADAS ({higienistas.length})</span>
-              <span>Toque para editar o eliminar</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
-              {higienistas.map((h) => (
-                <div
-                  key={h.id}
-                  className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                    editHigId === h.id
-                      ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-primary text-white font-display font-bold text-sm flex items-center justify-center shrink-0">
-                      {h.nombres
-                        .replace(/(Lic|T\.S\.U\.)\.?\s*/i, '')
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-xs text-dental-deep-navy truncate">
-                          {h.nombres}
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                            h.estado === 'activo'
-                              ? 'bg-status-success/15 text-status-success'
-                              : h.estado === 'esterilizacion'
-                              ? 'bg-primary/20 text-dental-deep-navy'
-                              : 'bg-secondary/15 text-secondary'
-                          }`}
-                        >
-                          {h.estado === 'activo'
-                            ? 'En Sillón'
-                            : h.estado === 'esterilizacion'
-                            ? 'Esterilización'
-                            : 'Descanso'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-secondary truncate mt-0.5">{h.areaEspecialidad}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
-                        <span className="font-mono font-bold text-dental-deep-navy">{h.cedula}</span>
-                        <span>•</span>
-                        <span>{h.registroMpps}</span>
-                        <span>•</span>
-                        <span>Box {h.boxApoyo}</span>
-                      </div>
-                      <p className="text-[10px] font-semibold text-primary truncate mt-1">
-                        Doc: {h.doctorAsignado}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
-                    <span className="text-[10px] font-bold text-secondary">
-                      Turno: <strong className="text-dental-deep-navy">{h.turno}</strong>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleHigienistaEstado(h)}
-                        title="Cambiar estado"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">sync_alt</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEditarHigienista(h)}
-                        title="Editar datos"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarHigienista(h.id, h.nombres)}
-                        title="Eliminar registro"
-                        className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">delete</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Botón para Desplegar Formulario */}
-            {!showHigForm && (
+      {activeTab === 'higienistas' && (() => {
+        const renderHigFormContent = () => (
+          <form
+            onSubmit={handleGuardarHigienista}
+            className="mt-2 pt-3 border-t-2 border-dashed border-indigo-400/40 flex flex-col gap-3 bg-white p-4 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-indigo-600">edit_note</span>
+                {editHigId ? 'Modificar Higienista Seleccionada' : 'Nuevo Registro de Higienista'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormHigienista();
-                  setShowHigForm(true);
+                  setShowHigForm(false);
                 }}
-                className="w-full mt-3 py-3 px-4 rounded-2xl bg-dental-deep-navy hover:bg-primary text-white font-bold text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-rose-50 text-secondary hover:text-rose-700 text-[10px] font-bold border border-border-subtle cursor-pointer flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-[18px]">group_add</span>
-                <span>Registrar Higienista</span>
+                <span className="material-symbols-outlined text-[13px]">close</span>
+                <span>Cerrar</span>
               </button>
-            )}
-          </div>
+            </div>
 
-          {/* 2. Formulario Desplegable de Higienistas */}
-          {showHigForm && (
-            <form
-              onSubmit={handleGuardarHigienista}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice/60 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
+            {/* Campo de Fotografía de Perfil para Higienistas */}
+            <div className="p-3 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white font-display font-black text-base flex items-center justify-center overflow-hidden border-2 border-indigo-300 shrink-0 shadow-xs">
+                  {higAvatar ? (
+                    <img src={higAvatar} alt="Foto Higienista" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>
+                      {(higNombres || 'HG')
+                        .replace(/(Lic|T\.S\.U\.)\.?\s*/i, '')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs font-extrabold text-dental-deep-navy block">
+                    Fotografía Profesional de la Higienista Dental
+                  </span>
+                  <span className="text-[10px] text-secondary block mt-0.5">
+                    Identificación visual para asistencia a 4 manos, bioseguridad y sillones asignados.
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">photo_camera</span>
+                  <span>{higAvatar ? 'Cambiar Foto' : 'Subir Foto'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSubirFotoHigienista}
+                    className="hidden"
+                  />
+                </label>
+                {higAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => setHigAvatar('')}
+                    className="px-2.5 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-border-subtle text-xs font-bold cursor-pointer"
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Nombres y Apellidos *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={higNombres}
+                  onChange={(e) => setHigNombres(e.target.value)}
+                  placeholder="Ej. T.S.U. Andrea Rangel"
+                  className={`h-10 ${getIlluminatedFieldClass(higNombres.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Cédula de Identidad *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={higCedula}
+                  onChange={(e) => setHigCedula(e.target.value)}
+                  placeholder="V-24.901.883"
+                  className={`h-10 ${getIlluminatedFieldClass(higCedula.trim().length > 0)}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Registro Sanitario MPPS *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={higMpps}
+                  onChange={(e) => setHigMpps(e.target.value)}
+                  placeholder="MPPS-HD-14205"
+                  className={`h-10 ${getIlluminatedFieldClass(higMpps.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Área Clínica & Especialidad *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={higEspecialidad}
+                  onChange={(e) => setHigEspecialidad(e.target.value)}
+                  placeholder="Profilaxis & Cirugía a 4 Manos"
+                  className={`h-10 ${getIlluminatedFieldClass(higEspecialidad.trim().length > 0)}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Teléfono Móvil (WhatsApp) *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={higTelefono}
+                  onChange={(e) => setHigTelefono(e.target.value)}
+                  placeholder="+58 412-0000000"
+                  className={`h-10 ${getIlluminatedFieldClass(higTelefono.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Odontólogo Asignado *
+                </label>
+                <select
+                  value={higDoctor}
+                  onChange={(e) => setHigDoctor(e.target.value)}
+                  className={`h-10 ${getIlluminatedFieldClass(higDoctor.trim().length > 0)}`}
+                >
+                  {odontologos.map((doc) => (
+                    <option key={doc.id} value={doc.nombres}>
+                      {doc.nombres}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
+                <select
+                  value={higSede}
+                  onChange={(e) => setHigSede(e.target.value as any)}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(higSede))}`}
+                >
+                  <option value="victoria">La Victoria</option>
+                  <option value="tovar">Colonia Tovar</option>
+                  <option value="ambas">Ambas Sedes</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Box Apoyo</label>
+                <select
+                  value={higBox}
+                  onChange={(e) => setHigBox(Number(e.target.value))}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(higBox))}`}
+                >
+                  <option value={1}>Box 01</option>
+                  <option value={2}>Box 02</option>
+                  <option value={3}>Box 03</option>
+                  <option value={4}>Box 04</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Turno</label>
+                <select
+                  value={higTurno}
+                  onChange={(e) => setHigTurno(e.target.value as any)}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(higTurno))}`}
+                >
+                  <option value="Completo">Completo</option>
+                  <option value="Mañana">Mañana</option>
+                  <option value="Tarde">Tarde</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Estado</label>
+                <select
+                  value={higEstado}
+                  onChange={(e) => setHigEstado(e.target.value as any)}
+                  className={`h-9 ${getIlluminatedFieldClass(Boolean(higEstado))}`}
+                >
+                  <option value="activo">En Sillón</option>
+                  <option value="esterilizacion">Esterilización</option>
+                  <option value="descanso">Descanso</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                isHigFormComplete
+                  ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
+                  : 'bg-dental-deep-navy hover:bg-primary shadow-md'
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
-                  {editHigId ? 'Modificar Higienista Seleccionada' : 'Nuevo Registro de Higienista'}
-                </span>
-                <span className="text-[10px] text-secondary font-semibold">
-                  * Campos requeridos se iluminan al escribir
-                </span>
-              </div>
+              <span className="material-symbols-outlined text-[18px]">
+                {isHigFormComplete ? 'verified' : 'group_add'}
+              </span>
+              <span>
+                {editHigId ? 'Guardar Cambios de Higienista' : 'Registrar Higienista'}
+              </span>
+            </button>
+          </form>
+        );
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Nombres y Apellidos *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={higNombres}
-                    onChange={(e) => setHigNombres(e.target.value)}
-                    placeholder="Ej. T.S.U. Andrea Rangel"
-                    className={`h-10 ${getIlluminatedFieldClass(higNombres.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Cédula de Identidad *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={higCedula}
-                    onChange={(e) => setHigCedula(e.target.value)}
-                    placeholder="V-24.901.883"
-                    className={`h-10 ${getIlluminatedFieldClass(higCedula.trim().length > 0)}`}
-                  />
-                </div>
-              </div>
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Registro Sanitario MPPS *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={higMpps}
-                    onChange={(e) => setHigMpps(e.target.value)}
-                    placeholder="MPPS-HD-14205"
-                    className={`h-10 ${getIlluminatedFieldClass(higMpps.trim().length > 0)}`}
-                  />
+            {/* Header Módulo 02 • Higienistas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">clean_hands</span>
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Área Clínica & Especialidad *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={higEspecialidad}
-                    onChange={(e) => setHigEspecialidad(e.target.value)}
-                    placeholder="Profilaxis & Cirugía a 4 Manos"
-                    className={`h-10 ${getIlluminatedFieldClass(higEspecialidad.trim().length > 0)}`}
-                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 02
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      Asistencia Clínica
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {higienistas.length} higienistas en plantilla
+                    </span>
+                  </div>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Directorio Clínico • Higienistas Dentales
+                  </h2>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Teléfono Móvil (WhatsApp) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={higTelefono}
-                    onChange={(e) => setHigTelefono(e.target.value)}
-                    placeholder="+58 412-0000000"
-                    className={`h-10 ${getIlluminatedFieldClass(higTelefono.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Odontólogo Asignado *
-                  </label>
-                  <select
-                    value={higDoctor}
-                    onChange={(e) => setHigDoctor(e.target.value)}
-                    className={`h-10 ${getIlluminatedFieldClass(higDoctor.trim().length > 0)}`}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {showHigForm && !editHigId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormHigienista();
+                      setShowHigForm(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                   >
-                    {odontologos.map((doc) => (
-                      <option key={doc.id} value={doc.nombres}>
-                        {doc.nombres}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                    <span>Ocultar formulario</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormHigienista();
+                      setShowHigForm(true);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-dental-deep-navy hover:bg-primary text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">group_add</span>
+                    <span>Registrar Higienista</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Formulario para Nueva Higienista (arriba cuando no se edita una sub-tarjeta) */}
+            {showHigForm && !editHigId && renderHigFormContent()}
+
+            {/* 1. Lista de Higienistas Registradas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
+                <span>HIGIENISTAS REGISTRADAS ({higienistas.length})</span>
+                <span>Pulsa Editar en una sub-tarjeta para desplegar su formulario justo debajo</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Sede</label>
-                  <select
-                    value={higSede}
-                    onChange={(e) => setHigSede(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(higSede))}`}
-                  >
-                    <option value="victoria">La Victoria</option>
-                    <option value="tovar">Colonia Tovar</option>
-                    <option value="ambas">Ambas Sedes</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {higienistas.map((h) => {
+                  const isEditingThis = showHigForm && editHigId === h.id;
+                  return (
+                    <div
+                      key={h.id}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                        isEditingThis
+                          ? 'col-span-full bg-surface-container border-indigo-500 ring-2 ring-indigo-500/30 shadow-md'
+                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white font-display font-bold text-sm flex items-center justify-center shrink-0 overflow-hidden border border-indigo-300">
+                          {h.avatar ? (
+                            <img src={h.avatar} alt={h.nombres} className="w-full h-full object-cover" />
+                          ) : (
+                            h.nombres
+                              .replace(/(Lic|T\.S\.U\.)\.?\s*/i, '')
+                              .slice(0, 2)
+                              .toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-dental-deep-navy truncate">
+                              {h.nombres}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                                h.estado === 'activo'
+                                  ? 'bg-status-success/15 text-status-success'
+                                  : h.estado === 'esterilizacion'
+                                  ? 'bg-primary/20 text-dental-deep-navy'
+                                  : 'bg-secondary/15 text-secondary'
+                              }`}
+                            >
+                              {h.estado === 'activo'
+                                ? 'En Sillón'
+                                : h.estado === 'esterilizacion'
+                                ? 'Esterilización'
+                                : 'Descanso'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-secondary truncate mt-0.5">{h.areaEspecialidad}</p>
+                          <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 flex-wrap">
+                            <span className="font-mono font-bold text-dental-deep-navy">{h.cedula}</span>
+                            <span>•</span>
+                            <span>{h.registroMpps}</span>
+                            <span>•</span>
+                            <span>Box {h.boxApoyo}</span>
+                          </div>
+                          <p className="text-[10px] font-semibold text-primary truncate mt-1">
+                            Doc: {h.doctorAsignado}
+                          </p>
+                        </div>
+                      </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Box Apoyo</label>
-                  <select
-                    value={higBox}
-                    onChange={(e) => setHigBox(Number(e.target.value))}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(higBox))}`}
-                  >
-                    <option value={1}>Box 01</option>
-                    <option value={2}>Box 02</option>
-                    <option value={3}>Box 03</option>
-                    <option value={4}>Box 04</option>
-                  </select>
-                </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-border-subtle/60">
+                        <span className="text-[10px] font-bold text-secondary">
+                          Turno: <strong className="text-dental-deep-navy">{h.turno}</strong>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleHigienistaEstado(h)}
+                            title="Cambiar estado"
+                            className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-secondary hover:text-dental-deep-navy active:scale-90 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditarHigienista(h)}
+                            title={isEditingThis ? 'Ocultar formulario' : 'Modificar debajo de esta tarjeta'}
+                            className={`h-7 px-2 rounded-lg border flex items-center gap-1 text-[10px] font-bold active:scale-90 cursor-pointer transition-all ${
+                              isEditingThis
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-indigo-600 hover:text-white'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {isEditingThis ? 'expand_less' : 'edit'}
+                            </span>
+                            <span>{isEditingThis ? 'Ocultar' : 'Editar'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarHigienista(h.id, h.nombres)}
+                            title="Eliminar registro"
+                            className="w-7 h-7 rounded-lg bg-white border border-border-subtle flex items-center justify-center text-status-danger/70 hover:text-status-danger active:scale-90 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Turno</label>
-                  <select
-                    value={higTurno}
-                    onChange={(e) => setHigTurno(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(higTurno))}`}
-                  >
-                    <option value="Completo">Completo</option>
-                    <option value="Mañana">Mañana</option>
-                    <option value="Tarde">Tarde</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy block mb-1">Estado</label>
-                  <select
-                    value={higEstado}
-                    onChange={(e) => setHigEstado(e.target.value as any)}
-                    className={`h-9 ${getIlluminatedFieldClass(Boolean(higEstado))}`}
-                  >
-                    <option value="activo">En Sillón</option>
-                    <option value="esterilizacion">Esterilización</option>
-                    <option value="descanso">Descanso</option>
-                  </select>
-                </div>
+                      {/* Formulario desplegado inmediatamente debajo de la sub-tarjeta a modificar */}
+                      {isEditingThis && renderHigFormContent()}
+                    </div>
+                  );
+                })}
               </div>
-
-              <button
-                type="submit"
-                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                  isHigFormComplete
-                    ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
-                    : 'bg-dental-deep-navy hover:bg-primary shadow-md'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {isHigFormComplete ? 'verified' : 'group_add'}
-                </span>
-                <span>
-                  {isHigFormComplete ? 'Confirmar Higienista' : 'Registrar Higienista'}
-                </span>
-              </button>
-            </form>
-          )}
-        </section>
-      )}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ---------------------------------------------------------------------
           SECCIÓN 03: PADRÓN EXCLUSIVO DE PACIENTES (CRUD MAESTRO)
          --------------------------------------------------------------------- */}
-      {activeTab === 'pacientes' && (
-        <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
-
-          {/* Header Módulo 03 • Pacientes */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">groups</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 03
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
-                    Maestro Clínico
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {pacientes.length} expedientes en padrón
-                  </span>
-                </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Padrón General de Pacientes & Expedientes
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+      {activeTab === 'pacientes' && (() => {
+        const renderPacFormContent = () => (
+          <form
+            onSubmit={handleGuardarPaciente}
+            className="mt-2 pt-3 border-t-2 border-dashed border-primary/30 flex flex-col gap-3 bg-white p-4 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
+                {editPacId ? 'Modificar Registro de Paciente Seleccionado' : 'Registrar Nuevo Paciente en Padrón'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormPaciente();
-                  setShowPacForm(!showPacForm);
+                  setShowPacForm(false);
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-rose-50 text-secondary hover:text-rose-700 text-[10px] font-bold border border-border-subtle cursor-pointer flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-[16px]">
-                  {showPacForm ? 'visibility_off' : 'person_add'}
-                </span>
-                <span>{showPacForm ? 'Ocultar Formulario' : 'Nuevo Paciente'}</span>
+                <span className="material-symbols-outlined text-[13px]">close</span>
+                <span>Cerrar</span>
               </button>
             </div>
-          </div>
 
-          {/* Barra de Búsqueda Rápida de Pacientes */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-subtle-ice p-3 rounded-2xl border border-border-subtle">
-            <div className="relative flex-1">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[18px]">
-                search
-              </span>
-              <input
-                type="text"
-                value={pacSearchQuery}
-                onChange={(e) => setPacSearchQuery(e.target.value)}
-                placeholder="Buscar por cédula, nombre, teléfono o correo..."
-                className="w-full pl-9 pr-8 py-2 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-              {pacSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setPacSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary hover:text-dental-deep-navy text-xs"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2 text-xs font-bold text-secondary px-1">
-              <span>Mostrando {pacientesFiltrados.length} de {pacientes.length}</span>
-            </div>
-          </div>
-
-          {/* 1. Lista de Tarjetas de Pacientes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
-            {pacientesFiltrados.length === 0 ? (
-              <div className="col-span-full py-10 text-center text-secondary text-xs">
-                <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/50">person_search</span>
-                No se encontraron pacientes con el término "{pacSearchQuery}".
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Nombres y Apellidos *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={pacNombres}
+                  onChange={(e) => setPacNombres(e.target.value)}
+                  placeholder="Ej. Raymond Gilbonio"
+                  className={`h-10 ${getIlluminatedFieldClass(pacNombres.trim().length > 0)}`}
+                />
               </div>
-            ) : (
-              pacientesFiltrados.map((p) => {
-                const edadStr = calcularEdad(p.fechaNacimiento);
-                const condicionEncontrada = condicionesMedicas.find((c) => c.id === p.condicionMedicaId);
-                const isSelected = editPacId === p.id;
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                      isSelected
-                        ? 'bg-surface-container border-primary ring-2 ring-primary/30 shadow-md'
-                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container/70 hover:border-primary/40'
-                    }`}
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Cédula de Identidad *
+                </label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={pacCedulaTipo}
+                    onChange={(e) => setPacCedulaTipo(e.target.value as any)}
+                    className="w-20 h-10 rounded-xl border border-border-subtle bg-white text-xs font-black text-dental-deep-navy"
                   >
-                    <div>
-                      {/* Top Header con Avatar y Sexo */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
-                            {p.nombres.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="font-bold text-xs text-dental-deep-navy truncate">
-                              {p.nombres}
-                            </h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="font-mono text-[11px] font-extrabold text-primary">
-                                {p.cedula}
-                              </span>
-                              <span className="text-[10px] text-secondary">•</span>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
-                                p.sexo === 'Masculino'
-                                  ? 'bg-sky-100 text-sky-800'
-                                  : p.sexo === 'Femenino'
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-purple-100 text-purple-800'
-                              }`}>
-                                {p.sexo || 'Femenino'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Badge de Sede */}
-                        <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy shrink-0">
-                          {p.sedeId === 'tovar' ? 'Sede Tovar' : p.sedeId === 'ambas' ? 'Ambas Sedes' : 'La Victoria'}
-                        </span>
-                      </div>
-
-                      {/* Datos Demográficos y de Contacto */}
-                      <div className="space-y-1.5 text-[11px] text-secondary mt-2 bg-white/70 p-2.5 rounded-xl border border-border-subtle/50">
-                        {p.fechaNacimiento && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-secondary font-medium">Nacimiento & Edad:</span>
-                            <span className="font-bold text-dental-deep-navy">
-                              {p.fechaNacimiento} {edadStr ? `(${edadStr})` : ''}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <span className="text-secondary font-medium">WhatsApp / Móvil:</span>
-                          <a
-                            href={`https://wa.me/${(p.telefono || '').replace(/[^0-9]/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-bold text-primary hover:underline flex items-center gap-1"
-                          >
-                            <span>{p.telefono}</span>
-                            <span className="material-symbols-outlined text-[13px] text-status-success">chat</span>
-                          </a>
-                        </div>
-                        {p.email && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-secondary font-medium">Correo:</span>
-                            <span className="font-semibold text-dental-deep-navy truncate max-w-[160px]">
-                              {p.email}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Condición Médica / Alerta Anamnesis */}
-                      {p.condicionMedicaId && p.condicionMedicaId !== 'ninguna' && (
-                        <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-status-danger/10 text-status-danger border border-status-danger/30 text-[10px] font-bold">
-                          <span className="material-symbols-outlined text-[14px]">medical_services</span>
-                          <span className="truncate">
-                            Alerta Médica: {condicionEncontrada ? `${condicionEncontrada.nombre} (${condicionEncontrada.codigoCie})` : p.condicionMedicaId}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Botones de Acción */}
-                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-border-subtle/70">
-                      <button
-                        type="button"
-                        onClick={() => handleEditarPaciente(p)}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-dental-deep-navy hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[14px] text-primary">edit</span>
-                        <span>Editar</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarPaciente(p.id, p.nombres)}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-status-danger hover:bg-status-danger/10 active:scale-95 transition-all cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">delete</span>
-                        <span>Eliminar</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* 2. Formulario Desplegable de Ingesta/Edición de Paciente */}
-          {showPacForm && (
-            <form
-              onSubmit={handleGuardarPaciente}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
-                  {editPacId ? 'Modificar Registro de Paciente' : 'Registrar Nuevo Paciente en Padrón'}
-                </span>
-                <span className="text-[10px] text-secondary font-semibold">
-                  * Datos clínicos y de filiación canónicos
-                </span>
-              </div>
-
-              {/* Fila 1: Nombres y Cédula */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Nombres y Apellidos *
-                  </label>
+                    <option value="V">V-</option>
+                    <option value="E">E-</option>
+                    <option value="J">J-</option>
+                    <option value="G">G-</option>
+                  </select>
                   <input
                     type="text"
                     required
-                    value={pacNombres}
-                    onChange={(e) => setPacNombres(e.target.value)}
-                    placeholder="Ej. Raymond Gilbonio"
-                    className={`h-10 ${getIlluminatedFieldClass(pacNombres.trim().length > 0)}`}
+                    value={pacCedulaNumero}
+                    onChange={(e) => setPacCedulaNumero(e.target.value)}
+                    placeholder="16762319"
+                    className={`flex-1 h-10 ${getIlluminatedFieldClass(pacCedulaNumero.trim().length > 0)}`}
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Cédula de Identidad *
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Sexo Biológico *
+                </label>
+                <select
+                  value={pacSexo}
+                  onChange={(e) => setPacSexo(e.target.value as any)}
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSexo))}`}
+                >
+                  <option value="Femenino">Femenino</option>
+                  <option value="Masculino">Masculino</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-dental-deep-navy">
+                    Fecha de Nacimiento *
                   </label>
-                  <div className="flex gap-1.5">
-                    <select
-                      value={pacCedulaTipo}
-                      onChange={(e) => setPacCedulaTipo(e.target.value as any)}
-                      className="w-20 h-10 rounded-xl border border-border-subtle bg-white text-xs font-black text-dental-deep-navy"
+                  {pacFechaNacimiento && (
+                    <span className="text-[10px] font-bold text-primary">
+                      {calcularEdad(pacFechaNacimiento)}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  required
+                  value={pacFechaNacimiento}
+                  onChange={(e) => setPacFechaNacimiento(e.target.value)}
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(pacFechaNacimiento))}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Teléfono Móvil (WhatsApp) *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={pacTelefono}
+                  onChange={(e) => setPacTelefono(e.target.value)}
+                  placeholder="04126841381"
+                  className={`h-10 ${getIlluminatedFieldClass(pacTelefono.trim().length > 0)}`}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Correo Electrónico
+                </label>
+                <input
+                  type="email"
+                  value={pacEmail}
+                  onChange={(e) => setPacEmail(e.target.value)}
+                  placeholder="raymond.gilbonio@odontosaludlv.com"
+                  className={`h-10 ${getIlluminatedFieldClass(pacEmail.trim().length > 0)}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Condición Médica / Alerta Clínica (CIE)
+                </label>
+                <select
+                  value={pacCondicionId}
+                  onChange={(e) => setPacCondicionId(e.target.value)}
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(pacCondicionId))}`}
+                >
+                  <option value="ninguna">Ninguna Condición Conocida</option>
+                  {condicionesMedicas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre} ({c.codigoCie}) - Riesgo {c.nivelRiesgo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
+                  Sede Habitual de Atención
+                </label>
+                <select
+                  value={pacSedeId}
+                  onChange={(e) => setPacSedeId(e.target.value as any)}
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSedeId))}`}
+                >
+                  <option value="victoria">Sede La Victoria (Boxes 01 y 02)</option>
+                  <option value="tovar">Sede Colonia Tovar (Box 01)</option>
+                  <option value="ambas">Ambas Sedes</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                isPacFormComplete
+                  ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
+                  : 'bg-primary hover:bg-dental-deep-navy shadow-md'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {isPacFormComplete ? 'verified' : 'person_add'}
+              </span>
+              <span>
+                {editPacId ? 'Confirmar Actualización de Paciente' : 'Guardar Paciente en Padrón'}
+              </span>
+            </button>
+          </form>
+        );
+
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-primary" />
+
+            {/* Header Módulo 03 • Pacientes */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">groups</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 03
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                      Maestro Clínico
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {pacientes.length} expedientes en padrón
+                    </span>
+                  </div>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Padrón General de Pacientes & Expedientes
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    limpiarFormPaciente();
+                    setShowPacForm(!showPacForm || Boolean(editPacId));
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {showPacForm && !editPacId ? 'visibility_off' : 'person_add'}
+                  </span>
+                  <span>{showPacForm && !editPacId ? 'Ocultar Formulario' : 'Nuevo Paciente'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Formulario Nuevo Paciente arriba cuando no se edita una sub-tarjeta */}
+            {showPacForm && !editPacId && renderPacFormContent()}
+
+            {/* Barra de Búsqueda Rápida de Pacientes */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-subtle-ice p-3 rounded-2xl border border-border-subtle">
+              <div className="relative flex-1">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[18px]">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={pacSearchQuery}
+                  onChange={(e) => setPacSearchQuery(e.target.value)}
+                  placeholder="Buscar por cédula, nombre, teléfono o correo..."
+                  className="w-full pl-9 pr-8 py-2 rounded-xl border border-border-subtle bg-white text-xs font-medium text-dental-deep-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                {pacSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPacSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary hover:text-dental-deep-navy text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-secondary px-1">
+                <span>Mostrando {pacientesFiltrados.length} de {pacientes.length}</span>
+              </div>
+            </div>
+
+            {/* 1. Lista de Tarjetas de Pacientes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pacientesFiltrados.length === 0 ? (
+                <div className="col-span-full py-10 text-center text-secondary text-xs">
+                  <span className="material-symbols-outlined text-4xl block mb-2 text-secondary/50">person_search</span>
+                  No se encontraron pacientes con el término "{pacSearchQuery}".
+                </div>
+              ) : (
+                pacientesFiltrados.map((p) => {
+                  const edadStr = calcularEdad(p.fechaNacimiento);
+                  const condicionEncontrada = condicionesMedicas.find((c) => c.id === p.condicionMedicaId);
+                  const isSelected = showPacForm && editPacId === p.id;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                        isSelected
+                          ? 'col-span-full bg-surface-container border-primary ring-2 ring-primary/30 shadow-md'
+                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container/70 hover:border-primary/40'
+                      }`}
                     >
-                      <option value="V">V-</option>
-                      <option value="E">E-</option>
-                      <option value="J">J-</option>
-                      <option value="G">G-</option>
-                    </select>
-                    <input
-                      type="text"
-                      required
-                      value={pacCedulaNumero}
-                      onChange={(e) => setPacCedulaNumero(e.target.value)}
-                      placeholder="16762319"
-                      className={`flex-1 h-10 ${getIlluminatedFieldClass(pacCedulaNumero.trim().length > 0)}`}
-                    />
-                  </div>
-                </div>
-              </div>
+                      <div>
+                        {/* Top Header con Avatar y Sexo */}
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-display font-black text-sm flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                              {p.avatarUrl ? (
+                                <img src={p.avatarUrl} alt={p.nombres} className="w-full h-full object-cover" />
+                              ) : (
+                                p.nombres.slice(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-bold text-xs text-dental-deep-navy truncate">
+                                {p.nombres}
+                              </h3>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono text-[11px] font-extrabold text-primary">
+                                  {p.cedula}
+                                </span>
+                                <span className="text-[10px] text-secondary">•</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                                  p.sexo === 'Masculino'
+                                    ? 'bg-sky-100 text-sky-800'
+                                    : p.sexo === 'Femenino'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-purple-100 text-purple-800'
+                                }`}>
+                                  {p.sexo || 'Femenino'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
 
-              {/* Fila 2: Sexo Biológico y Fecha de Nacimiento */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Sexo Biológico *
-                  </label>
-                  <select
-                    value={pacSexo}
-                    onChange={(e) => setPacSexo(e.target.value as any)}
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSexo))}`}
-                  >
-                    <option value="Femenino">Femenino</option>
-                    <option value="Masculino">Masculino</option>
-                    <option value="Otro">Otro</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-dental-deep-navy">
-                      Fecha de Nacimiento *
-                    </label>
-                    {pacFechaNacimiento && (
-                      <span className="text-[10px] font-bold text-primary">
-                        {calcularEdad(pacFechaNacimiento)}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="date"
-                    required
-                    value={pacFechaNacimiento}
-                    onChange={(e) => setPacFechaNacimiento(e.target.value)}
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacFechaNacimiento))}`}
-                  />
-                </div>
-              </div>
+                          {/* Badge de Sede */}
+                          <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white border border-border-subtle text-dental-deep-navy shrink-0">
+                            {p.sedeId === 'tovar' ? 'Sede Tovar' : p.sedeId === 'ambas' ? 'Ambas Sedes' : 'La Victoria'}
+                          </span>
+                        </div>
 
-              {/* Fila 3: Teléfono y Correo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Teléfono Móvil (WhatsApp) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={pacTelefono}
-                    onChange={(e) => setPacTelefono(e.target.value)}
-                    placeholder="04126841381"
-                    className={`h-10 ${getIlluminatedFieldClass(pacTelefono.trim().length > 0)}`}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Correo Electrónico
-                  </label>
-                  <input
-                    type="email"
-                    value={pacEmail}
-                    onChange={(e) => setPacEmail(e.target.value)}
-                    placeholder="raymond.gilbonio@odontosaludlv.com"
-                    className={`h-10 ${getIlluminatedFieldClass(pacEmail.trim().length > 0)}`}
-                  />
-                </div>
-              </div>
+                        {/* Datos Demográficos y de Contacto */}
+                        <div className="space-y-1.5 text-[11px] text-secondary mt-2 bg-white/70 p-2.5 rounded-xl border border-border-subtle/50">
+                          {p.fechaNacimiento && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-secondary font-medium">Nacimiento & Edad:</span>
+                              <span className="font-bold text-dental-deep-navy">
+                                {p.fechaNacimiento} {edadStr ? `(${edadStr})` : ''}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <span className="text-secondary font-medium">WhatsApp / Móvil:</span>
+                            <a
+                              href={`https://wa.me/${(p.telefono || '').replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold text-primary hover:underline flex items-center gap-1"
+                            >
+                              <span>{p.telefono}</span>
+                              <span className="material-symbols-outlined text-[13px] text-status-success">chat</span>
+                            </a>
+                          </div>
+                          {p.email && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-secondary font-medium">Correo:</span>
+                              <span className="font-semibold text-dental-deep-navy truncate max-w-[160px]">
+                                {p.email}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
-              {/* Fila 4: Condición Médica y Sede Habitual */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Condición Médica / Alerta Clínica (CIE)
-                  </label>
-                  <select
-                    value={pacCondicionId}
-                    onChange={(e) => setPacCondicionId(e.target.value)}
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacCondicionId))}`}
-                  >
-                    <option value="ninguna">Ninguna Condición Conocida</option>
-                    {condicionesMedicas.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nombre} ({c.codigoCie}) - Riesgo {c.nivelRiesgo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-dental-deep-navy block mb-1">
-                    Sede Habitual de Atención
-                  </label>
-                  <select
-                    value={pacSedeId}
-                    onChange={(e) => setPacSedeId(e.target.value as any)}
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(pacSedeId))}`}
-                  >
-                    <option value="victoria">Sede La Victoria (Boxes 01 y 02)</option>
-                    <option value="tovar">Sede Colonia Tovar (Box 01)</option>
-                    <option value="ambas">Ambas Sedes</option>
-                  </select>
-                </div>
-              </div>
+                        {/* Condición Médica / Alerta Anamnesis */}
+                        {p.condicionMedicaId && p.condicionMedicaId !== 'ninguna' && (
+                          <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-status-danger/10 text-status-danger border border-status-danger/30 text-[10px] font-bold">
+                            <span className="material-symbols-outlined text-[14px]">medical_services</span>
+                            <span className="truncate">
+                              Alerta Médica: {condicionEncontrada ? `${condicionEncontrada.nombre} (${condicionEncontrada.codigoCie})` : p.condicionMedicaId}
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
-              <button
-                type="submit"
-                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
-                  isPacFormComplete
-                    ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
-                    : 'bg-primary hover:bg-dental-deep-navy shadow-md'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {isPacFormComplete ? 'verified' : 'person_add'}
-                </span>
-                <span>
-                  {editPacId ? 'Confirmar Actualización de Paciente' : 'Guardar Paciente en Padrón'}
-                </span>
-              </button>
-            </form>
-          )}
-        </section>
-      )}
+                      {/* Botones de Acción */}
+                      <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-border-subtle/70">
+                        <button
+                          type="button"
+                          onClick={() => handleEditarPaciente(p)}
+                          className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-dental-deep-navy text-white border-dental-deep-navy'
+                              : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[14px]">
+                            {isSelected ? 'expand_less' : 'edit'}
+                          </span>
+                          <span>{isSelected ? 'Ocultar' : 'Editar'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarPaciente(p.id, p.nombres)}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle flex items-center gap-1 text-[11px] font-bold text-status-danger hover:bg-status-danger/10 active:scale-95 transition-all cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+
+                      {/* Formulario desplegado inmediatamente debajo de la sub-tarjeta del paciente */}
+                      {isSelected && renderPacFormContent()}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ---------------------------------------------------------------------
           SECCIÓN 04: CONTROL DE CITAS PROGRAMADAS (APROBACIONES & MULTI-FILTRO)
@@ -4353,946 +4718,973 @@ export const ControlDataView: React.FC = () => {
       {/* ---------------------------------------------------------------------
           SECCIÓN 04: CATÁLOGO DE TRATAMIENTOS, DATOS CLÍNICOS Y COSTOS
          --------------------------------------------------------------------- */}
-      {activeTab === 'tratamientos' && (
-        <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
-
-          {/* Header Módulo 05 • Tratamientos */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">table_chart</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 05
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
-                    Catálogo de Procedimientos
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {tratamientos.length} tratamientos • Arancel prom: ${promedioArancelUsd.toFixed(0)} USD
-                  </span>
-                </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Catálogo Maestro de Tratamientos & Aranceles
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {showTratForm ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormTratamiento();
-                    setShowTratForm(false);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
-                  <span>Ocultar formulario</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormTratamiento();
-                    setShowTratForm(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">add_circle</span>
-                  <span>Nuevo Tratamiento</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Controles de Filtro y Búsqueda de la Tabla */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <span className="material-symbols-outlined text-[18px] text-secondary absolute left-3 top-2.5">
-                search
+      {activeTab === 'tratamientos' && (() => {
+        const renderTratFormContent = () => (
+          <form
+            onSubmit={handleGuardarTratamiento}
+            className="mt-2 pt-3 border-t-2 border-dashed border-amber-300 flex flex-col gap-3 bg-white p-4 rounded-2xl shadow-md animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-amber-600">edit_note</span>
+                {editTratId ? 'Modificar Tratamiento Seleccionado' : 'Nuevo Tratamiento Clínico'}
               </span>
-              <input
-                type="text"
-                value={busquedaTrat}
-                onChange={(e) => setBusquedaTrat(e.target.value)}
-                placeholder="Buscar tratamiento por código, nombre o insumo..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-surface-subtle-ice border border-border-subtle focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-dental-deep-navy"
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  limpiarFormTratamiento();
+                  setShowTratForm(false);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-status-danger/10 text-secondary hover:text-status-danger text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[14px]">close</span>
+                <span>Cerrar</span>
+              </button>
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-              {['Todas', ...CATEGORIAS_TRATAMIENTO].map((cat) => {
-                const active = filtroCategoriaTrat === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setFiltroCategoriaTrat(cat)}
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-all active:scale-95 ${
-                      active
-                        ? 'bg-dental-deep-navy text-white shadow-sm'
-                        : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy border border-border-subtle'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Código *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={tratCodigo}
+                  onChange={(e) => setTratCodigo(e.target.value)}
+                  placeholder="OD-205"
+                  className={`h-10 font-mono ${getIlluminatedFieldClass(tratCodigo.trim().length > 0)}`}
+                />
+              </div>
 
-          {/* 1A. VISTA MÓVIL Y TABLET 100% RESPONSIVA (Tarjetas Estructuradas sin Scroll Horizontal) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
-            {tratamientosFiltrados.map((t) => {
-              const margenUsd = t.costoUsd - t.costoInsumosUsd;
-              const margenPct = t.costoUsd > 0 ? Math.round((margenUsd / t.costoUsd) * 100) : 0;
-              const montoBs = (t.costoUsd * tasaBcv).toLocaleString('es-VE', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              });
-              const isEditingThis = editTratId === t.id;
+              <div className="sm:col-span-4">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Nombre del Procedimiento *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={tratNombre}
+                  onChange={(e) => setTratNombre(e.target.value)}
+                  placeholder="Ej. Blanqueamiento Dental LED Zoom"
+                  className={`h-10 ${getIlluminatedFieldClass(tratNombre.trim().length > 0)}`}
+                />
+              </div>
 
-              return (
-                <div
-                  key={t.id}
-                  className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                    isEditingThis
-                      ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                      : 'bg-surface-subtle-ice border-border-subtle'
-                  }`}
+              <div className="sm:col-span-3">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Especialidad / Categoría *
+                </label>
+                <select
+                  value={tratCategoria}
+                  onChange={(e) =>
+                    setTratCategoria(e.target.value as TratamientoItem['categoria'])
+                  }
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(tratCategoria))}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-md bg-dental-deep-navy text-white font-mono text-[10px] font-extrabold">
-                          {t.codigo}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy font-bold text-[10px]">
-                          {t.categoria}
-                        </span>
-                        <span className="text-[10px] font-bold text-secondary">
-                          • {t.duracionMinutos} min {t.requiereRx ? '• +RX' : ''}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-xs sm:text-sm text-dental-deep-navy mt-1.5 leading-snug">
-                        {t.nombre}
-                      </h4>
-                      <p className="text-[11px] text-secondary mt-0.5 line-clamp-2">
-                        {t.descripcion}
-                      </p>
-                    </div>
+                  {CATEGORIAS_TRATAMIENTO.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleToggleTratamientoActivo(t)}
-                      className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                        t.activo
-                          ? 'bg-status-success/15 text-status-success'
-                          : 'bg-secondary/15 text-secondary'
-                      }`}
-                    >
-                      {t.activo ? 'Activo' : 'Pausado'}
-                    </button>
-                  </div>
+              <div className="sm:col-span-3">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Duración Estimada (Min) *
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  step={5}
+                  required
+                  value={tratDuracion}
+                  onChange={(e) => setTratDuracion(e.target.value)}
+                  placeholder="Ej. 45"
+                  className={`h-10 ${getIlluminatedFieldClass(Number(tratDuracion) > 0)}`}
+                />
+              </div>
+            </div>
 
-                  {/* Detalle Financiero Responsivo */}
-                  <div className="bg-white p-2.5 rounded-xl border border-border-subtle flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-[10px] text-secondary block font-semibold">Precio / Caja</span>
-                      <span className="font-display font-extrabold text-dental-deep-navy text-sm">
-                        ${t.costoUsd}{' '}
-                        <span className="text-[10px] font-normal text-secondary">USD</span>
-                      </span>
-                      <span className="text-[10px] text-secondary block font-mono">
-                        ~{montoBs} Bs.
-                      </span>
-                    </div>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-4">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Descripción Clínica / Materiales *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={tratDescripcion}
+                  onChange={(e) => setTratDescripcion(e.target.value)}
+                  placeholder="Detalle de insumos, protocolo y alcance..."
+                  className={`h-10 ${getIlluminatedFieldClass(tratDescripcion.trim().length > 0)}`}
+                />
+              </div>
 
-                    <div className="text-right">
-                      <span className="text-[10px] text-secondary block font-semibold">
-                        Insumos: ${t.costoInsumosUsd}
-                      </span>
-                      <span className="font-bold text-status-success text-[11px]">
-                        Margen: ${margenUsd} ({margenPct}%)
-                      </span>
-                    </div>
-                  </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Precio Arancel (USD $) *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step="0.5"
+                  required
+                  value={tratCostoUsd}
+                  onChange={(e) => setTratCostoUsd(e.target.value)}
+                  placeholder="Ej. 45"
+                  className={`h-10 ${getIlluminatedFieldClass(Number(tratCostoUsd) > 0)}`}
+                />
+              </div>
 
-                  {/* Acciones */}
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-border-subtle">
-                    <button
-                      type="button"
-                      onClick={() => handleEditarTratamiento(t)}
-                      className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
-                    >
-                      <span className="material-symbols-outlined text-[15px]">edit</span>
-                      <span>Modificar</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEliminarTratamiento(t.id, t.nombre)}
-                      className="px-3 py-1.5 rounded-xl bg-status-danger/10 text-status-danger hover:bg-status-danger hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
-                    >
-                      <span className="material-symbols-outlined text-[15px]">delete</span>
-                      <span>Eliminar</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Costo Insumos (USD $) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  required
+                  value={tratInsumosUsd}
+                  onChange={(e) => setTratInsumosUsd(e.target.value)}
+                  placeholder="Ej. 10"
+                  className={`h-10 ${getIlluminatedFieldClass(tratInsumosUsd.trim().length > 0)}`}
+                />
+              </div>
 
-          {/* 1B. VISTA DE ESCRITORIO (Tabla Completa con Columnas Clínicas y Financieras) */}
-          <div className="hidden lg:block overflow-x-auto rounded-2xl border border-border-subtle">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-subtle-ice border-b border-border-subtle text-[11px] font-extrabold text-dental-deep-navy uppercase tracking-wider">
-                  <th className="py-3 px-3">Cód.</th>
-                  <th className="py-3 px-3">Tratamiento & Descripción Clínica</th>
-                  <th className="py-3 px-3">Especialidad</th>
-                  <th className="py-3 px-2 text-center">Duración</th>
-                  <th className="py-3 px-2 text-center">RX</th>
-                  <th className="py-3 px-3 text-right">Insumos</th>
-                  <th className="py-3 px-3 text-right">Arancel USD</th>
-                  <th className="py-3 px-3 text-right">Ref. Bs. BCV</th>
-                  <th className="py-3 px-3 text-center">Estado</th>
-                  <th className="py-3 px-3 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle text-xs text-dental-deep-navy font-medium">
-                {tratamientosFiltrados.map((t) => {
-                  const montoBs = (t.costoUsd * tasaBcv).toLocaleString('es-VE', {
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Equivalente Bs. BCV
+                </label>
+                <div className="h-10 px-3 rounded-xl bg-surface-container border border-border-subtle flex items-center text-xs font-extrabold text-dental-deep-navy">
+                  {((Number(tratCostoUsd) || 0) * tasaBcv).toLocaleString('es-VE', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
-                  });
-                  const isEditingThis = editTratId === t.id;
-
-                  return (
-                    <tr
-                      key={t.id}
-                      className={`transition-colors ${
-                        isEditingThis ? 'bg-surface-container font-semibold' : 'hover:bg-surface-subtle-ice/60'
-                      }`}
-                    >
-                      <td className="py-3 px-3 font-mono font-bold text-primary">{t.codigo}</td>
-                      <td className="py-3 px-3 max-w-xs">
-                        <div className="font-bold text-dental-deep-navy">{t.nombre}</div>
-                        <div className="text-[11px] text-secondary truncate">{t.descripcion}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy text-[10px] font-bold">
-                          {t.categoria}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-secondary">
-                        {t.duracionMinutos} min
-                      </td>
-                      <td className="py-3 px-2 text-center">
-                        {t.requiereRx ? (
-                          <span className="material-symbols-outlined text-primary text-[17px]" title="Requiere Radiografía">
-                            radiology
-                          </span>
-                        ) : (
-                          <span className="text-secondary/40 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right text-secondary font-mono">
-                        ${t.costoInsumosUsd}
-                      </td>
-                      <td className="py-3 px-3 text-right font-display font-extrabold text-sm text-dental-deep-navy">
-                        ${t.costoUsd}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono text-[11px] text-secondary font-bold">
-                        {montoBs} Bs.
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleTratamientoActivo(t)}
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase transition-all active:scale-90 ${
-                            t.activo
-                              ? 'bg-status-success/15 text-status-success hover:bg-status-success hover:text-white'
-                              : 'bg-secondary/15 text-secondary hover:bg-secondary hover:text-white'
-                          }`}
-                        >
-                          {t.activo ? 'Activo' : 'Pausado'}
-                        </button>
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleEditarTratamiento(t)}
-                            title="Modificar tratamiento"
-                            className="w-7 h-7 rounded-lg bg-surface-subtle-ice hover:bg-primary hover:text-white flex items-center justify-center text-secondary transition-all active:scale-90"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleEliminarTratamiento(t.id, t.nombre)}
-                            title="Eliminar del arancel"
-                            className="w-7 h-7 rounded-lg bg-surface-subtle-ice hover:bg-status-danger hover:text-white flex items-center justify-center text-status-danger/70 transition-all active:scale-90"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Botón para Desplegar Formulario */}
-          {!showTratForm && (
-            <button
-              type="button"
-              onClick={() => {
-                limpiarFormTratamiento();
-                setShowTratForm(true);
-              }}
-              className="w-full mt-2 py-3 px-4 rounded-2xl bg-dental-deep-navy hover:bg-primary text-white font-bold text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              <span>Registrar Tratamiento</span>
-            </button>
-          )}
-
-          {/* 2. Formulario Desplegable de Tratamientos */}
-          {showTratForm && (
-            <form
-              onSubmit={handleGuardarTratamiento}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3 bg-surface-subtle-ice/60 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
-                  {editTratId ? 'Modificar Tratamiento de Arancel' : 'Nuevo Tratamiento Clínico'}
-                </span>
-                <span className="text-[10px] text-secondary font-semibold">
-                  * Campos requeridos se iluminan al escribir
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Código *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={tratCodigo}
-                    onChange={(e) => setTratCodigo(e.target.value)}
-                    placeholder="OD-205"
-                    className={`h-10 font-mono ${getIlluminatedFieldClass(tratCodigo.trim().length > 0)}`}
-                  />
-                </div>
-
-                <div className="sm:col-span-4">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Nombre del Procedimiento *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={tratNombre}
-                    onChange={(e) => setTratNombre(e.target.value)}
-                    placeholder="Ej. Blanqueamiento Dental LED Zoom"
-                    className={`h-10 ${getIlluminatedFieldClass(tratNombre.trim().length > 0)}`}
-                  />
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Especialidad / Categoría *
-                  </label>
-                  <select
-                    value={tratCategoria}
-                    onChange={(e) =>
-                      setTratCategoria(e.target.value as TratamientoItem['categoria'])
-                    }
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(tratCategoria))}`}
-                  >
-                    {CATEGORIAS_TRATAMIENTO.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Duración Estimada (Min) *
-                  </label>
-                  <input
-                    type="number"
-                    min={10}
-                    step={5}
-                    required
-                    value={tratDuracion}
-                    onChange={(e) => setTratDuracion(e.target.value)}
-                    placeholder="Ej. 45"
-                    className={`h-10 ${getIlluminatedFieldClass(Number(tratDuracion) > 0)}`}
-                  />
+                  })}{' '}
+                  Bs.
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                <div className="sm:col-span-4">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Descripción Clínica / Materiales *
-                  </label>
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full justify-center">
                   <input
-                    type="text"
-                    required
-                    value={tratDescripcion}
-                    onChange={(e) => setTratDescripcion(e.target.value)}
-                    placeholder="Detalle de insumos, protocolo y alcance..."
-                    className={`h-10 ${getIlluminatedFieldClass(tratDescripcion.trim().length > 0)}`}
+                    type="checkbox"
+                    checked={tratRequiereRx}
+                    onChange={(e) => setTratRequiereRx(e.target.checked)}
+                    className="w-4 h-4 accent-primary rounded"
                   />
-                </div>
+                  <span>Requiere RX</span>
+                </label>
+              </div>
+            </div>
 
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Precio Arancel (USD $) *
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step="0.5"
-                    required
-                    value={tratCostoUsd}
-                    onChange={(e) => setTratCostoUsd(e.target.value)}
-                    placeholder="Ej. 45"
-                    className={`h-10 ${getIlluminatedFieldClass(Number(tratCostoUsd) > 0)}`}
-                  />
-                </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="submit"
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                  isTratFormComplete
+                    ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
+                  : 'bg-primary hover:bg-dental-deep-navy shadow-md'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {isTratFormComplete ? 'verified' : 'add_task'}
+                </span>
+                <span>
+                  {editTratId ? 'Guardar Cambios' : isTratFormComplete ? 'Confirmar Tratamiento' : 'Registrar Tratamiento'}
+                </span>
+              </button>
+            </div>
+          </form>
+        );
 
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Costo Insumos (USD $) *
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    required
-                    value={tratInsumosUsd}
-                    onChange={(e) => setTratInsumosUsd(e.target.value)}
-                    placeholder="Ej. 10"
-                    className={`h-10 ${getIlluminatedFieldClass(tratInsumosUsd.trim().length > 0)}`}
-                  />
-                </div>
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-dental-deep-navy" />
 
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Equivalente Bs. BCV
-                  </label>
-                  <div className="h-10 px-3 rounded-xl bg-surface-container border border-border-subtle flex items-center text-xs font-extrabold text-dental-deep-navy">
-                    {((Number(tratCostoUsd) || 0) * tasaBcv).toLocaleString('es-VE', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    Bs.
+            {/* Header Módulo 05 • Tratamientos */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">table_chart</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 05
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                      Catálogo de Procedimientos
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {tratamientos.length} tratamientos • Arancel prom: ${promedioArancelUsd.toFixed(0)} USD
+                    </span>
                   </div>
-                </div>
-
-                <div className="sm:col-span-2 flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full justify-center">
-                    <input
-                      type="checkbox"
-                      checked={tratRequiereRx}
-                      onChange={(e) => setTratRequiereRx(e.target.checked)}
-                      className="w-4 h-4 accent-primary rounded"
-                    />
-                    <span>Requiere RX</span>
-                  </label>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Catálogo Maestro de Tratamientos & Aranceles
+                  </h2>
                 </div>
               </div>
 
-              <div className="flex justify-end pt-1">
-                <button
-                  type="submit"
-                  className={`w-full sm:w-auto px-6 py-3 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                    isTratFormComplete
-                      ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
-                    : 'bg-primary hover:bg-dental-deep-navy shadow-md'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {isTratFormComplete ? 'verified' : 'add_task'}
-                  </span>
-                  <span>
-                    {isTratFormComplete ? 'Confirmar Tratamiento' : 'Registrar Tratamiento'}
-                  </span>
-                </button>
-              </div>
-            </form>
-          )}
-        </section>
-      )}
-
-      {/* ---------------------------------------------------------------------
-          SECCIÓN 05 (NUEVA): INGESTA DE ENFERMEDADES Y CONDICIONES MÉDICAS ESPECIALES
-         --------------------------------------------------------------------- */}
-      {activeTab === 'condiciones' && (
-        <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-status-danger via-primary to-dental-deep-navy" />
-
-          {/* Header Módulo 06 • Condiciones Médicas CIE */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                <span className="material-symbols-outlined text-[24px]">health_and_safety</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
-                    Módulo 06
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
-                    Bioseguridad & Anamnesis
-                  </span>
-                  <span className="text-xs text-secondary font-medium">
-                    • {condicionesMedicas.length} condiciones registradas ({condicionesCriticasCount} alertas de riesgo)
-                  </span>
-                </div>
-                <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
-                  Catálogo de Condiciones Médicas Especiales (CIE)
-                </h2>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {showTratForm && !editTratId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormTratamiento();
+                      setShowTratForm(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                    <span>Ocultar formulario</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormTratamiento();
+                      setShowTratForm(true);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                    <span>Nuevo Tratamiento</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {showMedForm ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormCondicionMedica();
-                    setShowMedForm(false);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">visibility_off</span>
-                  <span>Ocultar formulario</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    limpiarFormCondicionMedica();
-                    setShowMedForm(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">add_moderator</span>
-                  <span>Nueva Condición</span>
-                </button>
-              )}
-            </div>
-          </div>
+            {/* Formulario Nuevo Tratamiento arriba */}
+            {showTratForm && !editTratId && renderTratFormContent()}
 
-          {/* Controles de Búsqueda y Filtros de Riesgo */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <span className="material-symbols-outlined text-[18px] text-secondary absolute left-3 top-2.5">
-                search
-              </span>
-              <input
-                type="text"
-                value={busquedaMed}
-                onChange={(e) => setBusquedaMed(e.target.value)}
-                placeholder="Buscar por CIE-10, patología, anestésico o protocolo..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-surface-subtle-ice border border-border-subtle focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-dental-deep-navy"
-              />
-            </div>
+            {/* Controles de Filtro y Búsqueda de la Tabla */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <span className="material-symbols-outlined text-[18px] text-secondary absolute left-3 top-2.5">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={busquedaTrat}
+                  onChange={(e) => setBusquedaTrat(e.target.value)}
+                  placeholder="Buscar tratamiento por código, nombre o insumo..."
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-surface-subtle-ice border border-border-subtle focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-dental-deep-navy"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Filtro por Nivel de Riesgo */}
-              <div className="flex items-center gap-1 bg-surface-subtle-ice p-1 rounded-2xl border border-border-subtle">
-                <span className="text-[10px] font-bold text-secondary px-2">Riesgo:</span>
-                {['Todos', ...NIVELES_RIESGO].map((r) => {
-                  const active = filtroRiesgoMed === r;
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+                {['Todas', ...CATEGORIAS_TRATAMIENTO].map((cat) => {
+                  const active = filtroCategoriaTrat === cat;
                   return (
                     <button
-                      key={r}
+                      key={cat}
                       type="button"
-                      onClick={() => setFiltroRiesgoMed(r)}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold transition-all active:scale-95 ${
+                      onClick={() => setFiltroCategoriaTrat(cat)}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-all active:scale-95 ${
                         active
                           ? 'bg-dental-deep-navy text-white shadow-sm'
-                          : 'text-secondary hover:text-dental-deep-navy'
+                          : 'bg-surface-subtle-ice text-secondary hover:text-dental-deep-navy border border-border-subtle'
                       }`}
                     >
-                      {r}
+                      {cat}
                     </button>
                   );
                 })}
               </div>
-
-              {/* Filtro por Categoría */}
-              <select
-                value={filtroCategoriaMed}
-                onChange={(e) => setFiltroCategoriaMed(e.target.value)}
-                className="h-8 px-2 rounded-xl text-xs font-bold text-dental-deep-navy bg-surface-subtle-ice border border-border-subtle outline-none"
-              >
-                <option value="Todas">Todas las Especialidades</option>
-                {CATEGORIAS_CONDICION.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Lista de Condiciones Médicas Registradas (Tarjetas Detalladas para Caracterización Clínica) */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
-              <span>CATÁLOGO CLÍNICO ({condicionesFiltradas.length} encontradas)</span>
-              <span>Caracterización y precauciones en sillón</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[32rem] overflow-y-auto pr-1">
-              {condicionesFiltradas.map((cond) => {
-                const isEditingThis = editMedId === cond.id;
+            {/* 1A. VISTA MÓVIL Y TABLET 100% RESPONSIVA (Tarjetas Estructuradas con Formulario Debajo) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
+              {tratamientosFiltrados.map((t) => {
+                const margenUsd = t.costoUsd - t.costoInsumosUsd;
+                const margenPct = t.costoUsd > 0 ? Math.round((margenUsd / t.costoUsd) * 100) : 0;
+                const montoBs = (t.costoUsd * tasaBcv).toLocaleString('es-VE', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                });
+                const isEditingThis = showTratForm && editTratId === t.id;
 
                 return (
                   <div
-                    key={cond.id}
-                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                    key={t.id}
+                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
                       isEditingThis
-                        ? 'bg-surface-container border-primary ring-2 ring-primary/30'
-                        : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                        ? 'col-span-full bg-surface-container border-amber-500 ring-2 ring-amber-400/30 shadow-md'
+                        : 'bg-surface-subtle-ice border-border-subtle'
                     }`}
                   >
-                    <div>
-                      {/* Cabecera de la Condición */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-dental-deep-navy text-white font-mono text-[11px] font-black tracking-wide">
-                            {cond.codigoCie}
-                          </span>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${getRiesgoBadgeClass(
-                              cond.nivelRiesgo
-                            )}`}
-                          >
-                            Riesgo {cond.nivelRiesgo}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-dental-deep-navy text-white font-mono text-[10px] font-extrabold">
+                            {t.codigo}
                           </span>
                           <span className="px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy font-bold text-[10px]">
-                            {cond.categoria}
+                            {t.categoria}
+                          </span>
+                          <span className="text-[10px] font-bold text-secondary">
+                            • {t.duracionMinutos} min {t.requiereRx ? '• +RX' : ''}
                           </span>
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleToggleCondicionActiva(cond)}
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                            cond.activo
-                              ? 'bg-status-success/15 text-status-success'
-                              : 'bg-secondary/15 text-secondary'
-                          }`}
-                        >
-                          {cond.activo ? 'Activa' : 'Inactiva'}
-                        </button>
-                      </div>
-
-                      {/* Nombre Principal */}
-                      <h3 className="font-display font-extrabold text-sm sm:text-base text-dental-deep-navy mt-2">
-                        {cond.nombre}
-                      </h3>
-
-                      {/* Alerta de Profilaxis Antibiótica Previa */}
-                      {cond.requiereProfilaxisAntibiotica && (
-                        <div className="mt-2 px-2.5 py-1.5 rounded-xl bg-status-danger/10 border border-status-danger/30 flex items-center gap-2 text-status-danger">
-                          <span className="material-symbols-outlined text-[16px] shrink-0">
-                            vaccines
-                          </span>
-                          <span className="text-[11px] font-black">
-                            ¡Requiere Profilaxis Antibiótica Previa al Procedimiento!
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Manifestación Bucal */}
-                      <div className="mt-2.5 bg-white p-2.5 rounded-xl border border-border-subtle/80">
-                        <div className="flex items-center gap-1.5 text-primary text-[11px] font-bold">
-                          <span className="material-symbols-outlined text-[15px]">dentistry</span>
-                          <span>Manifestación Bucal / Signos:</span>
-                        </div>
-                        <p className="text-xs text-secondary mt-1 leading-relaxed">
-                          {cond.manifestacionBucal}
+                        <h4 className="font-bold text-xs sm:text-sm text-dental-deep-navy mt-1.5 leading-snug">
+                          {t.nombre}
+                        </h4>
+                        <p className="text-[11px] text-secondary mt-0.5 line-clamp-2">
+                          {t.descripcion}
                         </p>
                       </div>
 
-                      {/* Protocolo Dental en Sillón */}
-                      <div className="mt-2 bg-white p-2.5 rounded-xl border border-border-subtle/80">
-                        <div className="flex items-center gap-1.5 text-dental-deep-navy text-[11px] font-bold">
-                          <span className="material-symbols-outlined text-[15px] text-status-success">
-                            assignment_turned_in
-                          </span>
-                          <span>Protocolo Clínico & Recomendación:</span>
-                        </div>
-                        <p className="text-xs text-dental-deep-navy font-medium mt-1 leading-relaxed">
-                          {cond.protocoloDental}
-                        </p>
-                      </div>
-
-                      {/* Advertencia Anestésica */}
-                      {cond.anestesicoContraindicado && (
-                        <div className="mt-2 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
-                          <div className="flex items-center gap-1.5 text-amber-900 text-[11px] font-extrabold">
-                            <span className="material-symbols-outlined text-[15px] text-amber-600">
-                              warning
-                            </span>
-                            <span>Anestésico / Fármaco Contraindicado:</span>
-                          </div>
-                          <p className="text-xs text-amber-950 font-semibold mt-1">
-                            {cond.anestesicoContraindicado}
-                          </p>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTratamientoActivo(t)}
+                        className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                          t.activo
+                            ? 'bg-status-success/15 text-status-success'
+                            : 'bg-secondary/15 text-secondary'
+                        }`}
+                      >
+                        {t.activo ? 'Activo' : 'Pausado'}
+                      </button>
                     </div>
 
-                    {/* Barra de Acciones */}
-                    <div className="flex items-center justify-between pt-3 border-t border-border-subtle/70">
-                      <span className="text-[10px] font-mono text-secondary">
-                        ID: {cond.id}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleEditarCondicionMedica(cond)}
-                          className="px-2.5 py-1 rounded-lg bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">edit</span>
-                          <span>Modificar</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEliminarCondicionMedica(cond.id, cond.nombre)}
-                          className="px-2.5 py-1 rounded-lg bg-status-danger/10 text-status-danger hover:bg-status-danger hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">delete</span>
-                          <span>Eliminar</span>
-                        </button>
+                    {/* Detalle Financiero Responsivo */}
+                    <div className="bg-white p-2.5 rounded-xl border border-border-subtle flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] text-secondary block font-semibold">Precio / Caja</span>
+                        <span className="font-display font-extrabold text-dental-deep-navy text-sm">
+                          ${t.costoUsd}{' '}
+                          <span className="text-[10px] font-normal text-secondary">USD</span>
+                        </span>
+                        <span className="text-[10px] text-secondary block font-mono">
+                          ~{montoBs} Bs.
+                        </span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-secondary block font-semibold">
+                          Insumos: ${t.costoInsumosUsd}
+                        </span>
+                        <span className="font-bold text-status-success text-[11px]">
+                          Margen: ${margenUsd} ({margenPct}%)
+                        </span>
                       </div>
                     </div>
+
+                    {/* Acciones */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-border-subtle">
+                      <button
+                        type="button"
+                        onClick={() => handleEditarTratamiento(t)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                          isEditingThis
+                            ? 'bg-amber-600 text-white shadow-sm'
+                            : 'bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {isEditingThis ? 'expand_less' : 'edit'}
+                        </span>
+                        <span>{isEditingThis ? 'Ocultar' : 'Modificar'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarTratamiento(t.id, t.nombre)}
+                        className="px-3 py-1.5 rounded-xl bg-status-danger/10 text-status-danger hover:bg-status-danger hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">delete</span>
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+
+                    {/* Formulario desplegado inmediatamente debajo de la sub-tarjeta */}
+                    {isEditingThis && renderTratFormContent()}
                   </div>
                 );
               })}
             </div>
 
-            {/* Botón para Desplegar Formulario */}
-            {!showMedForm && (
+            {/* 1B. VISTA DE ESCRITORIO (Tabla Completa con Formulario Debajo de la Fila) */}
+            <div className="hidden lg:block overflow-x-auto rounded-2xl border border-border-subtle">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-subtle-ice border-b border-border-subtle text-[11px] font-extrabold text-dental-deep-navy uppercase tracking-wider">
+                    <th className="py-3 px-3">Cód.</th>
+                    <th className="py-3 px-3">Tratamiento & Descripción Clínica</th>
+                    <th className="py-3 px-3">Especialidad</th>
+                    <th className="py-3 px-2 text-center">Duración</th>
+                    <th className="py-3 px-2 text-center">RX</th>
+                    <th className="py-3 px-3 text-right">Insumos</th>
+                    <th className="py-3 px-3 text-right">Arancel USD</th>
+                    <th className="py-3 px-3 text-right">Ref. Bs. BCV</th>
+                    <th className="py-3 px-3 text-center">Estado</th>
+                    <th className="py-3 px-3 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle text-xs text-dental-deep-navy font-medium">
+                  {tratamientosFiltrados.map((t) => {
+                    const montoBs = (t.costoUsd * tasaBcv).toLocaleString('es-VE', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    });
+                    const isEditingThis = showTratForm && editTratId === t.id;
+
+                    return (
+                      <React.Fragment key={t.id}>
+                        <tr
+                          className={`transition-colors ${
+                            isEditingThis ? 'bg-amber-50/70 font-semibold' : 'hover:bg-surface-subtle-ice/60'
+                          }`}
+                        >
+                          <td className="py-3 px-3 font-mono font-bold text-primary">{t.codigo}</td>
+                          <td className="py-3 px-3 max-w-xs">
+                            <div className="font-bold text-dental-deep-navy">{t.nombre}</div>
+                            <div className="text-[11px] text-secondary truncate">{t.descripcion}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy text-[10px] font-bold">
+                              {t.categoria}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 text-center font-semibold text-secondary">
+                            {t.duracionMinutos} min
+                          </td>
+                          <td className="py-3 px-2 text-center">
+                            {t.requiereRx ? (
+                              <span className="material-symbols-outlined text-primary text-[17px]" title="Requiere Radiografía">
+                                radiology
+                              </span>
+                            ) : (
+                              <span className="text-secondary/40 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right text-secondary font-mono">
+                            ${t.costoInsumosUsd}
+                          </td>
+                          <td className="py-3 px-3 text-right font-display font-extrabold text-sm text-dental-deep-navy">
+                            ${t.costoUsd}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-[11px] text-secondary font-bold">
+                            {montoBs} Bs.
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTratamientoActivo(t)}
+                              className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase transition-all active:scale-90 cursor-pointer ${
+                                t.activo
+                                  ? 'bg-status-success/15 text-status-success hover:bg-status-success hover:text-white'
+                                  : 'bg-secondary/15 text-secondary hover:bg-secondary hover:text-white'
+                              }`}
+                            >
+                              {t.activo ? 'Activo' : 'Pausado'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditarTratamiento(t)}
+                                title={isEditingThis ? 'Ocultar formulario' : 'Modificar tratamiento'}
+                                className={`px-2.5 h-7 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold transition-all active:scale-90 cursor-pointer ${
+                                  isEditingThis
+                                    ? 'bg-amber-600 text-white shadow-sm'
+                                    : 'bg-surface-subtle-ice hover:bg-primary hover:text-white text-secondary'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[14px]">
+                                  {isEditingThis ? 'expand_less' : 'edit'}
+                                </span>
+                                <span>{isEditingThis ? 'Cerrar' : 'Editar'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarTratamiento(t.id, t.nombre)}
+                                title="Eliminar del arancel"
+                                className="w-7 h-7 rounded-lg bg-surface-subtle-ice hover:bg-status-danger hover:text-white flex items-center justify-center text-status-danger/70 transition-all active:scale-90 cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isEditingThis && (
+                          <tr className="bg-amber-50/40">
+                            <td colSpan={10} className="p-3">
+                              {renderTratFormContent()}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* ---------------------------------------------------------------------
+          SECCIÓN 05: INGESTA DE ENFERMEDADES Y CONDICIONES MÉDICAS ESPECIALES
+         --------------------------------------------------------------------- */}
+      {activeTab === 'condiciones' && (() => {
+        const renderMedFormContent = () => (
+          <form
+            onSubmit={handleGuardarCondicionMedica}
+            className="mt-2 pt-3 border-t-2 border-dashed border-rose-300 flex flex-col gap-3.5 bg-white p-4 rounded-2xl shadow-md animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-rose-600">edit_note</span>
+                {editMedId
+                  ? 'Modificar Condición Médica Seleccionada'
+                  : 'Nueva Ingesta de Condición Médica / Patología'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   limpiarFormCondicionMedica();
-                  setShowMedForm(true);
+                  setShowMedForm(false);
                 }}
-                className="w-full mt-2 py-3 px-4 rounded-2xl bg-dental-deep-navy hover:bg-primary text-white font-bold text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                className="px-2.5 py-1 rounded-lg bg-surface-subtle-ice hover:bg-status-danger/10 text-secondary hover:text-status-danger text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                <span>Registrar Condición Médica</span>
+                <span className="material-symbols-outlined text-[14px]">close</span>
+                <span>Cerrar</span>
               </button>
-            )}
-          </div>
+            </div>
 
-          {/* 2. Formulario Desplegable de Ingesta de Condiciones Médicas */}
-          {showMedForm && (
-            <form
-              onSubmit={handleGuardarCondicionMedica}
-              className="mt-3 pt-4 border-t-2 border-dashed border-border-subtle flex flex-col gap-3.5 bg-surface-subtle-ice/60 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-dental-deep-navy flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-primary">edit_note</span>
-                  {editMedId
-                    ? 'Modificar Condición Médica Seleccionada'
-                    : 'Nueva Ingesta de Condición Médica / Patología'}
-                </span>
-                <span className="text-[10px] text-secondary font-semibold">
-                  * Campos requeridos se iluminan al escribir
-                </span>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <div className="sm:col-span-3">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Código CIE-10 *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={medCodigoCie}
+                  onChange={(e) => setMedCodigoCie(e.target.value)}
+                  placeholder="Ej. I10, E11.9, Z88.0"
+                  className={`h-10 font-mono font-bold ${getIlluminatedFieldClass(
+                    medCodigoCie.trim().length > 0
+                  )}`}
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-3">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Código CIE-10 *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={medCodigoCie}
-                    onChange={(e) => setMedCodigoCie(e.target.value)}
-                    placeholder="Ej. I10, E11.9, Z88.0"
-                    className={`h-10 font-mono font-bold ${getIlluminatedFieldClass(
-                      medCodigoCie.trim().length > 0
-                    )}`}
-                  />
-                </div>
-
-                <div className="sm:col-span-5">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Nombre de la Patología o Condición *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={medNombre}
-                    onChange={(e) => setMedNombre(e.target.value)}
-                    placeholder="Ej. Hipertensión Arterial Sistémica Grado 2"
-                    className={`h-10 ${getIlluminatedFieldClass(medNombre.trim().length > 0)}`}
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Categoría *
-                  </label>
-                  <select
-                    value={medCategoria}
-                    onChange={(e) =>
-                      setMedCategoria(e.target.value as CondicionMedicaItem['categoria'])
-                    }
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(medCategoria))}`}
-                  >
-                    {CATEGORIAS_CONDICION.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Nivel de Riesgo *
-                  </label>
-                  <select
-                    value={medNivelRiesgo}
-                    onChange={(e) =>
-                      setMedNivelRiesgo(e.target.value as CondicionMedicaItem['nivelRiesgo'])
-                    }
-                    className={`h-10 ${getIlluminatedFieldClass(Boolean(medNivelRiesgo))}`}
-                  >
-                    {NIVELES_RIESGO.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="sm:col-span-5">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Nombre de la Patología o Condición *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={medNombre}
+                  onChange={(e) => setMedNombre(e.target.value)}
+                  placeholder="Ej. Hipertensión Arterial Sistémica Grado 2"
+                  className={`h-10 ${getIlluminatedFieldClass(medNombre.trim().length > 0)}`}
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Manifestación Bucal & Signos Odontológicos *
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    value={medManifestacionBucal}
-                    onChange={(e) => setMedManifestacionBucal(e.target.value)}
-                    placeholder="Ej. Xerostomía, hiperplasia gingival, sangrado fácil, aftas..."
-                    className={`py-2 resize-none ${getIlluminatedFieldClass(
-                      medManifestacionBucal.trim().length > 0
-                    )}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Protocolo Dental & Consideraciones Clínicas *
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    value={medProtocoloDental}
-                    onChange={(e) => setMedProtocoloDental(e.target.value)}
-                    placeholder="Ej. Toma de presión previa, citas cortas matutinas, hemostáticos locales..."
-                    className={`py-2 resize-none ${getIlluminatedFieldClass(
-                      medProtocoloDental.trim().length > 0
-                    )}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                <div className="sm:col-span-6">
-                  <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
-                    Anestésicos o Fármacos Contraindicados (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={medAnestesicoContraindicado}
-                    onChange={(e) => setMedAnestesicoContraindicado(e.target.value)}
-                    placeholder="Ej. Evitar epinefrina/norepinefrina, mepivacaína recomendada..."
-                    className={`h-10 ${getIlluminatedFieldClass(
-                      medAnestesicoContraindicado.trim().length > 0
-                    )}`}
-                  />
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full">
-                    <input
-                      type="checkbox"
-                      checked={medRequiereProfilaxis}
-                      onChange={(e) => setMedRequiereProfilaxis(e.target.checked)}
-                      className="w-4 h-4 accent-status-danger rounded"
-                    />
-                    <span>Profilaxis Antibiótica</span>
-                  </label>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full">
-                    <input
-                      type="checkbox"
-                      checked={medActivo}
-                      onChange={(e) => setMedActivo(e.target.checked)}
-                      className="w-4 h-4 accent-primary rounded"
-                    />
-                    <span>Habilitada en Ficha</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  className={`w-full sm:w-auto px-6 py-3 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                    isMedFormComplete
-                      ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
-                      : 'bg-primary hover:bg-dental-deep-navy shadow-md'
-                  }`}
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Categoría *
+                </label>
+                <select
+                  value={medCategoria}
+                  onChange={(e) =>
+                    setMedCategoria(e.target.value as CondicionMedicaItem['categoria'])
+                  }
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(medCategoria))}`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {isMedFormComplete ? 'verified' : 'add_circle'}
-                  </span>
-                  <span>
-                    {isMedFormComplete ? 'Confirmar Condición Médica' : 'Registrar Condición Médica'}
-                  </span>
-                </button>
+                  {CATEGORIAS_CONDICION.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </form>
-          )}
-        </section>
-      )}
+
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Nivel de Riesgo *
+                </label>
+                <select
+                  value={medNivelRiesgo}
+                  onChange={(e) =>
+                    setMedNivelRiesgo(e.target.value as CondicionMedicaItem['nivelRiesgo'])
+                  }
+                  className={`h-10 ${getIlluminatedFieldClass(Boolean(medNivelRiesgo))}`}
+                >
+                  {NIVELES_RIESGO.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Manifestación Bucal & Signos Odontológicos *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={medManifestacionBucal}
+                  onChange={(e) => setMedManifestacionBucal(e.target.value)}
+                  placeholder="Ej. Xerostomía, hiperplasia gingival, sangrado fácil, aftas..."
+                  className={`py-2 resize-none ${getIlluminatedFieldClass(
+                    medManifestacionBucal.trim().length > 0
+                  )}`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Protocolo Dental & Consideraciones Clínicas *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={medProtocoloDental}
+                  onChange={(e) => setMedProtocoloDental(e.target.value)}
+                  placeholder="Ej. Toma de presión previa, citas cortas matutinas, hemostáticos locales..."
+                  className={`py-2 resize-none ${getIlluminatedFieldClass(
+                    medProtocoloDental.trim().length > 0
+                  )}`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-6">
+                <label className="text-[10px] font-bold text-dental-deep-navy uppercase block mb-1">
+                  Anestésicos o Fármacos Contraindicados (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={medAnestesicoContraindicado}
+                  onChange={(e) => setMedAnestesicoContraindicado(e.target.value)}
+                  placeholder="Ej. Evitar epinefrina/norepinefrina, mepivacaína recomendada..."
+                  className={`h-10 ${getIlluminatedFieldClass(
+                    medAnestesicoContraindicado.trim().length > 0
+                  )}`}
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full">
+                  <input
+                    type="checkbox"
+                    checked={medRequiereProfilaxis}
+                    onChange={(e) => setMedRequiereProfilaxis(e.target.checked)}
+                    className="w-4 h-4 accent-status-danger rounded"
+                  />
+                  <span>Profilaxis Antibiótica</span>
+                </label>
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-dental-deep-navy bg-white px-3 h-10 rounded-xl border border-border-subtle w-full">
+                  <input
+                    type="checkbox"
+                    checked={medActivo}
+                    onChange={(e) => setMedActivo(e.target.checked)}
+                    className="w-4 h-4 accent-primary rounded"
+                  />
+                  <span>Habilitada en Ficha</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl text-white font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
+                  isMedFormComplete
+                    ? 'bg-status-success hover:bg-dental-deep-navy shadow-[0_0_20px_rgba(27,109,59,0.4)] ring-2 ring-status-success/40'
+                    : 'bg-primary hover:bg-dental-deep-navy shadow-md'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {isMedFormComplete ? 'verified' : 'add_circle'}
+                </span>
+                <span>
+                  {editMedId ? 'Guardar Cambios' : isMedFormComplete ? 'Confirmar Condición Médica' : 'Registrar Condición Médica'}
+                </span>
+              </button>
+            </div>
+          </form>
+        );
+
+        return (
+          <section className="bg-surface-clean-white rounded-3xl p-4 sm:p-5 shadow-soft-elevated border border-border-subtle flex flex-col gap-4 relative overflow-hidden animate-in fade-in duration-300">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-status-danger via-primary to-dental-deep-navy" />
+
+            {/* Header Módulo 06 • Condiciones Médicas CIE */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">health_and_safety</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-container text-dental-deep-navy border border-border-subtle">
+                      Módulo 06
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                      Bioseguridad & Anamnesis
+                    </span>
+                    <span className="text-xs text-secondary font-medium">
+                      • {condicionesMedicas.length} condiciones registradas ({condicionesCriticasCount} alertas de riesgo)
+                    </span>
+                  </div>
+                  <h2 className="font-display font-black text-base sm:text-lg text-dental-deep-navy mt-1 tracking-tight">
+                    Catálogo de Condiciones Médicas Especiales (CIE)
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {showMedForm && !editMedId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormCondicionMedica();
+                      setShowMedForm(false);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white text-xs font-bold border border-border-subtle active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">visibility_off</span>
+                    <span>Ocultar formulario</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      limpiarFormCondicionMedica();
+                      setShowMedForm(true);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-dental-deep-navy text-white text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add_moderator</span>
+                    <span>Nueva Condición</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Formulario Nueva Condición arriba */}
+            {showMedForm && !editMedId && renderMedFormContent()}
+
+            {/* Controles de Búsqueda y Filtros de Riesgo */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <span className="material-symbols-outlined text-[18px] text-secondary absolute left-3 top-2.5">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={busquedaMed}
+                  onChange={(e) => setBusquedaMed(e.target.value)}
+                  placeholder="Buscar por CIE-10, patología, anestésico o protocolo..."
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-surface-subtle-ice border border-border-subtle focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-dental-deep-navy"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Filtro por Nivel de Riesgo */}
+                <div className="flex items-center gap-1 bg-surface-subtle-ice p-1 rounded-2xl border border-border-subtle">
+                  <span className="text-[10px] font-bold text-secondary px-2">Riesgo:</span>
+                  {['Todos', ...NIVELES_RIESGO].map((r) => {
+                    const active = filtroRiesgoMed === r;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setFiltroRiesgoMed(r)}
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold transition-all active:scale-95 ${
+                          active
+                            ? 'bg-dental-deep-navy text-white shadow-sm'
+                            : 'text-secondary hover:text-dental-deep-navy'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Filtro por Categoría */}
+                <select
+                  value={filtroCategoriaMed}
+                  onChange={(e) => setFiltroCategoriaMed(e.target.value)}
+                  className="h-8 px-2 rounded-xl text-xs font-bold text-dental-deep-navy bg-surface-subtle-ice border border-border-subtle outline-none"
+                >
+                  <option value="Todas">Todas las Especialidades</option>
+                  {CATEGORIAS_CONDICION.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Lista de Condiciones Médicas Registradas (Tarjetas con Formulario Debajo) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[11px] font-bold text-secondary px-1">
+                <span>CATÁLOGO CLÍNICO ({condicionesFiltradas.length} encontradas)</span>
+                <span>Pulsa Modificar para desplegar el formulario debajo de la condición</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[38rem] overflow-y-auto pr-1">
+                {condicionesFiltradas.map((cond) => {
+                  const isEditingThis = showMedForm && editMedId === cond.id;
+
+                  return (
+                    <div
+                      key={cond.id}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                        isEditingThis
+                          ? 'col-span-full bg-surface-container border-rose-500 ring-2 ring-rose-400/30 shadow-md'
+                          : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      }`}
+                    >
+                      <div>
+                        {/* Cabecera de la Condición */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded-md bg-dental-deep-navy text-white font-mono text-[11px] font-black tracking-wide">
+                              {cond.codigoCie}
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${getRiesgoBadgeClass(
+                                cond.nivelRiesgo
+                              )}`}
+                            >
+                              Riesgo {cond.nivelRiesgo}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-surface-container text-dental-deep-navy font-bold text-[10px]">
+                              {cond.categoria}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCondicionActiva(cond)}
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                              cond.activo
+                                ? 'bg-status-success/15 text-status-success'
+                                : 'bg-secondary/15 text-secondary'
+                            }`}
+                          >
+                            {cond.activo ? 'Activa' : 'Inactiva'}
+                          </button>
+                        </div>
+
+                        {/* Nombre Principal */}
+                        <h3 className="font-display font-extrabold text-sm sm:text-base text-dental-deep-navy mt-2">
+                          {cond.nombre}
+                        </h3>
+
+                        {/* Alerta de Profilaxis Antibiótica Previa */}
+                        {cond.requiereProfilaxisAntibiotica && (
+                          <div className="mt-2 px-2.5 py-1.5 rounded-xl bg-status-danger/10 border border-status-danger/30 flex items-center gap-2 text-status-danger">
+                            <span className="material-symbols-outlined text-[16px] shrink-0">
+                              vaccines
+                            </span>
+                            <span className="text-[11px] font-black">
+                              ¡Requiere Profilaxis Antibiótica Previa al Procedimiento!
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Manifestación Bucal */}
+                        <div className="mt-2.5 bg-white p-2.5 rounded-xl border border-border-subtle/80">
+                          <div className="flex items-center gap-1.5 text-primary text-[11px] font-bold">
+                            <span className="material-symbols-outlined text-[15px]">dentistry</span>
+                            <span>Manifestación Bucal / Signos:</span>
+                          </div>
+                          <p className="text-xs text-secondary mt-1 leading-relaxed">
+                            {cond.manifestacionBucal}
+                          </p>
+                        </div>
+
+                        {/* Protocolo Dental en Sillón */}
+                        <div className="mt-2 bg-white p-2.5 rounded-xl border border-border-subtle/80">
+                          <div className="flex items-center gap-1.5 text-dental-deep-navy text-[11px] font-bold">
+                            <span className="material-symbols-outlined text-[15px] text-status-success">
+                              assignment_turned_in
+                            </span>
+                            <span>Protocolo Clínico & Recomendación:</span>
+                          </div>
+                          <p className="text-xs text-dental-deep-navy font-medium mt-1 leading-relaxed">
+                            {cond.protocoloDental}
+                          </p>
+                        </div>
+
+                        {/* Advertencia Anestésica */}
+                        {cond.anestesicoContraindicado && (
+                          <div className="mt-2 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
+                            <div className="flex items-center gap-1.5 text-amber-900 text-[11px] font-extrabold">
+                              <span className="material-symbols-outlined text-[15px] text-amber-600">
+                                warning
+                              </span>
+                              <span>Anestésico / Fármaco Contraindicado:</span>
+                            </div>
+                            <p className="text-xs text-amber-950 font-semibold mt-1">
+                              {cond.anestesicoContraindicado}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Barra de Acciones */}
+                      <div className="flex items-center justify-between pt-3 border-t border-border-subtle/70">
+                        <span className="text-[10px] font-mono text-secondary">
+                          ID: {cond.id}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleEditarCondicionMedica(cond)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                              isEditingThis
+                                ? 'bg-rose-600 text-white shadow-sm'
+                                : 'bg-surface-container text-dental-deep-navy hover:bg-primary hover:text-white'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {isEditingThis ? 'expand_less' : 'edit'}
+                            </span>
+                            <span>{isEditingThis ? 'Ocultar' : 'Modificar'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarCondicionMedica(cond.id, cond.nombre)}
+                            className="px-2.5 py-1 rounded-lg bg-status-danger/10 text-status-danger hover:bg-status-danger hover:text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">delete</span>
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Formulario desplegado inmediatamente debajo de la sub-tarjeta */}
+                      {isEditingThis && renderMedFormContent()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* =====================================================================
           TARJETA 07: CIERRES DIARIOS DE CAJA (HISTÓRICO D1)
