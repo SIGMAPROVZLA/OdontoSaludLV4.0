@@ -16,6 +16,7 @@ import {
   normalizarDisponibilidadOdontologo,
   normalizarListaOdontologos,
 } from '../../hooks/useOdontologos';
+import { compressImage } from '../../utils/imageCompression';
 
 interface DoctorOption {
   id: string;
@@ -220,20 +221,39 @@ const INITIAL_CONDICIONES_FALLBACK: CondicionMedicaItem[] = [
   },
 ];
 
-const getDoctorAvatar = (nombre: string, box: number) => {
-  const n = nombre.toLowerCase();
-  if (n.includes('domínguez') || n.includes('maría') || n.includes('alejandra')) {
+export const getDoctorAvatar = (nombre: string = '', box: number = 1): string => {
+  const n = (nombre || '').toLowerCase();
+  if (n.includes('domínguez') || n.includes('dominguez') || n.includes('maría') || n.includes('maria') || n.includes('alejandra')) {
     return 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=200&q=80';
+  }
+  if (n.includes('julianny') || n.includes('rebolledo') || n.includes('ramos')) {
+    return 'https://images.unsplash.com/photo-1594824813637-4560767733a1?auto=format&fit=crop&w=200&q=80';
+  }
+  if (n.includes('sandra') || n.includes('carreño') || n.includes('carreno')) {
+    return 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80';
+  }
+  if (n.includes('carmen') || n.includes('silva')) {
+    return 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=200&q=80';
+  }
+  if (n.includes('valeria') || n.includes('hernández') || n.includes('hernandez')) {
+    return 'https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?auto=format&fit=crop&w=200&q=80';
   }
   if (n.includes('mendoza') || n.includes('carlos') || n.includes('rivas')) {
     return 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80';
   }
-  if (n.includes('páez') || n.includes('valentina') || n.includes('gómez')) {
+  if (n.includes('páez') || n.includes('paez') || n.includes('valentina') || n.includes('gómez') || n.includes('gomez')) {
     return 'https://images.unsplash.com/photo-1594824813637-4560767733a1?auto=format&fit=crop&w=200&q=80';
   }
   return box % 2 === 0
     ? 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80'
     : 'https://images.unsplash.com/photo-1594824813637-4560767733a1?auto=format&fit=crop&w=200&q=80';
+};
+
+export const cleanAvatar = (rawAvatar?: string, nombre: string = '', box: number = 1): string => {
+  if (rawAvatar && (rawAvatar.startsWith('http://') || rawAvatar.startsWith('https://') || rawAvatar.startsWith('data:image/'))) {
+    return rawAvatar;
+  }
+  return getDoctorAvatar(nombre, box);
 };
 
 export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab }) => {
@@ -416,7 +436,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       titulo: odo.nombres.toLowerCase().includes('domínguez') ? 'Directora Clínica' : 'Especialista',
       especialidad: odo.especialidad,
       box: odo.boxAsignado || 1,
-      avatar: odo.avatar || getDoctorAvatar(odo.nombres, odo.boxAsignado || 1),
+      avatar: cleanAvatar(odo.avatar, odo.nombres, odo.boxAsignado || 1),
       turno: odo.turno,
       estado: odo.estado,
       esTitular: odo.nombres.toLowerCase().includes('domínguez'),
@@ -444,6 +464,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const [email, setEmail] = useState<string>('');
   const [motivo, setMotivo] = useState<string>('');
   const [selectedCondicionId, setSelectedCondicionId] = useState<string>('ninguna');
+  const [fotoSelfie, setFotoSelfie] = useState<string>('');
+  const [isCompressingSelfie, setIsCompressingSelfie] = useState<boolean>(false);
 
   // Estado del flujo secuencial (inicia en 'sede' como Tarjeta Nro 1)
   const [openStep, setOpenStep] = useState<BookingStep | null>('sede');
@@ -623,6 +645,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       setSelectedCondicionId((pacienteEncontrado as any).condicionMedicaId);
     }
 
+    // Cargar foto selfie o avatar si ya está registrada en el expediente o en caché local
+    const savedAvatar =
+      pacienteEncontrado.avatarUrl ||
+      localStorage.getItem(`paciente_avatar_${rawCedula}`) ||
+      localStorage.getItem(`paciente_avatar_${authCedulaTipo}-${authCedulaInput.trim()}`) ||
+      '';
+    setFotoSelfie(savedAvatar || '');
+
     setShowAuthModal(false);
     setOpenStep('sede');
   };
@@ -637,6 +667,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     setSexo(nuevoSexo);
     setFechaNacimiento(nuevoFechaNacimiento);
     setTelefono(nuevoTelefono.trim());
+
+    const storedSelfie = localStorage.getItem(`paciente_avatar_${fullCedula}`);
+    setFotoSelfie(storedSelfie || '');
 
     const nuevoPac: PacienteItem = {
       id: `pac-${Date.now()}`,
@@ -653,6 +686,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       fechaCita: 'Primera Consulta',
       horaInicio: '09:00 AM',
       doctorNombre: 'Por Asignar',
+      avatarUrl: storedSelfie || undefined,
     };
 
     setPacienteEncontrado(nuevoPac);
@@ -676,7 +710,33 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     setOpenStep('sede');
   };
 
-  // Helper para persistir todos los datos personales y médicos (sexo, nacimiento, email, patología) tanto en D1 como local
+  // Handler para captar y comprimir la foto selfie del paciente con HTML5 Canvas en cliente
+  const handleSubirSelfie = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsCompressingSelfie(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.82 });
+      setFotoSelfie(compressed);
+      const fullCed = `${cedulaTipo}-${cedulaNumero.trim()}`;
+      if (cedulaNumero.trim().length > 2) {
+        localStorage.setItem(`paciente_avatar_${fullCed}`, compressed);
+      }
+    } catch (err) {
+      console.error('Error al comprimir foto selfie:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = reader.result as string;
+        setFotoSelfie(res);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsCompressingSelfie(false);
+      e.target.value = '';
+    }
+  };
+
+  // Helper para persistir todos los datos personales y médicos (sexo, nacimiento, email, patología, selfie) tanto en D1 como local
   const persistirDatosPaciente = async (override?: Partial<PacienteItem>) => {
     const fullCedula = `${cedulaTipo}-${cedulaNumero.trim()}`;
     const cleanNum = cedulaNumero.trim();
@@ -700,12 +760,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       fechaNacimiento: finalFechaNacimiento,
       condicionMedicaId: finalCondicion,
       motivo: motivo.trim() || treatment || 'Evaluación Odontológica',
-      fechaCita: selectedDate || 'Primera Consulta',
+      fechaCita: selectedDate || new Date().toISOString().split('T')[0],
       horaInicio: selectedSlot || '09:00 AM',
       doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por Asignar',
       sedeId: selectedSedeId || sedeId || 'victoria',
       estado: 'confirmada',
       esUrgencia: treatment.toLowerCase().includes('urgencia') || treatment.toLowerCase().includes('dolor'),
+      avatarUrl: fotoSelfie || undefined,
       ...override,
     };
 
@@ -816,7 +877,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   // Vista y Navegación de Fecha (Semanal de 6 días o Mensual con navegación de meses)
   const [dateViewMode, setDateViewMode] = useState<'semanal' | 'mensual'>('semanal');
   const [weekOffset, setWeekOffset] = useState<number>(0);
-  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => new Date(2024, 9, 24)); // Octubre 2024 como referencia clínica
+  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => new Date()); // Fecha actual contemporánea del usuario
 
   // Detección de duración según tratamiento seleccionado (o 45 min por defecto)
   const selectedTreatmentObj = treatments.find(
@@ -905,23 +966,32 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const mananaHabilitado = turnoDoctorEnData === 'Completo' || turnoDoctorEnData === 'Mañana';
   const tardeHabilitado = turnoDoctorEnData === 'Completo' || turnoDoctorEnData === 'Tarde';
 
-  // Obtiene los 6 días hábiles de la semana activa (LUN a SÁB) filtrados por disponibilidad en #Data
+  // Obtiene los 6 días hábiles de la semana activa (LUN a SÁB) filtrados por disponibilidad en #Data y fecha actual
   const getSemana6Dias = () => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
     const base = new Date(currentMonthDate);
     base.setDate(base.getDate() + weekOffset * 7);
 
-    const day = base.getDay();
-    const diff = base.getDate() - day + (day === 0 ? -6 : 1);
+    const day = base.getDay(); // 0: Dom, 1: Lun, 2: Mar, 3: Mié, 4: Jue, 5: Vie, 6: Sáb
+    // Si hoy es domingo (0) y weekOffset === 0, mostramos la semana entrante que comienza mañana lunes (+1)
+    const diff = base.getDate() - day + (day === 0 ? 1 : 1);
     const lunes = new Date(base.getFullYear(), base.getMonth(), diff);
+    lunes.setHours(0, 0, 0, 0);
 
     const semana = [];
     for (let i = 0; i < 6; i++) {
       const d = new Date(lunes);
       d.setDate(lunes.getDate() + i);
+      d.setHours(0, 0, 0, 0);
 
       const diaSemana = DIAS_SEMANA_6[i];
-      const disponibleEnSede = diasPermitidosEnSede.includes(diaSemana);
-      const atiendeEnOtraSede = !disponibleEnSede && diasDoctorEnOtraSede.includes(diaSemana);
+      const esPasado = d < hoy;
+      const esHoy = d.getTime() === hoy.getTime();
+
+      const disponibleEnSede = !esPasado && diasPermitidosEnSede.includes(diaSemana);
+      const atiendeEnOtraSede = !disponibleEnSede && !esPasado && diasDoctorEnOtraSede.includes(diaSemana);
 
       const diaNum = d.getDate();
       const cuposOcupados = [5, 3, 7, 2, 6, 4][(diaNum + i) % 6];
@@ -929,9 +999,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       const porcentajeOcupacion = disponibleEnSede ? Math.round((cuposOcupados / 8) * 100) : 100;
 
       let estado: 'disponible' | 'moderado' | 'critico' | 'cerrado' = 'disponible';
-      if (!disponibleEnSede) estado = 'cerrado';
+      if (!disponibleEnSede || esPasado) estado = 'cerrado';
       else if (cuposLibres === 1) estado = 'critico';
       else if (cuposLibres <= 3) estado = 'moderado';
+
+      const isoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
 
       semana.push({
         dateObj: d,
@@ -939,10 +1011,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         numero: diaNum < 10 ? `0${diaNum}` : `${diaNum}`,
         mesCorto: MESES_ABR[d.getMonth()],
         fullString: `${diaSemana} ${diaNum} ${MESES_ABR[d.getMonth()]}`,
+        isoDate,
         cuposLibres,
         cuposOcupados,
         porcentajeOcupacion,
         estado,
+        esPasado,
+        esHoy,
         noDisponibleEnSede: !disponibleEnSede,
         atiendeEnOtraSede,
       });
@@ -952,6 +1027,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
   // Obtiene la matriz completa del mes con indicador de cupos filtrada por disponibilidad en #Data
   const getDiasDelMes = () => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
     const year = currentMonthDate.getFullYear();
     const month = currentMonthDate.getMonth();
 
@@ -969,26 +1047,31 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
     for (let d = 1; d <= diasEnMes; d++) {
       const dateObj = new Date(year, month, d);
+      dateObj.setHours(0, 0, 0, 0);
       const dayOfWeek = dateObj.getDay();
       const esDomingo = dayOfWeek === 0;
+      const esPasado = dateObj < hoy;
+      const esHoy = dateObj.getTime() === hoy.getTime();
 
       const diaSemanaStr = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'][dayOfWeek];
       const disponibleEnSede =
-        !esDomingo && diasPermitidosEnSede.includes(diaSemanaStr as DiaSemanaClinico);
+        !esDomingo && !esPasado && diasPermitidosEnSede.includes(diaSemanaStr as DiaSemanaClinico);
       const atiendeEnOtraSede =
         !esDomingo &&
         !disponibleEnSede &&
+        !esPasado &&
         diasDoctorEnOtraSede.includes(diaSemanaStr as DiaSemanaClinico);
 
       const mesCorto = MESES_ABR[month];
       const fullString = `${diaSemanaStr} ${d} ${mesCorto}`;
+      const isoDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
       const cuposOcupados = [5, 3, 7, 2, 6, 4][(d + dayOfWeek) % 6];
       const cuposLibres = disponibleEnSede ? Math.max(1, 8 - cuposOcupados) : 0;
       const porcentajeOcupacion = disponibleEnSede ? Math.round((cuposOcupados / 8) * 100) : 100;
 
       let estado: 'disponible' | 'moderado' | 'critico' | 'cerrado' = 'disponible';
-      if (esDomingo || !disponibleEnSede) estado = 'cerrado';
+      if (esDomingo || !disponibleEnSede || esPasado) estado = 'cerrado';
       else if (cuposLibres === 1) estado = 'critico';
       else if (cuposLibres <= 3) estado = 'moderado';
 
@@ -999,8 +1082,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         diaSemana: diaSemanaStr,
         mesCorto,
         fullString,
+        isoDate,
         esDomingo,
-        noDisponibleEnSede: !esDomingo && !disponibleEnSede,
+        esPasado,
+        esHoy,
+        noDisponibleEnSede: !disponibleEnSede,
         atiendeEnOtraSede,
         cuposLibres,
         cuposOcupados,
@@ -1012,8 +1098,26 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     return celdas;
   };
 
+  const puedeIrMesAnterior = (() => {
+    const hoy = new Date();
+    return (
+      currentMonthDate.getFullYear() > hoy.getFullYear() ||
+      (currentMonthDate.getFullYear() === hoy.getFullYear() && currentMonthDate.getMonth() > hoy.getMonth())
+    );
+  })();
+
   const irMesAnterior = () => {
-    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    const hoy = new Date();
+    setCurrentMonthDate((prev) => {
+      const nuevo = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
+      if (
+        nuevo.getFullYear() < hoy.getFullYear() ||
+        (nuevo.getFullYear() === hoy.getFullYear() && nuevo.getMonth() < hoy.getMonth())
+      ) {
+        return prev;
+      }
+      return nuevo;
+    });
   };
 
   const irMesSiguiente = () => {
@@ -1120,10 +1224,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       pacienteEmail: email,
       pacienteSexo: sexo,
       pacienteFechaNacimiento: fechaNacimiento,
+      pacienteAvatar: fotoSelfie || undefined,
       condicionMedicaId: selectedCondicionId,
       doctorNombre: selectedDoctor ? selectedDoctor.nombre : 'Por asignar',
       boxNumero: selectedDoctor ? selectedDoctor.box : 1,
-      fechaCita: selectedDate || '2024-10-24',
+      fechaCita: selectedDate || new Date().toISOString().split('T')[0],
       horaInicio: selectedSlot || '09:00 AM',
       motivo: motivoCompleto,
       estado: 'pendiente',
@@ -1581,8 +1686,16 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             {/* TABLA / TARJETA CLÍNICA DE DATOS 100% LEGIBLE Y ESTRUCTURADA */}
             <div className="w-full bg-[#FAF8FB] rounded-2xl border border-border-subtle/80 p-3.5 sm:p-4 text-left divide-y divide-border-subtle/60 space-y-2.5">
               {/* Paciente */}
-              <div className="flex items-start gap-3 pt-0 pb-1">
-                <span className="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">person</span>
+              <div className="flex items-center gap-3 pt-0 pb-1">
+                {fotoSelfie ? (
+                  <img
+                    src={fotoSelfie}
+                    alt={nombres}
+                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-primary/25 shrink-0 shadow-xs"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">person</span>
+                )}
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-secondary block">Paciente</span>
                   <span className="text-sm font-bold text-dental-deep-navy leading-snug block">{nombres}</span>
@@ -1937,13 +2050,21 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             Selecciona el profesional para tu consulta. Al tocar su tarjeta, se guardará y se desplegará el tipo de tratamiento.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {doctoresEmpadronados.map((doc) => {
               const isSelected = selectedDoctor?.id === doc.id;
               const diasEnSedeActiva =
                 sedeEfectiva === 'tovar' ? doc.diasTovar || [] : doc.diasVictoria || [];
               const diasEnOtraSede =
                 sedeEfectiva === 'tovar' ? doc.diasVictoria || [] : doc.diasTovar || [];
+
+              const horarioTurnoTexto =
+                doc.turno === 'Mañana'
+                  ? '🌅 08:30 AM – 12:30 PM'
+                  : doc.turno === 'Tarde'
+                  ? '🌇 01:15 PM – 05:00 PM'
+                  : '⭐ 08:30 AM – 05:00 PM';
+
               return (
                 <button
                   key={doc.id}
@@ -1955,36 +2076,49 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                       treatmentCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 80);
                   }}
-                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-all cursor-pointer active:scale-95 ${
+                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-3.5 transition-all cursor-pointer active:scale-95 relative overflow-hidden ${
                     isSelected
-                      ? 'bg-surface-container border-2 border-primary shadow-md ring-2 ring-primary/20'
-                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-surface-container'
+                      ? 'bg-surface-clean-white border-2 border-primary shadow-lg ring-4 ring-primary/15'
+                      : 'bg-surface-subtle-ice border-border-subtle hover:bg-white hover:border-primary/40 hover:shadow-sm'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
+                  {/* Etiqueta de Doctor Seleccionado */}
+                  {isSelected && (
+                    <span className="absolute top-0 right-0 w-16 h-16 pointer-events-none overflow-hidden">
+                      <span className="absolute transform rotate-45 bg-primary text-white text-[8.5px] font-black py-0.5 right-[-24px] top-[14px] w-[90px] text-center shadow-xs">
+                        ELEGIDO
+                      </span>
+                    </span>
+                  )}
+
+                  {/* Cabecera del Doctor con Avatar Protegido */}
+                  <div className="flex items-start gap-3">
                     <div className="relative shrink-0">
                       <img
-                        src={doc.avatar}
+                        src={cleanAvatar(doc.avatar, doc.nombre, doc.box)}
                         alt={doc.nombre}
-                        className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20 shadow-sm"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = getDoctorAvatar(doc.nombre, doc.box);
+                        }}
+                        className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20 shadow-sm bg-white"
                       />
                       <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-status-success ring-2 ring-white flex items-center justify-center">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                       </span>
                     </div>
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 pr-6">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[9px] font-extrabold uppercase">
+                        <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[9px] font-extrabold uppercase tracking-wide">
                           {doc.titulo}
                         </span>
                         {doc.sedeId === 'ambas' && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 text-[8.5px] font-black">
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[8.5px] font-black inline-flex items-center gap-0.5">
                             🏢🌲 2 Sedes
                           </span>
                         )}
                       </div>
-                      <h3 className="font-display font-bold text-xs sm:text-sm text-dental-deep-navy mt-1 truncate">
+                      <h3 className="font-display font-black text-xs sm:text-sm text-dental-deep-navy mt-1 leading-snug">
                         {doc.nombre}
                       </h3>
                       <p className="text-[11px] text-secondary truncate mt-0.5">
@@ -1993,38 +2127,89 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     </div>
                   </div>
 
-                  {/* Días de Atención en la Sede Elegida según #Data */}
-                  <div className="bg-white/85 rounded-xl p-2 border border-border-subtle/70 flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-[9.5px] font-extrabold text-dental-deep-navy">
-                      <span>
-                        {sedeEfectiva === 'tovar'
-                          ? '🌲 Días en Col. Tovar:'
-                          : '🏢 Días en La Victoria:'}
+                  {/* Disponibilidad Semanal Visual (Chips de los 6 Días Clínicos LUN a SÁB) */}
+                  <div className="bg-white rounded-xl p-2.5 border border-border-subtle/80 flex flex-col gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between text-[10.5px]">
+                      <span className="font-extrabold text-dental-deep-navy flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[15px] text-primary">event_available</span>
+                        <span>{sedeEfectiva === 'tovar' ? 'Colonia Tovar:' : 'La Victoria:'}</span>
                       </span>
-                      <span className="text-primary font-black">
-                        {diasEnSedeActiva.join(' · ') || 'Sin asignar'}
+                      <span className="text-[10px] font-bold text-secondary">
+                        {diasEnSedeActiva.length} {diasEnSedeActiva.length === 1 ? 'día' : 'días'} de guardia
                       </span>
                     </div>
-                    {diasEnOtraSede.length > 0 && (
-                      <div className="flex items-center justify-between text-[9px] text-secondary">
-                        <span>
-                          {sedeEfectiva === 'tovar'
-                            ? '🏢 En La Victoria:'
-                            : '🌲 En Col. Tovar:'}
-                        </span>
-                        <span className="font-semibold">{diasEnOtraSede.join(' · ')}</span>
+
+                    {/* Matriz de Chips Semanales */}
+                    <div className="grid grid-cols-6 gap-1">
+                      {DIAS_SEMANA_CLINICOS.map((dia) => {
+                        const enEstaSede = diasEnSedeActiva.includes(dia);
+                        const enOtra = !enEstaSede && diasEnOtraSede.includes(dia);
+
+                        return (
+                          <div
+                            key={dia}
+                            className={`py-1 rounded-lg text-center font-black text-[9.5px] transition-all flex flex-col items-center justify-center ${
+                              enEstaSede
+                                ? 'bg-primary text-white shadow-xs'
+                                : enOtra
+                                ? 'bg-amber-100/90 text-amber-900 border border-amber-300'
+                                : 'bg-slate-100 text-slate-350 opacity-40 line-through'
+                            }`}
+                            title={
+                              enEstaSede
+                                ? `Atiende en ${sedeEfectiva === 'tovar' ? 'Colonia Tovar' : 'La Victoria'}`
+                                : enOtra
+                                ? `Atiende en ${sedeEfectiva === 'tovar' ? 'La Victoria' : 'Colonia Tovar'}`
+                                : 'Sin guardia este día'
+                            }
+                          >
+                            <span>{dia}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Leyenda y Días Explícitos */}
+                    <div className="pt-1.5 border-t border-border-subtle/60 flex flex-col gap-1 text-[10px]">
+                      <div className="flex items-center justify-between text-dental-deep-navy">
+                        <span className="text-secondary font-medium">Días en sede activa:</span>
+                        <strong className="text-primary font-bold">
+                          {diasEnSedeActiva.join(' · ') || 'Sin guardia'}
+                        </strong>
                       </div>
-                    )}
+                      {diasEnOtraSede.length > 0 && (
+                        <div className="flex items-center justify-between text-[9.5px] text-amber-800">
+                          <span className="font-medium">
+                            {sedeEfectiva === 'tovar' ? '🏢 En La Victoria:' : '🌲 En Col. Tovar:'}
+                          </span>
+                          <span className="font-bold">{diasEnOtraSede.join(' · ')}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-border-subtle/80 text-[11px]">
-                    <span className="font-bold text-status-success flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-status-success" />
-                      Sillón Box 0{doc.box} • {doc.turno || 'Completo'}
+                  {/* Franja de Horario / Turno y Box Asignado */}
+                  <div className="flex items-center justify-between bg-surface-container/40 px-2.5 py-1.5 rounded-xl border border-border-subtle/60 text-[10.5px]">
+                    <span className="font-bold text-dental-deep-navy flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px] text-secondary">schedule</span>
+                      <span>{horarioTurnoTexto}</span>
                     </span>
-                    <span className="font-bold text-primary flex items-center gap-1">
-                      <span>Seleccionar</span>
-                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                    <span className="font-extrabold text-primary bg-white px-2 py-0.5 rounded-md border border-primary/20 shadow-2xs">
+                      Box 0{doc.box}
+                    </span>
+                  </div>
+
+                  {/* Botón de Selección Inferior */}
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <span className="text-[10px] font-bold text-status-success flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-status-success" />
+                      <span>{doc.turno || 'Jornada Completa'}</span>
+                    </span>
+                    <span className={`font-extrabold flex items-center gap-1 ${isSelected ? 'text-primary' : 'text-dental-deep-navy group-hover:text-primary'}`}>
+                      <span>{isSelected ? '✓ Seleccionado' : 'Seleccionar'}</span>
+                      <span className="material-symbols-outlined text-[14px]">
+                        {isSelected ? 'check' : 'arrow_forward'}
+                      </span>
                     </span>
                   </div>
                 </button>
@@ -2255,8 +2440,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 <div className="flex items-center justify-between bg-surface-subtle-ice px-3 py-2 rounded-2xl border border-border-subtle text-xs">
                   <button
                     type="button"
-                    onClick={() => setWeekOffset((prev) => prev - 1)}
-                    className="px-2.5 py-1 rounded-xl bg-white border border-border-subtle hover:bg-surface-container font-bold text-dental-deep-navy flex items-center gap-1 cursor-pointer transition-all active:scale-95 text-[11px] shadow-2xs"
+                    disabled={weekOffset <= 0}
+                    onClick={() => setWeekOffset((prev) => Math.max(0, prev - 1))}
+                    className={`px-2.5 py-1 rounded-xl border font-bold text-dental-deep-navy flex items-center gap-1 transition-all text-[11px] shadow-2xs ${
+                      weekOffset <= 0
+                        ? 'bg-slate-100 text-slate-350 border-slate-200 cursor-not-allowed opacity-50'
+                        : 'bg-white border-border-subtle hover:bg-surface-container active:scale-95 cursor-pointer'
+                    }`}
                   >
                     <span className="material-symbols-outlined text-[15px]">chevron_left</span>
                     <span>Anterior</span>
@@ -2265,7 +2455,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   <div className="text-center font-bold text-dental-deep-navy text-xs">
                     <span className="text-secondary text-[11px] font-normal mr-1">Rango Semanal:</span>
                     <strong className="text-dental-deep-navy">
-                      {semana6Dias[0]?.numero} {semana6Dias[0]?.mesCorto} — {semana6Dias[5]?.numero} {semana6Dias[5]?.mesCorto}
+                      {semana6Dias[0]?.numero} {semana6Dias[0]?.mesCorto} — {semana6Dias[5]?.numero} {semana6Dias[5]?.mesCorto} {semana6Dias[0]?.dateObj.getFullYear()}
                     </strong>
                   </div>
 
@@ -2295,15 +2485,18 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   {semana6Dias.map((d) => {
                     const isSelected =
                       !d.noDisponibleEnSede &&
+                      !d.esPasado &&
                       (selectedDate === d.fullString ||
                         (selectedDate.includes(d.numero) && selectedDate.includes(d.diaSemana)));
 
-                    if (d.noDisponibleEnSede) {
+                    if (d.noDisponibleEnSede || d.esPasado) {
                       return (
                         <div
                           key={d.fullString}
                           title={
-                            d.atiendeEnOtraSede
+                            d.esPasado
+                              ? 'Fecha pasada no disponible para reserva'
+                              : d.atiendeEnOtraSede
                               ? `El especialista atiende este día en ${
                                   sedeEfectiva === 'tovar' ? 'Sede La Victoria' : 'Sede Colonia Tovar'
                                 }`
@@ -2324,9 +2517,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                             </span>
                             <div className="w-full pt-1.5 border-t border-slate-200/80 mt-1 flex flex-col items-center gap-0.5">
                               <span className="text-[8px] sm:text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600 inline-flex items-center gap-0.5 leading-tight text-center">
-                                <span className="material-symbols-outlined text-[10px]">block</span>
+                                <span className="material-symbols-outlined text-[10px]">
+                                  {d.esPasado ? 'history' : 'block'}
+                                </span>
                                 <span className="truncate">
-                                  {d.atiendeEnOtraSede
+                                  {d.esPasado
+                                    ? 'Pasado'
+                                    : d.atiendeEnOtraSede
                                     ? sedeEfectiva === 'tovar'
                                       ? 'En La Victoria'
                                       : 'En Col. Tovar'
@@ -2334,7 +2531,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                                 </span>
                               </span>
                               <span className="text-[8px] font-bold text-slate-400">
-                                Según #Data
+                                {d.esPasado ? 'No disponible' : 'Según #Data'}
                               </span>
                             </div>
                           </div>
@@ -2366,13 +2563,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
                         {/* Contenido de alta legibilidad */}
                         <div className="w-full pl-2.5 sm:pl-3 flex flex-col items-center justify-center">
-                          <span
-                            className={`text-[11px] sm:text-xs font-black tracking-wider uppercase ${
-                              isSelected ? 'text-primary' : 'text-secondary'
-                            }`}
-                          >
-                            {d.diaSemana}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`text-[11px] sm:text-xs font-black tracking-wider uppercase ${
+                                isSelected ? 'text-primary' : 'text-secondary'
+                              }`}
+                            >
+                              {d.diaSemana}
+                            </span>
+                            {d.esHoy && (
+                              <span className="text-[7.5px] font-black uppercase px-1 py-0.2 rounded-full bg-status-success text-white">
+                                Hoy
+                              </span>
+                            )}
+                          </div>
                           <span
                             className={`text-2xl sm:text-3xl font-black tabular-nums tracking-tight leading-none my-0.5 ${
                               isSelected ? 'text-white' : 'text-dental-deep-navy'
@@ -2431,9 +2635,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
+                    disabled={!puedeIrMesAnterior}
                     onClick={irMesAnterior}
-                    className="w-9 h-9 rounded-xl bg-white border border-border-subtle flex items-center justify-center text-dental-deep-navy hover:bg-surface-container font-bold active:scale-95 cursor-pointer shadow-xs transition-all"
-                    title="Mes Anterior"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold transition-all ${
+                      !puedeIrMesAnterior
+                        ? 'bg-slate-100 text-slate-350 border-slate-200 cursor-not-allowed opacity-40'
+                        : 'bg-white border-border-subtle text-dental-deep-navy hover:bg-surface-container active:scale-95 cursor-pointer shadow-xs'
+                    }`}
+                    title={puedeIrMesAnterior ? 'Mes Anterior' : 'Meses anteriores no disponibles'}
                   >
                     <span className="material-symbols-outlined text-[19px]">chevron_left</span>
                   </button>
@@ -2473,7 +2682,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                   </span>
                   <span className="inline-flex items-center gap-1 font-semibold text-slate-500">
                     <span className="w-2 h-2 rounded-full bg-slate-300" />
-                    Domingo (Cerrado)
+                    Domingo / Pasado
                   </span>
                 </div>
 
@@ -2494,16 +2703,19 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
 
                     const isSelected =
                       !c.noDisponibleEnSede &&
+                      !c.esPasado &&
                       (selectedDate === c.fullString ||
                         (selectedDate.includes(c.numero) && selectedDate.includes(c.diaSemana)));
 
-                    if (c.esDomingo || c.noDisponibleEnSede) {
+                    if (c.esDomingo || c.noDisponibleEnSede || c.esPasado) {
                       return (
                         <div
                           key={c.id}
                           className="h-12 rounded-xl bg-slate-100/70 border border-slate-200/50 flex flex-col items-center justify-center text-slate-400 select-none"
                           title={
-                            c.esDomingo
+                            c.esPasado
+                              ? 'Fecha pasada'
+                              : c.esDomingo
                               ? 'Domingo cerrado'
                               : c.atiendeEnOtraSede
                               ? `Atiende en ${sedeEfectiva === 'tovar' ? 'La Victoria' : 'Colonia Tovar'}`
@@ -2514,7 +2726,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                             {c.numero}
                           </span>
                           <span className="text-[7.5px] font-semibold truncate max-w-full px-1">
-                            {c.esDomingo
+                            {c.esPasado
+                              ? 'Pasado'
+                              : c.esDomingo
                               ? 'Cerrado'
                               : c.atiendeEnOtraSede
                               ? sedeEfectiva === 'tovar'
@@ -2610,10 +2824,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                       if (!mananaHabilitado) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
-                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede);
-                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'JUE 24 Oct');
+                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede && !d.esPasado);
+                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'Fecha seleccionada');
                       }
-                      if (pacienteEncontrado && nombres.trim()) {
+                      const debeCaptarSelfie = !fotoSelfie;
+                      if (pacienteEncontrado && nombres.trim() && !debeCaptarSelfie) {
                         setOpenStep(null);
                         setTimeout(() => {
                           summaryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2690,10 +2905,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                       if (!tardeHabilitado) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
-                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede);
-                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'JUE 24 Oct');
+                        const disp = semana6Dias.find((d) => !d.noDisponibleEnSede && !d.esPasado);
+                        setSelectedDate(disp?.fullString || semana6Dias[0]?.fullString || 'Fecha seleccionada');
                       }
-                      if (pacienteEncontrado && nombres.trim()) {
+                      const debeCaptarSelfie = !fotoSelfie;
+                      if (pacienteEncontrado && nombres.trim() && !debeCaptarSelfie) {
                         setOpenStep(null);
                         setTimeout(() => {
                           summaryCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2798,6 +3014,134 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
               </div>
             </div>
           )}
+
+          {/* Notificación amigable si ya tiene data cargada pero falta la imagen selfie */}
+          {(pacienteEncontrado || nombres.trim().length > 2) && !fotoSelfie && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 flex items-start gap-3 text-xs text-amber-950 shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="material-symbols-outlined text-[22px]">add_a_photo</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold text-amber-950 text-xs">
+                    Expediente Activo • ¡Falta tu Foto Selfie!
+                  </span>
+                  <span className="text-[9px] bg-amber-200/80 text-amber-900 font-extrabold px-2 py-0.5 rounded-full">
+                    Recomendado para Ficha Clínica
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-snug mt-1">
+                  Hola <strong className="text-amber-950">{nombres.split(' ')[0] || 'Estimado Paciente'}</strong>, tus datos están precargados pero aún no cuentas con foto selfie de perfil. Tómate una selfie rápida o sube una imagen para que el odontólogo te reconozca inmediatamente al pasar al Box clínico.
+                </p>
+                <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                  <label
+                    htmlFor="input-selfie-paciente-camera"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] rounded-xl cursor-pointer shadow-xs active:scale-95 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">photo_camera</span>
+                    <span>Tomar Selfie Ahora</span>
+                  </label>
+                  <label
+                    htmlFor="input-selfie-paciente-file"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] rounded-xl cursor-pointer shadow-2xs active:scale-95 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">upload</span>
+                    <span>Elegir de Galería</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tarjeta de Captación y Previsualización de Foto Selfie del Paciente */}
+          <div className="p-4 rounded-2xl bg-surface-subtle-ice border border-border-subtle flex flex-col sm:flex-row items-center gap-4 shadow-2xs">
+            <div className="relative shrink-0">
+              {fotoSelfie ? (
+                <div className="relative">
+                  <img
+                    src={fotoSelfie}
+                    alt={nombres || 'Selfie Paciente'}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-primary/20 shadow-md"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFotoSelfie('');
+                      const fullCed = `${cedulaTipo}-${cedulaNumero.trim()}`;
+                      if (fullCed.length > 2) {
+                        localStorage.removeItem(`paciente_avatar_${fullCed}`);
+                      }
+                    }}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-xs hover:bg-rose-600 active:scale-90 transition-all cursor-pointer"
+                    title="Eliminar selfie"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 border-dashed border-primary/40 bg-white flex flex-col items-center justify-center text-secondary gap-1 shadow-inner">
+                  <span className="material-symbols-outlined text-[30px] text-primary">face</span>
+                  <span className="text-[9px] font-extrabold text-center px-1 text-dental-deep-navy">Sin Selfie</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0 text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                <h4 className="font-display font-extrabold text-xs sm:text-sm text-dental-deep-navy">
+                  Foto Selfie del Paciente
+                </h4>
+                {fotoSelfie ? (
+                  <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                    Selfie Vinculada
+                  </span>
+                ) : (
+                  <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    Pendiente de Captura
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-secondary mt-1 leading-snug">
+                {fotoSelfie
+                  ? 'Foto procesada y optimizada en tu navegador. Aparecerá en tu ficha clínica y expediente digital.'
+                  : 'Tómate una selfie rápida o selecciona una foto desde tu galería para registrar tu rostro en el expediente digital.'}
+              </p>
+
+              {/* Botones de Acción */}
+              <div className="mt-2.5 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                <input
+                  type="file"
+                  id="input-selfie-paciente-camera"
+                  accept="image/*"
+                  capture="user"
+                  onChange={handleSubirSelfie}
+                  className="hidden"
+                />
+                <input
+                  type="file"
+                  id="input-selfie-paciente-file"
+                  accept="image/*"
+                  onChange={handleSubirSelfie}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="input-selfie-paciente-camera"
+                  className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-[11px] font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[15px]">photo_camera</span>
+                  <span>{isCompressingSelfie ? 'Optimizando...' : fotoSelfie ? 'Cambiar Selfie' : 'Tomar Selfie'}</span>
+                </label>
+                <label
+                  htmlFor="input-selfie-paciente-file"
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-surface-container text-dental-deep-navy border border-border-subtle text-[11px] font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[15px]">upload</span>
+                  <span>Subir de Galería</span>
+                </label>
+              </div>
+            </div>
+          </div>
 
           {/* Grid de 2 columnas para optimizar espacio y eliminar vacíos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
@@ -3136,11 +3480,26 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
             {/* Sub-tarjeta 4: Paciente y Anamnesis */}
             <div className="bg-surface-subtle-ice p-3 rounded-2xl border border-border-subtle flex items-center justify-between gap-2.5 hover:border-primary/40 transition-all">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-bold text-xs flex items-center justify-center shrink-0">
-                  {nombres.trim().length > 0 ? nombres.slice(0, 2).toUpperCase() : 'ID'}
-                </div>
+                {fotoSelfie ? (
+                  <img
+                    src={fotoSelfie}
+                    alt={nombres}
+                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-primary/25 shrink-0 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-dental-deep-navy text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    {nombres.trim().length > 0 ? nombres.slice(0, 2).toUpperCase() : 'ID'}
+                  </div>
+                )}
                 <div className="min-w-0">
-                  <span className="text-[9px] uppercase font-bold text-secondary block">Paciente & Anamnesis</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[9px] uppercase font-bold text-secondary block">Paciente & Anamnesis</span>
+                    {!fotoSelfie && (
+                      <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                        📸 Sin Selfie
+                      </span>
+                    )}
+                  </div>
                   <p className="font-bold text-xs text-dental-deep-navy truncate">
                     {nombres || 'Datos pendientes'}
                   </p>

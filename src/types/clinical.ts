@@ -308,6 +308,7 @@ export interface PacienteItem {
   sedeId: SedeId | 'ambas';
   estado?: 'pendiente' | 'confirmada' | 'en_sillon' | 'completada' | 'cancelada';
   esUrgencia?: boolean;
+  avatarUrl?: string;
 }
 
 export interface CondicionMedicaItem {
