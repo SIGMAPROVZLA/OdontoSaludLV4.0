@@ -20,15 +20,18 @@ import { DesktopTopBar } from './components/layout/DesktopTopBar';
 
 const parseTabFromLocation = (): TabId => {
   if (typeof window === 'undefined') return 'dashboard';
-  const hash = window.location.hash.replace('#', '').toLowerCase();
-  if (hash === 'reserva' || hash === 'autoregistro' || hash === 'citas' || hash === 'cita') return 'reserva';
-  if (hash === 'coordinacion' || hash === 'triaje') return 'coordinacion';
-  if (hash === 'agenda') return 'agenda';
-  if (hash === 'odontograma' || hash === 'ficha') return 'odontograma';
-  if (hash === 'cobros') return 'cobros';
-  if (hash === 'data' || hash === 'control-data' || hash === 'controldata') return 'data';
-  if (hash === 'superadmin' || hash === 'gobernanza' || hash === 'citadel' || hash === 'telemetria') return 'superadmin';
-  if (hash === 'dashboard' || hash === 'inicio') return 'dashboard';
+  const cleanHash = window.location.hash.replace(/^#\/?/, '').split('?')[0].replace(/\/+$/, '').toLowerCase();
+  const cleanPath = window.location.pathname.replace(/^\/+/, '').split('?')[0].replace(/\/+$/, '').toLowerCase();
+  const target = cleanHash || cleanPath;
+
+  if (target === 'reserva' || target === 'autoregistro' || target === 'citas' || target === 'cita') return 'reserva';
+  if (target === 'coordinacion' || target === 'triaje') return 'coordinacion';
+  if (target === 'agenda') return 'agenda';
+  if (target === 'odontograma' || target === 'ficha') return 'odontograma';
+  if (target === 'cobros') return 'cobros';
+  if (target === 'data' || target === 'control-data' || target === 'controldata') return 'data';
+  if (target === 'superadmin' || target === 'gobernanza' || target === 'citadel' || target === 'telemetria') return 'superadmin';
+  if (target === 'dashboard' || target === 'inicio') return 'dashboard';
 
   const params = new URLSearchParams(window.location.search);
   const tabParam = (params.get('tab') || params.get('page') || '').toLowerCase();

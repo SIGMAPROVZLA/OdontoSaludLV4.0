@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { useSede } from '../../context/SedeContext';
 import { ApiClient } from '../../services/api';
-import { normalizarFechaInput } from '../booking/BookingFlow';
+import { normalizarFechaInput } from '../../utils/dateNormalization';
 import {
   DIAS_SEMANA_CLINICOS,
   normalizarDisponibilidadOdontologo,
@@ -760,25 +760,10 @@ export const ControlDataView: React.FC = () => {
     try {
       const saved = localStorage.getItem('odontosalud_data_pacientes');
       const list: PacienteItem[] = saved ? JSON.parse(saved) : INITIAL_PACIENTES;
-      return list.map((p) => {
-        const clean = (p.cedula || '').replace(/[^0-9]/g, '');
-        if (clean.includes('16762319')) {
-          return {
-            ...p,
-            nombres: 'Raymond Gilbonio',
-            cedula: 'V-16.762.319',
-            telefono: '04126841381',
-            email: 'raymond.gilbonio@odontosaludlv.com',
-            sexo: 'Masculino' as const,
-            fechaNacimiento: '1982-10-15',
-            condicionMedicaId: 'med-1',
-          };
-        }
-        return {
-          ...p,
-          fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
-        };
-      });
+      return list.map((p) => ({
+        ...p,
+        fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+      }));
     } catch {
       return INITIAL_PACIENTES;
     }
@@ -838,25 +823,10 @@ export const ControlDataView: React.FC = () => {
         setTratamientos(remote.tratamientos);
       }
       if (remote.pacientes && remote.pacientes.length > 0) {
-        const sanitized = remote.pacientes.map((p) => {
-          const clean = (p.cedula || '').replace(/[^0-9]/g, '');
-          if (clean.includes('16762319')) {
-            return {
-              ...p,
-              nombres: 'Raymond Gilbonio',
-              cedula: 'V-16.762.319',
-              telefono: '04126841381',
-              email: 'raymond.gilbonio@odontosaludlv.com',
-              sexo: 'Masculino' as const,
-              fechaNacimiento: '1982-10-15',
-              condicionMedicaId: 'med-1',
-            };
-          }
-          return {
-            ...p,
-            fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
-          };
-        });
+        const sanitized = remote.pacientes.map((p) => ({
+          ...p,
+          fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+        }));
         setPacientes(sanitized);
       }
       if (remote.citas && remote.citas.length > 0) {
@@ -866,6 +836,18 @@ export const ControlDataView: React.FC = () => {
         setCondicionesMedicas(remote.condicionesMedicas);
       }
     });
+
+    const handleDataUpdated = (e: any) => {
+      if (e?.detail?.tipo === 'pacientes' && Array.isArray(e.detail.data)) {
+        setPacientes(e.detail.data);
+      } else if (e?.detail?.tipo === 'citas' && Array.isArray(e.detail.data)) {
+        setCitas(e.detail.data);
+      } else if (e?.detail?.tipo === 'odontologos' && Array.isArray(e.detail.data)) {
+        setOdontologos(e.detail.data.map(normalizarDisponibilidadOdontologo));
+      }
+    };
+    window.addEventListener('odontosalud_data_updated', handleDataUpdated);
+    return () => window.removeEventListener('odontosalud_data_updated', handleDataUpdated);
   }, []);
 
   // Guardar automáticamente en localStorage cuando cambian
@@ -903,6 +885,13 @@ export const ControlDataView: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem('odontosalud_data_pacientes', JSON.stringify(pacientes));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('odontosalud_data_updated', {
+            detail: { tipo: 'pacientes', data: pacientes },
+          })
+        );
+      }
     } catch {
       // ignore
     }

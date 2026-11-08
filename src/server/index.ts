@@ -480,14 +480,15 @@ app.post('/api/citas', async (c) => {
 
   let pacienteId = body.pacienteId;
 
-  // Buscar si el paciente ya existe en D1 por su número de cédula limpio
+  // Buscar si el paciente ya existe en D1 por su número de cédula limpio o ID
   const pacienteExistente: any = await db
     .prepare(
       `SELECT id, nombres, apellidos, telefono, email, sexo, fecha_nacimiento, condicion_medica_id 
        FROM pacientes 
-       WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), 'v', ''), 'e', ''), 'j', ''), 'g', ''), ' ', '') = ?
+          OR id = ?`
     )
-    .bind(cleanDigits)
+    .bind(cleanDigits, body.pacienteId || '')
     .first();
 
   if (pacienteExistente) {
@@ -741,19 +742,15 @@ app.get('/api/pacientes/cedula/:cedula', async (c) => {
     return c.json({ error: 'Paciente no encontrado' }, 404);
   }
 
-  // Si es Raymond Gilbonio (16762319), garantizar explícitamente sus datos canónicos verificados
-  const rowCleanCedula = (row.cedula || '').replace(/[^0-9]/g, '');
-  const isRaymond = rowCleanCedula.includes('16762319') || cleanCedula === '16762319';
-
   return c.json({
     id: row.id,
-    nombres: isRaymond ? 'Raymond Gilbonio' : row.nombres,
-    cedula: isRaymond ? 'V-16.762.319' : row.cedula,
-    telefono: isRaymond ? '04126841381' : row.telefono,
-    email: isRaymond ? 'raymond.gilbonio@odontosaludlv.com' : (row.email || ''),
-    sexo: isRaymond ? 'Masculino' : (row.sexo || 'Femenino'),
-    fechaNacimiento: isRaymond ? '1982-10-15' : (row.fecha_nacimiento || ''),
-    condicionMedicaId: isRaymond ? 'med-1' : (row.condicion_medica_id || 'ninguna'),
+    nombres: row.nombres,
+    cedula: row.cedula,
+    telefono: row.telefono,
+    email: row.email || '',
+    sexo: row.sexo || 'Femenino',
+    fechaNacimiento: row.fecha_nacimiento || '',
+    condicionMedicaId: row.condicion_medica_id || 'ninguna',
     motivo: row.motivo,
     fechaCita: row.fecha_cita,
     horaInicio: row.hora_inicio,
@@ -2782,19 +2779,17 @@ app.get('/api/control-data', async (c) => {
       requiereRx: Boolean(r.requiere_rx),
       activo: Boolean(r.activo),
     })),
-    pacientes: (pacientesRes?.results || []).map((r: any) => {
-      const isRaymond = (r.cedula || '').replace(/[^0-9]/g, '').includes('16762319');
-      return {
-        id: r.id,
-        nombres: isRaymond ? 'Raymond Gilbonio' : r.nombres,
-        cedula: isRaymond ? 'V-16.762.319' : r.cedula,
-        telefono: isRaymond ? '04126841381' : r.telefono,
-        email: isRaymond ? 'raymond.gilbonio@odontosaludlv.com' : (r.email || ''),
-        sexo: isRaymond ? 'Masculino' : (r.sexo || 'Femenino'),
-        fechaNacimiento: isRaymond ? '1982-10-15' : (r.fecha_nacimiento || ''),
-        condicionMedicaId: isRaymond ? 'med-1' : (r.condicion_medica_id || 'ninguna'),
-      };
-    }),
+    pacientes: (pacientesRes?.results || []).map((r: any) => ({
+      id: r.id,
+      nombres: r.nombres,
+      cedula: r.cedula,
+      telefono: r.telefono || '',
+      email: r.email || '',
+      sexo: r.sexo || 'Femenino',
+      fechaNacimiento: r.fecha_nacimiento || '',
+      condicionMedicaId: r.condicion_medica_id || 'ninguna',
+      avatarUrl: r.avatar_url || undefined,
+    })),
     citas: (citasRes?.results || []).map((r: any) => ({
       id: r.id,
       sedeId: r.sede_id,
@@ -3021,13 +3016,14 @@ app.post('/api/control-data/pacientes', async (c) => {
   // 1. Normalización estricta de la cédula venezolana
   const { canonical: cedulaCanonica, cleanDigits } = formatearCedulaVenezolana(b.cedula);
 
-  // 2. Control anti-duplicados: verificar si ya existe un paciente con esa cédula
+  // 2. Control anti-duplicados: verificar si ya existe un paciente con esa cédula o ID
   const pacienteExistente: any = await db
     .prepare(
       `SELECT id FROM pacientes 
-       WHERE REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), ' ', '') = ?`
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), 'v', ''), 'e', ''), 'j', ''), 'g', ''), ' ', '') = ?
+          OR id = ?`
     )
-    .bind(cleanDigits)
+    .bind(cleanDigits, b.id || '')
     .first();
 
   const id = pacienteExistente ? pacienteExistente.id : (b.id || `pac-${Date.now()}`);
@@ -3066,6 +3062,16 @@ app.post('/api/control-data/pacientes', async (c) => {
 
   // 4. Sincronizar en registro_pacientes_reserva
   try {
+    const reservaExistente: any = await db
+      .prepare(
+        `SELECT id FROM registro_pacientes_reserva 
+         WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(cedula), '.', ''), '-', ''), 'v', ''), 'e', ''), 'j', ''), 'g', ''), ' ', '') = ?
+            OR id = ?`
+      )
+      .bind(cleanDigits, id)
+      .first();
+    const reservaId = reservaExistente ? reservaExistente.id : id;
+
     await db
       .prepare(
         `INSERT INTO registro_pacientes_reserva (
@@ -3082,7 +3088,7 @@ app.post('/api/control-data/pacientes', async (c) => {
           updated_at = CURRENT_TIMESTAMP`
       )
       .bind(
-        id,
+        reservaId,
         b.nombres,
         cedulaCanonica,
         b.telefono || '',

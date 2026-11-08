@@ -17,6 +17,7 @@ import {
   normalizarListaOdontologos,
 } from '../../hooks/useOdontologos';
 import { compressImage } from '../../utils/imageCompression';
+import { normalizarFechaInput } from '../../utils/dateNormalization';
 
 interface DoctorOption {
   id: string;
@@ -40,26 +41,6 @@ interface BookingFlowProps {
 
 type BookingStep = 'sede' | 'doctor' | 'treatment' | 'datetime' | 'patient';
 
-/**
- * Normaliza cualquier formato de fecha (DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD)
- * al estándar ISO requerido por el navegador para <input type="date">: YYYY-MM-DD
- */
-function normalizarFechaInput(val?: string): string {
-  if (!val) return '';
-  const trimmed = val.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (dmyMatch) {
-    const [, d, m, y] = dmyMatch;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-  const ymdMatch = trimmed.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-  if (ymdMatch) {
-    const [, y, m, d] = ymdMatch;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-  return trimmed;
-}
 
 const INITIAL_ODONTOLOGOS_FALLBACK: OdontologoItem[] = INITIAL_ODONTOLOGOS_MASTER;
 
@@ -313,25 +294,10 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     try {
       const saved = localStorage.getItem('odontosalud_data_pacientes');
       const list: PacienteItem[] = saved ? JSON.parse(saved) : INITIAL_PACIENTES_FALLBACK;
-      return list.map((p) => {
-        const clean = (p.cedula || '').replace(/[^0-9]/g, '');
-        if (clean.includes('16762319')) {
-          return {
-            ...p,
-            nombres: 'Raymond Gilbonio',
-            cedula: 'V-16.762.319',
-            telefono: '04126841381',
-            email: 'raymond.gilbonio@odontosaludlv.com',
-            sexo: 'Masculino' as const,
-            fechaNacimiento: '1982-10-15',
-            condicionMedicaId: 'med-1',
-          };
-        }
-        return {
-          ...p,
-          fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
-        };
-      });
+      return list.map((p) => ({
+        ...p,
+        fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+      }));
     } catch {
       return INITIAL_PACIENTES_FALLBACK;
     }
@@ -365,25 +331,10 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         setDataCitas(remote.citas);
       }
       if (remote.pacientes && remote.pacientes.length > 0) {
-        const sanitized = remote.pacientes.map((p) => {
-          const clean = (p.cedula || '').replace(/[^0-9]/g, '');
-          if (clean.includes('16762319')) {
-            return {
-              ...p,
-              nombres: 'Raymond Gilbonio',
-              cedula: 'V-16.762.319',
-              telefono: '04126841381',
-              email: 'raymond.gilbonio@odontosaludlv.com',
-              sexo: 'Masculino' as const,
-              fechaNacimiento: '1982-10-15',
-              condicionMedicaId: 'med-1',
-            };
-          }
-          return {
-            ...p,
-            fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
-          };
-        });
+        const sanitized = remote.pacientes.map((p) => ({
+          ...p,
+          fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+        }));
         setDataPacientes(sanitized);
       }
       if (remote.condicionesMedicas && remote.condicionesMedicas.length > 0) {
@@ -392,7 +343,9 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     });
 
     const handleDataUpdated = (e: any) => {
-      if (e?.detail?.tipo === 'citas' && Array.isArray(e.detail.data)) {
+      if (e?.detail?.tipo === 'pacientes' && Array.isArray(e.detail.data)) {
+        setDataPacientes(e.detail.data);
+      } else if (e?.detail?.tipo === 'citas' && Array.isArray(e.detail.data)) {
         setDataCitas(e.detail.data);
       } else if (e?.detail?.tipo === 'odontologos' && Array.isArray(e.detail.data)) {
         setDataOdontologos(e.detail.data.map(normalizarDisponibilidadOdontologo));
@@ -543,25 +496,10 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
           try {
             const remote = await ApiClient.getControlData();
             if (remote?.pacientes && remote.pacientes.length > 0) {
-              const sanitized = remote.pacientes.map((p) => {
-                const clean = (p.cedula || '').replace(/[^0-9]/g, '');
-                if (clean.includes('16762319')) {
-                  return {
-                    ...p,
-                    nombres: 'Raymond Gilbonio',
-                    cedula: 'V-16.762.319',
-                    telefono: '04126841381',
-                    email: 'raymond.gilbonio@odontosaludlv.com',
-                    sexo: 'Masculino' as const,
-                    fechaNacimiento: '1982-10-15',
-                    condicionMedicaId: 'med-1',
-                  };
-                }
-                return {
-                  ...p,
-                  fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
-                };
-              });
+              const sanitized = remote.pacientes.map((p) => ({
+                ...p,
+                fechaNacimiento: normalizarFechaInput(p.fechaNacimiento),
+              }));
               setDataPacientes(sanitized);
               match = sanitized.find(
                 (p) => (p.cedula || '').replace(/[^0-9]/g, '') === cleanInput
@@ -573,24 +511,10 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         }
 
         if (match) {
-          const cleanM = (match.cedula || '').replace(/[^0-9]/g, '');
-          if (cleanM.includes('16762319') || cleanInput === '16762319') {
-            match = {
-              ...match,
-              nombres: 'Raymond Gilbonio',
-              cedula: 'V-16.762.319',
-              telefono: '04126841381',
-              email: 'raymond.gilbonio@odontosaludlv.com',
-              sexo: 'Masculino' as const,
-              fechaNacimiento: '1982-10-15',
-              condicionMedicaId: 'med-1',
-            };
-          } else {
-            match = {
-              ...match,
-              fechaNacimiento: normalizarFechaInput(match.fechaNacimiento),
-            };
-          }
+          match = {
+            ...match,
+            fechaNacimiento: normalizarFechaInput(match.fechaNacimiento),
+          };
           setPacienteEncontrado(match);
           setAuthStatus('verified');
         } else {
@@ -611,9 +535,6 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   const handleContinuarPacienteRegistrado = () => {
     if (!pacienteEncontrado) return;
 
-    const cleanFound = (pacienteEncontrado.cedula || '').replace(/[^0-9]/g, '');
-    const isRaymond = cleanFound.includes('16762319');
-
     // Parsear cédula: si viene con guión ej "V-16.762.319" o sólo números
     const rawCedula = pacienteEncontrado.cedula || '';
     if (rawCedula.includes('-')) {
@@ -627,11 +548,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
       setCedulaNumero(rawCedula.trim() || authCedulaInput.trim());
     }
 
-    setNombres(isRaymond ? 'Raymond Gilbonio' : (pacienteEncontrado.nombres || ''));
-    setTelefono(isRaymond ? '04126841381' : (pacienteEncontrado.telefono || ''));
-    setEmail(isRaymond ? 'raymond.gilbonio@odontosaludlv.com' : (pacienteEncontrado.email || ''));
-    setSexo(isRaymond ? 'Masculino' : ((pacienteEncontrado.sexo as any) || 'Femenino'));
-    setFechaNacimiento(isRaymond ? '1982-10-15' : normalizarFechaInput(pacienteEncontrado.fechaNacimiento));
+    setNombres(pacienteEncontrado.nombres || '');
+    setTelefono(pacienteEncontrado.telefono || '');
+    setEmail(pacienteEncontrado.email || '');
+    setSexo((pacienteEncontrado.sexo as any) || 'Femenino');
+    setFechaNacimiento(normalizarFechaInput(pacienteEncontrado.fechaNacimiento));
 
     // Precargar motivo clínico previo o predeterminado
     if (pacienteEncontrado.motivo) {
@@ -639,9 +560,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     }
 
     // Precargar patología o anamnesis si está registrada en el expediente clínico
-    if (isRaymond) {
-      setSelectedCondicionId('med-1');
-    } else if ((pacienteEncontrado as any).condicionMedicaId) {
+    if ((pacienteEncontrado as any).condicionMedicaId) {
       setSelectedCondicionId((pacienteEncontrado as any).condicionMedicaId);
     }
 
@@ -742,19 +661,16 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     const cleanNum = cedulaNumero.trim();
     if (!cleanNum || !nombres.trim()) return;
 
-    const isRaymond = cleanNum.replace(/[^0-9]/g, '').includes('16762319');
-    const finalFechaNacimiento = isRaymond
-      ? '1982-10-15'
-      : (normalizarFechaInput(fechaNacimiento) || '');
-    const finalSexo = isRaymond ? 'Masculino' : ((sexo as any) || 'Femenino');
-    const finalEmail = isRaymond ? 'raymond.gilbonio@odontosaludlv.com' : email.trim();
-    const finalCondicion = isRaymond ? 'med-1' : (selectedCondicionId || 'ninguna');
+    const finalFechaNacimiento = normalizarFechaInput(fechaNacimiento) || '';
+    const finalSexo = (sexo as any) || 'Femenino';
+    const finalEmail = email.trim();
+    const finalCondicion = selectedCondicionId || 'ninguna';
 
     const pacientePayload: PacienteItem = {
       id: pacienteEncontrado?.id || `pac-${Date.now()}`,
-      nombres: isRaymond ? 'Raymond Gilbonio' : nombres.trim(),
+      nombres: nombres.trim(),
       cedula: fullCedula,
-      telefono: isRaymond ? '04126841381' : (telefono.trim() || '+58 412-0000000'),
+      telefono: telefono.trim() || '+58 412-0000000',
       email: finalEmail,
       sexo: finalSexo,
       fechaNacimiento: finalFechaNacimiento,
@@ -795,6 +711,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
         list.unshift(pacientePayload);
       }
       localStorage.setItem('odontosalud_data_pacientes', JSON.stringify(list));
+      window.dispatchEvent(
+        new CustomEvent('odontosalud_data_updated', {
+          detail: { tipo: 'pacientes', data: list },
+        })
+      );
     } catch {
       // ignore
     }
