@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SedeId } from '../../types/clinical';
 import { DeterministicIdenticon } from '../../utils/identicon';
+import { useOdontologos } from '../../hooks/useOdontologos';
 
 export type FiltroSedeRendimiento = 'todas' | 'victoria' | 'tovar';
 export type FiltroPeriodoRendimiento = 'dia' | 'semana' | 'mes';
@@ -41,7 +42,7 @@ interface OdontologaRendimientoItem {
   };
 }
 
-const ODONTOLOGAS_DATA: OdontologaRendimientoItem[] = [
+const ODONTOLOGAS_BASE: OdontologaRendimientoItem[] = [
   {
     id: 'odo-1',
     nombres: 'Dra. María Alejandra Domínguez',
@@ -250,6 +251,125 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
   const [filtroPeriodo, setFiltroPeriodo] = useState<FiltroPeriodoRendimiento>('dia');
   const [odontologaExpandidaId, setOdontologaExpandidaId] = useState<string | null>(null);
 
+  // Conexión reactiva a la tabla oficial de Odontólogos de la clínica (ControlData / D1)
+  const { odontologos: staffOdontologos } = useOdontologos();
+
+  // Mapear los registros oficiales de OdontologoItem a OdontologaRendimientoItem
+  const listaOdontologas = useMemo(() => {
+    return staffOdontologos.map((doc) => {
+      const sedesValidas: SedeId[] = doc.sedeId === 'ambas' 
+        ? ['victoria', 'tovar'] 
+        : [doc.sedeId as SedeId];
+      const sedeHabitual = doc.sedeId === 'ambas'
+        ? 'Ambas Sedes (La Victoria & Tovar)'
+        : doc.sedeId === 'tovar'
+        ? 'Sede Colonia Tovar'
+        : `Sede La Victoria (Box 0${doc.boxAsignado || 1})`;
+
+      const guardiaTurno: 'manana' | 'tarde' | 'ambos' = 
+        doc.turno === 'Mañana' ? 'manana' : doc.turno === 'Tarde' ? 'tarde' : 'ambos';
+
+      const cleanCedula = doc.cedula.replace(/[^0-9]/g, '');
+      const baseExistente = ODONTOLOGAS_BASE.find(
+        (b) => b.id === doc.id || b.cedula.replace(/[^0-9]/g, '') === cleanCedula
+      );
+
+      if (baseExistente) {
+        return {
+          ...baseExistente,
+          id: doc.id,
+          nombres: doc.nombres,
+          especialidad: doc.especialidad,
+          cov: doc.cov,
+          cedula: doc.cedula,
+          sedeHabitual,
+          sedesValidas,
+          porcentajeHonorario: doc.porcentajeHonorarios || baseExistente.porcentajeHonorario || 40,
+          guardiaTurno,
+          fotoUrl: doc.avatar || baseExistente.fotoUrl,
+        };
+      }
+
+      // Para doctores agregados dinámicamente en Data, generar métricas base proporcionales
+      const espLower = (doc.especialidad || '').toLowerCase();
+      let procedimientosManana = ['2 Restauraciones Estéticas', '1 Limpieza Ultrasónica'];
+      let procedimientosTarde = ['1 Evaluación Integral', '1 Pulido & Profilaxis'];
+      let procedimientosSemana = ['12 Procedimientos', '6 Profilaxis', '4 Restauraciones'];
+      let procedimientosMes = ['48 Procedimientos', '22 Profilaxis', '16 Restauraciones'];
+
+      if (espLower.includes('ortodoncia') || espLower.includes('ortopedia')) {
+        procedimientosManana = ['3 Controles Ortodoncia', '1 Instalación Arcos'];
+        procedimientosTarde = ['2 Cambios de Brackets', '1 Evaluación Oclusal'];
+        procedimientosSemana = ['18 Controles Brackets', '6 Alineadores', '4 Cementaciones'];
+        procedimientosMes = ['74 Controles Ortodoncia', '22 Retenedores', '16 Nuevas Instalaciones'];
+      } else if (espLower.includes('endodoncia')) {
+        procedimientosManana = ['1 Endodoncia Unirradicular', '1 Desobturación'];
+        procedimientosTarde = ['1 Endodoncia Molar', '1 Re-tratamiento'];
+        procedimientosSemana = ['10 Endodoncias Molares', '5 Biopulpectomías', '3 Re-tratamientos'];
+        procedimientosMes = ['42 Endodoncias Molares', '20 Premolares', '12 Apicectomías'];
+      } else if (espLower.includes('cirugía') || espLower.includes('periodoncia')) {
+        procedimientosManana = ['1 Cirugía Bucal Menor', '1 Raspado Periodontal'];
+        procedimientosTarde = ['1 Extracción Quirúrgica', '1 Control Postoperatorio'];
+        procedimientosSemana = ['12 Cirugías Menores', '8 Mantenimientos Periodontales'];
+        procedimientosMes = ['48 Tratamientos Periodontales', '18 Cirugías Menores'];
+      } else if (espLower.includes('pediatría') || espLower.includes('infantil')) {
+        procedimientosManana = ['2 Pulpotomías', '2 Sellantes de Fosetas'];
+        procedimientosTarde = ['1 Topicación con Flúor', '1 Restauración Infantil'];
+        procedimientosSemana = ['14 Tratamientos Pediátricos', '8 Profilaxis Infantiles'];
+        procedimientosMes = ['56 Tratamientos Pediátricos', '30 Limpiezas Infantiles'];
+      }
+
+      return {
+        id: doc.id,
+        nombres: doc.nombres,
+        especialidad: doc.especialidad,
+        cov: doc.cov,
+        cedula: doc.cedula,
+        sedeHabitual,
+        sedesValidas,
+        porcentajeHonorario: doc.porcentajeHonorarios || 40,
+        fotoUrl: doc.avatar,
+        guardiaTurno,
+        metricasBase: {
+          dia: {
+            manana: {
+              pacientes: guardiaTurno === 'tarde' ? 0 : 3,
+              totalCitas: guardiaTurno === 'tarde' ? 0 : 3,
+              procedimientos: guardiaTurno === 'tarde' ? ['Sin guardia de mañana'] : procedimientosManana,
+              recaudadoUsd: guardiaTurno === 'tarde' ? 0 : 180,
+              metaUsd: 200,
+              satisfaccion: 98,
+            },
+            tarde: {
+              pacientes: guardiaTurno === 'manana' ? 0 : 3,
+              totalCitas: guardiaTurno === 'manana' ? 0 : 3,
+              procedimientos: guardiaTurno === 'manana' ? ['Sin guardia de tarde'] : procedimientosTarde,
+              recaudadoUsd: guardiaTurno === 'manana' ? 0 : 160,
+              metaUsd: 180,
+              satisfaccion: 99,
+            },
+          },
+          semana: {
+            pacientes: 22,
+            totalCitas: 24,
+            procedimientos: procedimientosSemana,
+            recaudadoUsd: 1650,
+            metaUsd: 1800,
+            satisfaccion: 98.4,
+          },
+          mes: {
+            pacientes: 92,
+            totalCitas: 98,
+            procedimientos: procedimientosMes,
+            recaudadoUsd: 6800,
+            metaUsd: 7200,
+            satisfaccion: 98.8,
+          },
+        },
+      };
+    });
+  }, [staffOdontologos]);
+
   // Conmutadores ON/OFF con protección contra apagado total
   const toggleVictoria = () => {
     if (sedeVictoriaOn && !sedeTovarOn) {
@@ -315,7 +435,7 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
 
   // Filtrado y cálculo reactivo agregado (ON / OFF) de las métricas por odontóloga
   const odontologasCalculadas = useMemo(() => {
-    return ODONTOLOGAS_DATA.filter((odo) => {
+    return listaOdontologas.filter((odo) => {
       const matchVictoria = sedeVictoriaOn && odo.sedesValidas.includes('victoria');
       const matchTovar = sedeTovarOn && odo.sedesValidas.includes('tovar');
       return matchVictoria || matchTovar;
@@ -423,7 +543,7 @@ export const OdontologaPerformanceCard: React.FC<OdontologaPerformanceCardProps>
         metaUsd,
       };
     });
-  }, [sedeVictoriaOn, sedeTovarOn, filtroPeriodo, turnoMananaOn, turnoTardeOn, tasaBcv]);
+  }, [listaOdontologas, sedeVictoriaOn, sedeTovarOn, filtroPeriodo, turnoMananaOn, turnoTardeOn, tasaBcv]);
 
   // Totales consolidados de la barra
   const totalPacientes = odontologasCalculadas.reduce((acc, o) => acc + o.pacientes, 0);

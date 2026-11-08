@@ -908,6 +908,13 @@ export const ControlDataView: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem('odontosalud_data_odontologos', JSON.stringify(odontologos));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('odontosalud_data_updated', {
+            detail: { tipo: 'odontologos', data: odontologos },
+          })
+        );
+      }
     } catch {
       // ignore
     }

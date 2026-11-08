@@ -2257,6 +2257,28 @@ async function _initControlDataTablesInternal(db: D1Database) {
     )
     .run();
 
+  // Semilla de staff_odontologos si está vacío
+  try {
+    const oCount = (await db.prepare(`SELECT COUNT(*) as count FROM staff_odontologos`).first()) as any;
+    if (!oCount || oCount.count === 0) {
+      const initialOdo = [
+        ['odo-1', 'Dra. María Alejandra Domínguez', 'V-16.482.910', 'C.O.V. 24.891', 'Directora Clínica • Odontología General & Estética', '+58 414-5550101', 'dra.dominguez@odontosalud.ve', 'ambas', 1, 'Completo', 50, 'activo'],
+        ['odo-2', 'Dra. Carmen Elena Silva', 'V-18.329.110', 'C.O.V. 19.450', 'Ortodoncia & Ortopedia Dentofacial', '+58 412-8891234', 'c.silva@odontosalud.ve', 'victoria', 2, 'Mañana', 45, 'activo'],
+        ['odo-3', 'Dra. Valeria Hernández', 'V-21.054.672', 'C.O.V. 22.108', 'Endodoncia Avanzada & Microcirugía Apical', '+58 424-3349011', 'v.hernandez@odontosalud.ve', 'ambas', 1, 'Tarde', 45, 'en_guardia'],
+        ['odo-4', 'Dra. Andrea Morales', 'V-23.891.405', 'C.O.V. 25.334', 'Periodoncia, Prótesis & Cirugía Bucal', '+58 414-9988112', 'a.morales@odontosalud.ve', 'ambas', 2, 'Completo', 40, 'activo'],
+      ];
+      for (const o of initialOdo) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO staff_odontologos (
+            id, nombres, cedula, cov, especialidad, telefono, email, sede_id, box_asignado, turno, porcentaje_honorarios, estado
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(...o).run();
+      }
+    }
+  } catch (err) {
+    console.error('Error inicializando staff_odontologos:', err);
+  }
+
   // Semilla de Catálogo de Condiciones Médicas si está vacío
   try {
     const cCount = (await db.prepare(`SELECT COUNT(*) as count FROM catalogo_condiciones_medicas`).first()) as any;

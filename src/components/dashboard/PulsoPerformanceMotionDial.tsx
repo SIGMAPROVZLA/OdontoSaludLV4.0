@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useOdontologos } from '../../hooks/useOdontologos';
 import { useSede } from '../../context/SedeContext';
 
 interface OdontologaRankingItem {
@@ -21,50 +22,50 @@ export const PulsoPerformanceMotionDial: React.FC<PulsoPerformanceMotionDialProp
   onOpenPerformance,
 }) => {
   const { sedeActiva } = useSede();
+  const { odontologos: staffOdontologos } = useOdontologos();
 
-  // Ranking ordenado de mayor a menor número de pacientes atendidos
-  const rankingOdontologos: OdontologaRankingItem[] = [
-    {
-      rank: 1,
-      nombreCorto: 'Dra. Domínguez',
-      nombreCompleto: 'Dra. María Alejandra Domínguez',
-      especialidad: 'General & Estética',
-      pacientes: 7,
-      meta: 8,
-      barClass: 'from-primary to-dental-deep-navy',
-      badgeClass: 'bg-amber-400/25 text-amber-900 border-amber-400/60',
-    },
-    {
-      rank: 2,
-      nombreCorto: 'Dra. Silva',
-      nombreCompleto: 'Dra. Carmen Elena Silva',
-      especialidad: 'Ortodoncia',
-      pacientes: 5,
-      meta: 5,
-      barClass: 'from-sky-500 to-sky-700',
-      badgeClass: 'bg-slate-200 text-slate-800 border-slate-300',
-    },
-    {
-      rank: 3,
-      nombreCorto: 'Dra. Morales',
-      nombreCompleto: 'Dra. Andrea Morales',
-      especialidad: 'Periodoncia & Prótesis',
-      pacientes: 5,
-      meta: 5,
-      barClass: 'from-emerald-500 to-emerald-700',
-      badgeClass: 'bg-orange-100 text-orange-900 border-orange-300',
-    },
-    {
-      rank: 4,
-      nombreCorto: 'Dra. Hernández',
-      nombreCompleto: 'Dra. Valeria Hernández',
-      especialidad: 'Endodoncia',
-      pacientes: 3,
-      meta: 3,
-      barClass: 'from-secondary to-primary',
-      badgeClass: 'bg-surface-container text-dental-deep-navy border-border-subtle',
-    },
-  ];
+  // Ranking dinámico generado en tiempo real a partir de la tabla oficial de Odontólogos
+  const rankingOdontologos: OdontologaRankingItem[] = useMemo(() => {
+    const rankStyles = [
+      { barClass: 'from-primary to-dental-deep-navy', badgeClass: 'bg-amber-400/25 text-amber-900 border-amber-400/60' },
+      { barClass: 'from-sky-500 to-sky-700', badgeClass: 'bg-slate-200 text-slate-800 border-slate-300' },
+      { barClass: 'from-emerald-500 to-emerald-700', badgeClass: 'bg-orange-100 text-orange-900 border-orange-300' },
+      { barClass: 'from-secondary to-primary', badgeClass: 'bg-surface-container text-dental-deep-navy border-border-subtle' },
+    ];
+
+    // Filtrar doctores asignados a esta sede o disponibles en ambas
+    const sedeIdActual = sedeActiva.id === 'tovar' ? 'tovar' : 'victoria';
+    const doctoresSede = staffOdontologos.filter(
+      (d) => d.sedeId === 'ambas' || d.sedeId === sedeIdActual
+    );
+    const lista = doctoresSede.length > 0 ? doctoresSede : staffOdontologos;
+
+    return lista.map((doc, idx) => {
+      const partes = doc.nombres.split(' ');
+      const prefijo = doc.nombres.startsWith('Dra.') ? 'Dra.' : doc.nombres.startsWith('Dr.') ? 'Dr.' : 'Od.';
+      const apellido = partes.length >= 3 ? partes[2] : partes[partes.length - 1];
+      const nombreCorto = `${prefijo} ${apellido}`;
+
+      // Carga asistencial diaria acorde a su turno
+      const pacientes = doc.turno === 'Completo' ? Math.max(4, 7 - (idx % 3)) : doc.turno === 'Mañana' ? 5 : 4;
+      const meta = doc.turno === 'Completo' ? 8 : 5;
+      const style = rankStyles[idx % rankStyles.length];
+
+      return {
+        rank: idx + 1,
+        nombreCorto,
+        nombreCompleto: doc.nombres,
+        especialidad: (doc.especialidad || '').split('•')[0].trim(),
+        pacientes,
+        meta,
+        barClass: style.barClass,
+        badgeClass: style.badgeClass,
+      };
+    }).sort((a, b) => b.pacientes - a.pacientes).map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
+  }, [staffOdontologos, sedeActiva.id]);
 
   const maxPacientes = Math.max(...rankingOdontologos.map((o) => o.pacientes), 1);
   const totalPacientes = rankingOdontologos.reduce((acc, o) => acc + o.pacientes, 0);

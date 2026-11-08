@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useOdontologos } from '../../hooks/useOdontologos';
 import { useSede } from '../../context/SedeContext';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { ApiClient } from '../../services/api';
@@ -22,6 +23,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const [pulse, setPulse] = useState<DashboardPulse | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalKpi, setModalKpi] = useState<PulsoKpiType | null>(null);
+  const { odontologos } = useOdontologos();
+
+  // Datos del doctor activo conectado a la tabla oficial de Odontólogos
+  const doctorActivoData = useMemo(() => {
+    return (
+      odontologos.find((o) => o.nombres === doctorActivo) ||
+      odontologos.find((o) => o.boxAsignado === 1 && (o.sedeId === 'ambas' || o.sedeId === sedeId)) ||
+      odontologos[0]
+    );
+  }, [odontologos, doctorActivo, sedeId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -58,8 +69,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative shrink-0">
               <img
-                alt={doctorActivo}
-                src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80"
+                alt={doctorActivoData?.nombres || doctorActivo}
+                src={doctorActivoData?.avatar || "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80"}
                 className="w-12 h-12 rounded-2xl object-cover shadow-sm ring-2 ring-primary/20"
               />
               <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-status-success ring-2 ring-surface-clean-white flex items-center justify-center">
@@ -69,12 +80,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-display font-bold text-base text-dental-deep-navy truncate">
-                  Hola, Dra. Domínguez
+                  Hola, {doctorActivoData ? doctorActivoData.nombres.split(' ')[0] + ' ' + (doctorActivoData.nombres.split(' ')[2] || doctorActivoData.nombres.split(' ')[1]) : 'Dra. Domínguez'}
                 </span>
                 <span className="text-electric-blue text-xs">✨</span>
               </div>
               <p className="text-xs text-secondary truncate">
-                Box 1 Activo • {sedeActiva.nombre}
+                Box {doctorActivoData?.boxAsignado || 1} Activo • {sedeActiva.nombre}
               </p>
             </div>
           </div>
@@ -324,11 +335,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                 Box {b.boxNumero}
               </span>
               <span className="text-[10px] text-secondary truncate max-w-full">
-                {b.estado === 'ocupado'
-                  ? b.doctorNombre || 'Ocupado'
-                  : b.estado === 'limpieza'
-                  ? 'Limpieza'
-                  : 'Libre'}
+                {(() => {
+                  const docAsignado = odontologos.find(
+                    (o) => o.boxAsignado === b.boxNumero && (o.sedeId === 'ambas' || o.sedeId === sedeId)
+                  );
+                  if (b.estado === 'ocupado') return b.doctorNombre || docAsignado?.nombres || 'Ocupado';
+                  if (b.estado === 'limpieza') return 'Limpieza';
+                  return docAsignado ? 'Libre (' + docAsignado.nombres.split(' ')[0] + ')' : 'Libre';
+                })()}
               </span>
             </div>
           ))}
