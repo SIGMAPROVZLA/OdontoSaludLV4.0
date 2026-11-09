@@ -6,6 +6,7 @@ import { TabId } from '../layout/BottomNavigation';
 import { PulsoDetailModal, PulsoKpiType } from './PulsoDetailModal';
 import { OdontologaPerformanceCard } from './OdontologaPerformanceCard';
 import { PulsoPerformanceMotionDial } from './PulsoPerformanceMotionDial';
+import { PortalReservaAdminCard } from './PortalReservaAdminCard';
 
 interface DesktopDashboardViewProps {
   pulse: DashboardPulse | null;
@@ -220,6 +221,9 @@ export const DesktopDashboardView: React.FC<DesktopDashboardViewProps> = ({
         sedeActualId={sedeId}
         tasaBcv={tasaBcv}
       />
+
+      {/* 2C. Control y Difusión Oficial del Portal de Reserva (QR & WhatsApp) */}
+      <PortalReservaAdminCard />
 
       {/* 3. Estructura Principal en 2 Columnas (8 cols + 4 cols) */}
       <div className="grid grid-cols-12 gap-6">

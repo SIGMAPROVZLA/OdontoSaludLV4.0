@@ -133,6 +133,10 @@ Los agentes deben evitar saltar directamente al código en tareas de mediano o a
 2. **Contexto Limpio (Anti-Rot):** En sesiones largas o tareas multi-fase, apoyarse en `ralph-loop` o `gsd-execute-phase` para ejecutar en bloques atómicos sin arrastrar residuos en la ventana de contexto.
 3. **Evidencia antes de declarar victoria:** Ninguna funcionalidad se marca como terminada sin verificar logs de servidor (`task-1020` Vite, `task-1022` Wrangler) o pruebas de compilación/unitarias (`verification-before-completion`).
 4. **Revisión de Seguridad obligatoria:** Todo cambio en endpoints de API o sincronización de base de datos debe ser auditado con los criterios de `coderabbit-review` (OWASP, validación de inputs, resiliencia).
+5. **Gobernanza de Git Push (Ahorro de Tokens y Estabilidad):** Prohibido ejecutar `git push` en cada micro-iteración o cambio menor. El `git push` se reserva exclusivamente para:
+   - Cerrar una jornada de trabajo completa (fin de sesión).
+   - Consolidar un gran hito arquitectónico o funcional verificado al 100%.
+   - En las fases intermedias se opera en local; el agente evaluará y recomendará el momento idóneo del push sin forzarlo en cada turno.
 
 ---
 

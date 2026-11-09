@@ -11,6 +11,7 @@ import { TabId } from '../layout/BottomNavigation';
 import { PulsoDetailModal, PulsoKpiType } from './PulsoDetailModal';
 import { OdontologaPerformanceCard } from './OdontologaPerformanceCard';
 import { PulsoPerformanceMotionDial } from './PulsoPerformanceMotionDial';
+import { PortalReservaAdminCard } from './PortalReservaAdminCard';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: TabId) => void;
@@ -242,6 +243,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
           }}
         />
       </section>
+
+      {/* Tarjeta de Control y Difusión Oficial del Portal de Reserva (QR & WhatsApp) */}
+      <PortalReservaAdminCard />
 
       {/* Acciones Rápidas Táctiles (1-toque) */}
       <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle">
