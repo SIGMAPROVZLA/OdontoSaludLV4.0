@@ -4,6 +4,11 @@ import { useTasaCambio } from '../../context/TasaCambioContext';
 import { TabId } from './BottomNavigation';
 import { NotificationCenterModal } from './NotificationCenterModal';
 import { DeterministicIdenticon } from '../../utils/identicon';
+import {
+  EVENT_SESION_ACTUALIZADA,
+  getActiveSessionUser,
+  getInitials,
+} from '../../utils/userSession';
 
 interface DesktopTopBarProps {
   onNavigateTab: (tab: TabId) => void;
@@ -14,7 +19,24 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
   const { tasaBcv, hayNoLeidas } = useTasaCambio();
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [activeUser, setActiveUser] = useState<ReturnType<typeof getActiveSessionUser>>(() =>
+    getActiveSessionUser()
+  );
+  const [avatarError, setAvatarError] = useState(false);
   const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const syncSession = () => {
+      setActiveUser(getActiveSessionUser());
+      setAvatarError(false);
+    };
+    window.addEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, []);
 
   useEffect(() => {
     let ticking = false;
@@ -170,13 +192,35 @@ export const DesktopTopBar: React.FC<DesktopTopBarProps> = ({ onNavigateTab }) =
           <button
             type="button"
             onClick={() => onNavigateTab('login')}
-            className="flex items-center gap-2 pl-1 cursor-pointer hover:opacity-85 transition-opacity text-left"
-            title="Sesión Clínica / Validar Credenciales (#login)"
+            className="flex items-center gap-2.5 pl-1 cursor-pointer hover:opacity-85 transition-opacity text-left"
+            title={
+              activeUser
+                ? `${activeUser.nombres} • Sesión Activa (#login)`
+                : 'Sesión Clínica / Validar Credenciales (#login)'
+            }
           >
-            <DeterministicIdenticon seed={doctorActivo} name={doctorActivo} size={36} />
-            <div className="hidden xl:flex flex-col text-left">
-              <span className="text-xs font-bold text-dental-deep-navy leading-tight">
-                {doctorActivo}
+            <div className="relative shrink-0">
+              {activeUser?.avatar && !avatarError ? (
+                <img
+                  src={activeUser.avatar}
+                  alt={activeUser.nombres}
+                  onError={() => setAvatarError(true)}
+                  className="w-9 h-9 rounded-xl object-cover border border-primary/30 shadow-2xs"
+                />
+              ) : activeUser ? (
+                <div className="w-9 h-9 rounded-xl bg-dental-deep-navy text-white font-display font-black text-xs flex items-center justify-center border border-primary/30 shadow-2xs">
+                  {getInitials(activeUser.nombres)}
+                </div>
+              ) : (
+                <DeterministicIdenticon seed={doctorActivo} name={doctorActivo} size={36} />
+              )}
+              {activeUser && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+              )}
+            </div>
+            <div className="hidden xl:flex flex-col text-left min-w-0">
+              <span className="text-xs font-bold text-dental-deep-navy leading-tight truncate max-w-[160px]">
+                {activeUser ? activeUser.nombres : doctorActivo}
               </span>
               <span className="text-[10px] text-primary font-semibold flex items-center gap-1">
                 <span>{sedeActiva.nombre}</span>

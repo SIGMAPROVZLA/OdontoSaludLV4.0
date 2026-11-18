@@ -284,9 +284,15 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
         } catch {}
 
         if (rawCitas.length > 0) {
-          // Filtrar estrictamente solo citas que han sido aprobadas / confirmadas por el facultativo
+          // Filtrar citas aprobadas, en sillón o completadas para atención clínica
           const citasValidas = rawCitas
-            .filter((c: any) => c.estado === 'confirmada' || c.estado === 'aprobada' || c.estado === 'completada')
+            .filter(
+              (c: any) =>
+                c.estado === 'confirmada' ||
+                c.estado === 'aprobada' ||
+                c.estado === 'en_sillon' ||
+                c.estado === 'completada'
+            )
             .map((c: any) => ({
               id: c.id,
               sedeId: c.sedeId || c.sede_id || 'victoria',
@@ -322,10 +328,22 @@ export const OdontogramView: React.FC<OdontogramViewProps> = ({ onNavigateTab })
           setFechasDisponibles(fechasUnicas);
 
           if (fechasUnicas.length > 0) {
-            setFechaConsulta(fechasUnicas[0]);
-            const primeraCita = citasValidas.find((c: CitaAprobadaConsulta) => c.fechaCita === fechasUnicas[0]);
-            if (primeraCita) {
-              setSelectedCitaId(primeraCita.id);
+            const targetCitaId =
+              typeof window !== 'undefined' ? localStorage.getItem('odontosalud_selected_cita_id') : null;
+            const citaObjetivo = targetCitaId
+              ? citasValidas.find((c: CitaAprobadaConsulta) => c.id === targetCitaId)
+              : null;
+
+            if (citaObjetivo) {
+              setFechaConsulta(citaObjetivo.fechaCita);
+              setSelectedCitaId(citaObjetivo.id);
+              localStorage.removeItem('odontosalud_selected_cita_id');
+            } else {
+              setFechaConsulta(fechasUnicas[0]);
+              const primeraCita = citasValidas.find((c: CitaAprobadaConsulta) => c.fechaCita === fechasUnicas[0]);
+              if (primeraCita) {
+                setSelectedCitaId(primeraCita.id);
+              }
             }
           }
         }

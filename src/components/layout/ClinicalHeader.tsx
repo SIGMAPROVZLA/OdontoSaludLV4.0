@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 import { TabId } from './BottomNavigation';
 import { NotificationCenterModal } from './NotificationCenterModal';
+import {
+  EVENT_SESION_ACTUALIZADA,
+  getActiveSessionUser,
+  getInitials,
+} from '../../utils/userSession';
 
 interface ClinicalHeaderProps {
   onNavigateTab?: (tab: TabId) => void;
@@ -11,7 +16,24 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
   const { tasaBcv, hayNoLeidas } = useTasaCambio();
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [activeUser, setActiveUser] = useState<ReturnType<typeof getActiveSessionUser>>(() =>
+    getActiveSessionUser()
+  );
+  const [avatarError, setAvatarError] = useState(false);
   const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const syncSession = () => {
+      setActiveUser(getActiveSessionUser());
+      setAvatarError(false);
+    };
+    window.addEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, []);
 
   // Ocultar cabecera suavemente al deslizar hacia arriba y mostrarla al deslizar hacia abajo (AGENTS.md Capa 4)
   useEffect(() => {
@@ -73,14 +95,36 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
 
         {/* Derecha: Login / Perfil + Campanita de Notificación + Icono de VictorIA Pro */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Botón de Acceso a Vista Independiente de Login */}
+          {/* Botón de Acceso a Vista Independiente de Login / Perfil Activo */}
           <button
             type="button"
             onClick={() => (onNavigateTab ? onNavigateTab('login') : (window.location.hash = 'login'))}
-            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-dental-deep-navy border border-border-subtle shadow-2xs transition-all active:scale-90 cursor-pointer"
-            title="Iniciar Sesión / Validar Credenciales (#login)"
+            className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle-ice hover:bg-surface-container text-dental-deep-navy border border-border-subtle shadow-2xs transition-all active:scale-90 cursor-pointer overflow-visible"
+            title={
+              activeUser
+                ? `${activeUser.nombres} • Sesión Activa (#login)`
+                : 'Iniciar Sesión / Validar Credenciales (#login)'
+            }
           >
-            <span className="material-symbols-outlined text-[21px] text-primary">account_circle</span>
+            {activeUser ? (
+              <>
+                {activeUser.avatar && !avatarError ? (
+                  <img
+                    src={activeUser.avatar}
+                    alt={activeUser.nombres}
+                    onError={() => setAvatarError(true)}
+                    className="w-full h-full rounded-xl object-cover"
+                  />
+                ) : (
+                  <span className="w-full h-full rounded-xl bg-dental-deep-navy text-white font-display font-black text-xs flex items-center justify-center">
+                    {getInitials(activeUser.nombres)}
+                  </span>
+                )}
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white shadow-2xs" />
+              </>
+            ) : (
+              <span className="material-symbols-outlined text-[21px] text-primary">account_circle</span>
+            )}
           </button>
 
           {/* Campanita de Notificación Ultra Llamativa (Tasa BCV + Avisos) */}
@@ -104,20 +148,19 @@ export const ClinicalHeader: React.FC<ClinicalHeaderProps> = ({ onNavigateTab })
             )}
           </button>
 
-          {/* Icono de VictorIA Pro */}
+          {/* Icono de VictorIA Pro (Estandarizado a w-10 h-10 como la campana) */}
           <button
             type="button"
             aria-label="Abrir Asistente VictorIA Pro"
             onClick={() => window.dispatchEvent(new CustomEvent('open-victoria-assistant'))}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-primary bg-gradient-to-r from-dental-ambient-bg via-dental-deep-navy to-primary text-white shadow-sm hover:brightness-105 active:scale-95 transition-all group"
+            className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-primary bg-gradient-to-br from-dental-ambient-bg via-dental-deep-navy to-primary text-white border border-primary/40 shadow-xs hover:brightness-110 active:scale-90 transition-all cursor-pointer group"
             title="VictorIA Pro • Asistente Clínico Inteligente"
           >
-            <span className="material-symbols-outlined text-[17px] text-secondary-fixed group-hover:rotate-12 transition-transform">
+            <span className="material-symbols-outlined text-[22px] text-secondary-fixed group-hover:rotate-12 transition-transform duration-300">
               smart_toy
             </span>
-            <span className="text-[11px] font-bold tracking-tight">VictorIA</span>
-            <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-dental-ambient-bg uppercase tracking-wider text-secondary-fixed">
-              Pro
+            <span className="absolute -bottom-1 -right-1 px-1 py-0 rounded bg-dental-deep-navy border border-secondary-fixed/50 text-[8px] font-black uppercase tracking-tighter text-secondary-fixed leading-tight shadow-2xs">
+              PRO
             </span>
           </button>
         </div>

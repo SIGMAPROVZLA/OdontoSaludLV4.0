@@ -5,6 +5,12 @@ import { TabId } from '../layout/BottomNavigation';
 import { SedeId } from '../../types/clinical';
 import { ClinicalScheduleMatrix } from './ClinicalScheduleMatrix';
 import { PatientClinicalHistoryModal } from './PatientClinicalHistoryModal';
+import {
+  EVENT_SESION_ACTUALIZADA,
+  getActiveSessionUser,
+  isGlobalAgendaManager,
+  canEditDoctorCita,
+} from '../../utils/userSession';
 
 export interface SolicitudCita {
   id: string;
@@ -184,6 +190,21 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
   const [busqueda, setBusqueda] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [activeUser, setActiveUser] = useState<ReturnType<typeof getActiveSessionUser>>(() =>
+    getActiveSessionUser()
+  );
+
+  useEffect(() => {
+    const syncSession = () => setActiveUser(getActiveSessionUser());
+    window.addEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, []);
+
+  const isSuperAdminView = isGlobalAgendaManager(activeUser);
 
   // Estado para la Matriz Horaria Clínica (Propuesta A)
   const [sedeMatriz, setSedeMatriz] = useState<SedeId>((sedeId as SedeId) || 'victoria');
@@ -274,7 +295,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       motivo: 'Dolor agudo en molar superior derecho al masticar',
       fechaTexto: 'Hoy',
       fechaIso: fechasRelativas.hoyIso,
-      horaTexto: '08:30 AM',
+      horaTexto: '08:00 AM',
       duracionMinutos: 45,
       boxSugerido: 1,
       doctorSugerido: 'Dra. María Alejandra Domínguez',
@@ -315,7 +336,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       motivo: 'Endodoncia #16',
       fechaTexto: 'Hoy',
       fechaIso: fechasRelativas.hoyIso,
-      horaTexto: '09:30 AM',
+      horaTexto: 'Por asignar',
       duracionMinutos: 45,
       boxSugerido: 1,
       doctorSugerido: 'Dra. María Alejandra Domínguez',
@@ -373,7 +394,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       motivo: 'Toma de impresión definitiva para prótesis fija',
       fechaTexto: 'Hoy',
       fechaIso: fechasRelativas.hoyIso,
-      horaTexto: '10:30 AM',
+      horaTexto: 'Por asignar',
       duracionMinutos: 45,
       boxSugerido: 2,
       doctorSugerido: 'Od. Miriel Morillo / Od. Julianny Ramos',
@@ -711,8 +732,13 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     window.open(`mailto:${sol.pacienteEmail}?subject=${subject}&body=${body}`, '_blank');
   };
 
-  // Botón 4: Aprobar Cita Individual
+  // Botón 4: Aprobar Cita Individual (Segmentado por RBAC)
   const handleAprobarCita = async (sol: SolicitudCita) => {
+    if (!canEditDoctorCita(activeUser, sol.doctorSugerido)) {
+      mostrarNotificacion(`Acceso segmentado: esta cita pertenece a ${sol.doctorSugerido}.`);
+      return;
+    }
+
     setSolicitudes((prev) =>
       prev.map((s) =>
         s.id === sol.id ? { ...s, estado: 'confirmada', confirmacionPaciente: 'confirmado' } : s
@@ -775,17 +801,33 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     }, 4000);
   };
 
-  // Manejar asignación directa de cita a un Box y Hora desde la Matriz (Campo de Selección Simple)
+  // Manejar asignación directa o intercambio (swap) de cita a un Box y Hora desde la Matriz
   const handleAsignarCitaAHora = async (citaId: string, boxNumero: number, hora: string) => {
     const cita = solicitudes.find((s) => s.id === citaId);
     if (!cita) return;
+    if (cita.boxSugerido === boxNumero && cita.horaTexto === hora) return;
+
+    const ocupante = solicitudes.find(
+      (s) =>
+        s.id !== citaId &&
+        s.fechaIso === cita.fechaIso &&
+        (s.boxSugerido || 1) === boxNumero &&
+        s.horaTexto === hora
+    );
+
+    const oldBox = cita.boxSugerido || 1;
+    const oldHora = cita.horaTexto;
 
     setSolicitudes((prev) =>
-      prev.map((s) =>
-        s.id === citaId
-          ? { ...s, boxSugerido: boxNumero, horaTexto: hora }
-          : s
-      )
+      prev.map((s) => {
+        if (s.id === citaId) {
+          return { ...s, boxSugerido: boxNumero, horaTexto: hora };
+        }
+        if (ocupante && s.id === ocupante.id) {
+          return { ...s, boxSugerido: oldBox, horaTexto: oldHora };
+        }
+        return s;
+      })
     );
 
     await ApiClient.actualizarEstadoCita(
@@ -796,6 +838,16 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       hora
     );
 
+    if (ocupante) {
+      await ApiClient.actualizarEstadoCita(
+        ocupante.id,
+        ocupante.estado === 'confirmada' ? 'confirmada' : 'pendiente',
+        sedeId,
+        oldBox,
+        oldHora
+      );
+    }
+
     try {
       const saved = localStorage.getItem('odontosalud_data_citas');
       let list = saved ? JSON.parse(saved) : [];
@@ -804,6 +856,9 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
         if (c.id === citaId) {
           found = true;
           return { ...c, boxNumero, horaInicio: hora };
+        }
+        if (ocupante && c.id === ocupante.id) {
+          return { ...c, boxNumero: oldBox, horaInicio: oldHora };
         }
         return c;
       });
@@ -826,7 +881,11 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       window.dispatchEvent(new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } }));
     } catch {}
 
-    mostrarNotificacion(`✅ Cita de ${cita.pacienteNombre} asignada al Box 0${boxNumero} a las ${hora}`);
+    mostrarNotificacion(
+      ocupante
+        ? `🔄 Intercambio realizado: ${cita.pacienteNombre} (${hora}) ↔ ${ocupante.pacienteNombre} (${oldHora})`
+        : `✅ Cita de ${cita.pacienteNombre} asignada al Box 0${boxNumero} a las ${hora}`
+    );
   };
 
   // Manejar cambio de duración con efecto inmediato sobre el horario en la Matriz con Cascada
@@ -884,7 +943,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
     mostrarNotificacion(`⏱ Duración de ${cita.pacienteNombre} ajustada a ${nuevaDuracion}m (${cita.horaTexto} a ${horaFin}) con cascada activa.`);
   };
 
-  // Desasignar o liberar horario de una cita en la Matriz
+  // Desasignar o liberar horario de una cita en la Matriz (con persistencia real)
   const handleLiberarSlotCita = async (citaId: string) => {
     const cita = solicitudes.find((s) => s.id === citaId);
     if (!cita) return;
@@ -897,7 +956,67 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
       )
     );
 
-    mostrarNotificacion(`🔄 Espacio liberado en sillón. Cita de ${cita.pacienteNombre} disponible para reasignar.`);
+    await ApiClient.actualizarEstadoCita(
+      citaId,
+      cita.estado === 'confirmada' ? 'confirmada' : 'pendiente',
+      sedeId,
+      cita.boxSugerido,
+      'Por asignar'
+    );
+
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      if (saved) {
+        const list = JSON.parse(saved).map((c: any) =>
+          c.id === citaId ? { ...c, horaInicio: 'Por asignar' } : c
+        );
+        localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+        window.dispatchEvent(
+          new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } })
+        );
+      }
+    } catch {}
+
+    mostrarNotificacion(`🔄 Espacio liberado en sillón. Cita de ${cita.pacienteNombre} movida a la bandeja flotante.`);
+  };
+
+  // Restablecer Posición Inicial limpia: envía citas no confirmadas a la bandeja flotante para organizar desde cero
+  const handleRestablecerPosicionInicial = async () => {
+    const targetFecha =
+      filtroDia === 'hoy'
+        ? fechasRelativas.hoyIso
+        : filtroDia === 'manana'
+        ? fechasRelativas.mananaIso
+        : filtroDia === 'ayer'
+        ? fechasRelativas.ayerIso
+        : null;
+
+    const affectedIds = new Set<string>();
+    setSolicitudes((prev) =>
+      prev.map((s) => {
+        const matchesDay = !targetFecha || s.fechaIso === targetFecha;
+        if (matchesDay && s.estado !== 'confirmada' && s.horaTexto !== 'Por asignar') {
+          affectedIds.add(s.id);
+          return { ...s, horaTexto: 'Por asignar' };
+        }
+        return s;
+      })
+    );
+
+    try {
+      const saved = localStorage.getItem('odontosalud_data_citas');
+      if (saved && affectedIds.size > 0) {
+        const list = JSON.parse(saved).map((c: any) =>
+          affectedIds.has(c.id) ? { ...c, horaInicio: 'Por asignar' } : c
+        );
+        localStorage.setItem('odontosalud_data_citas', JSON.stringify(list));
+        window.dispatchEvent(
+          new CustomEvent('odontosalud_data_updated', { detail: { tipo: 'citas', data: list } })
+        );
+      }
+    } catch {}
+
+    mostrarNotificacion('✨ Posición inicial restablecida: sillones limpios y citas pendientes listas en la bandeja flotante.');
   };
 
   // Manejar asignación de un hueco libre desde la Matriz Horaria
@@ -1107,6 +1226,7 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
         onAsignarCitaAHora={handleAsignarCitaAHora}
         onCambiarDuracionCita={handleCambiarDuracionCita}
         onLiberarSlotCita={handleLiberarSlotCita}
+        onRestablecerPosicionInicial={handleRestablecerPosicionInicial}
         onEnviarWhatsApp={handleEnviarWhatsAppConfirmacion}
         onToggleConfirmacion={handleToggleEstadoConfirmacion}
         onVerHistoriaClinica={(sol) => setModalHistoriaPaciente(sol)}
@@ -1322,33 +1442,45 @@ export const AppointmentCoordinationView: React.FC<AppointmentCoordinationViewPr
                   </button>
                 </div>
 
-                {/* Botón 3 y 4: Gestión Odontológica */}
+                {/* Botón 3 y 4: Gestión Odontológica (Segmentada por RBAC) */}
                 <div className="flex items-center gap-1.5">
-                  {/* Botón 3: Cambiar Horario (va al lado izquierdo de Aprobar Cita) */}
-                  <button
-                    type="button"
-                    onClick={() => handleAbrirModalHorario(sol)}
-                    className="px-2.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-dental-deep-navy text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                    title="Ajustar hora y duración en tiempo real"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-primary">edit_calendar</span>
-                    <span className="text-[11px]">Cambiar Horario</span>
-                  </button>
+                  {canEditDoctorCita(activeUser, sol.doctorSugerido) ? (
+                    <>
+                      {/* Botón 3: Cambiar Horario (va al lado izquierdo de Aprobar Cita) */}
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirModalHorario(sol)}
+                        className="px-2.5 py-1.5 rounded-xl bg-surface-subtle-ice hover:bg-surface-container border border-border-subtle text-dental-deep-navy text-xs font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                        title="Ajustar hora y duración en tiempo real"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-primary">edit_calendar</span>
+                        <span className="text-[11px]">Cambiar Horario</span>
+                      </button>
 
-                  {/* Botón 4: Aprobar Cita */}
-                  {!isConfirmada ? (
-                    <button
-                      type="button"
-                      onClick={() => handleAprobarCita(sol)}
-                      className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">verified</span>
-                      <span className="text-[11px]">Aprobar Cita</span>
-                    </button>
+                      {/* Botón 4: Aprobar Cita */}
+                      {!isConfirmada ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAprobarCita(sol)}
+                          className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-dental-deep-navy text-white text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-vibrant-cyan">verified</span>
+                          <span className="text-[11px]">Aprobar Cita</span>
+                        </button>
+                      ) : (
+                        <div className="px-3 py-1.5 rounded-xl bg-status-success/15 text-status-success border border-status-success/30 text-xs font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                          <span className="text-[11px]">Aprobada</span>
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="px-3 py-1.5 rounded-xl bg-status-success/15 text-status-success border border-status-success/30 text-xs font-bold flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                      <span className="text-[11px]">Aprobada</span>
+                    <div
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 text-[11px] font-bold flex items-center gap-1"
+                      title={`Solo editable por ${sol.doctorSugerido} o SuperAdmin`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">lock</span>
+                      <span>{isConfirmada ? 'Aprobada (Solo lectura)' : 'Solo lectura'}</span>
                     </div>
                   )}
                 </div>

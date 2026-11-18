@@ -12,6 +12,12 @@ import { PulsoDetailModal, PulsoKpiType } from './PulsoDetailModal';
 import { OdontologaPerformanceCard } from './OdontologaPerformanceCard';
 import { PulsoPerformanceMotionDial } from './PulsoPerformanceMotionDial';
 import { PortalReservaAdminCard } from './PortalReservaAdminCard';
+import {
+  EVENT_SESION_ACTUALIZADA,
+  getActiveSessionUser,
+  getInitials,
+  sanitizeUserAvatar,
+} from '../../utils/userSession';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: TabId) => void;
@@ -23,6 +29,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   const { isDesktop } = useDeviceLayout();
   const [pulse, setPulse] = useState<DashboardPulse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeUser, setActiveUser] = useState<ReturnType<typeof getActiveSessionUser>>(() =>
+    getActiveSessionUser()
+  );
+  const [avatarError, setAvatarError] = useState(false);
   const [modalKpi, setModalKpi] = useState<PulsoKpiType | null>(null);
   const { odontologos } = useOdontologos();
 
@@ -34,6 +44,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       odontologos[0]
     );
   }, [odontologos, doctorActivo, sedeId]);
+
+  useEffect(() => {
+    const syncSession = () => {
+      setActiveUser(getActiveSessionUser());
+      setAvatarError(false);
+    };
+    window.addEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(EVENT_SESION_ACTUALIZADA, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, []);
+
+  const greetingName = useMemo(() => {
+    const rawName = activeUser?.nombres || doctorActivoData?.nombres || 'Dra. Domínguez';
+    const parts = rawName.trim().split(/\s+/);
+    return parts.length >= 2 ? `${parts[0]} ${parts[1]}` : rawName;
+  }, [activeUser, doctorActivoData]);
+
+  const greetingAvatar = useMemo(() => {
+    return sanitizeUserAvatar(
+      activeUser?.avatar || doctorActivoData?.avatar,
+      activeUser?.cedula || doctorActivoData?.cedula || ''
+    );
+  }, [activeUser, doctorActivoData]);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,49 +100,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
   return (
     <div className="flex flex-col gap-4 pb-28">
       {/* Saludo Clínico y Micro-banner de Guardia */}
-      <section className="bg-surface-clean-white rounded-2xl p-4 shadow-sm border border-border-subtle relative overflow-hidden">
+      <section className="bg-surface-clean-white rounded-2xl p-3.5 shadow-sm border border-border-subtle relative overflow-hidden">
         <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-electric-blue/5 pointer-events-none" />
-        <div className="flex items-center justify-between gap-2 relative z-10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative shrink-0">
+        <div className="flex items-stretch gap-3.5 relative z-10">
+          {/* Imagen casi de la altura total de la tarjeta, bien visible y sin indicador en esquina */}
+          <div className="w-20 sm:w-24 self-stretch shrink-0 rounded-2xl overflow-hidden shadow-sm ring-1 ring-primary/20 bg-surface-subtle-ice flex items-center justify-center">
+            {greetingAvatar && !avatarError ? (
               <img
-                alt={doctorActivoData?.nombres || doctorActivo}
-                src={doctorActivoData?.avatar || "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80"}
-                className="w-12 h-12 rounded-2xl object-cover shadow-sm ring-2 ring-primary/20"
+                alt={activeUser?.nombres || doctorActivoData?.nombres || doctorActivo}
+                src={greetingAvatar}
+                onError={() => setAvatarError(true)}
+                className="w-full h-full object-cover object-top"
               />
-              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-status-success ring-2 ring-surface-clean-white flex items-center justify-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-surface-clean-white animate-ping" />
+            ) : (
+              <span className="w-full h-full bg-dental-deep-navy text-white font-display font-black text-xl flex items-center justify-center">
+                {getInitials(activeUser?.nombres || doctorActivoData?.nombres || doctorActivo)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0 flex flex-col justify-between gap-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-display font-bold text-base text-dental-deep-navy truncate">
+                    Hola, {greetingName}
+                  </span>
+                  <span className="text-electric-blue text-xs shrink-0">✨</span>
+                </div>
+                <p className="text-xs text-secondary truncate mt-0.5">
+                  Box {doctorActivoData?.boxAsignado || 1} Activo • {sedeActiva.nombre}
+                </p>
+              </div>
+
+              <span className="shrink-0 px-2.5 py-1 rounded-lg bg-surface-subtle-ice text-primary font-bold text-xs border border-border-subtle">
+                {sedeActiva.totalBoxes} Boxes
               </span>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-display font-bold text-base text-dental-deep-navy truncate">
-                  Hola, {doctorActivoData ? doctorActivoData.nombres.split(' ')[0] + ' ' + (doctorActivoData.nombres.split(' ')[2] || doctorActivoData.nombres.split(' ')[1]) : 'Dra. Domínguez'}
+
+            {/* Micro banner de guardia clínica */}
+            <div className="bg-surface-subtle-ice rounded-xl px-2.5 py-2 flex items-center justify-between gap-2 border border-border-subtle">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-vibrant-cyan shrink-0 animate-pulse" />
+                <span className="text-[11px] text-dental-deep-navy truncate font-medium">
+                  Guardia asistencial fluida
                 </span>
-                <span className="text-electric-blue text-xs">✨</span>
               </div>
-              <p className="text-xs text-secondary truncate">
-                Box {doctorActivoData?.boxAsignado || 1} Activo • {sedeActiva.nombre}
-              </p>
+              <span className="text-[11px] text-electric-blue font-bold shrink-0">
+                BCV: {(pulse?.tasaBcv ?? tasaBcv ?? 49.85).toFixed(2)} Bs/$
+              </span>
             </div>
           </div>
-
-          <span className="shrink-0 px-2.5 py-1 rounded-lg bg-surface-subtle-ice text-primary font-bold text-xs border border-border-subtle">
-            {sedeActiva.totalBoxes} Boxes
-          </span>
-        </div>
-
-        {/* Micro banner de guardia clínica */}
-        <div className="mt-3 pt-2 bg-surface-subtle-ice rounded-xl px-3 py-2 flex items-center justify-between border border-border-subtle">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-2 h-2 rounded-full bg-vibrant-cyan shrink-0 animate-pulse" />
-            <span className="text-xs text-dental-deep-navy truncate font-medium">
-              Guardia asistencial fluida sin demoras en esterilización
-            </span>
-          </div>
-          <span className="text-xs text-electric-blue font-bold shrink-0">
-            Tasa BCV: {(pulse?.tasaBcv ?? 49.85).toFixed(2)} Bs/$
-          </span>
         </div>
       </section>
 

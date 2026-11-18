@@ -62,13 +62,22 @@ export class ApiClient {
   static async crearCita(
     sedeId: SedeId,
     cita: Omit<Cita, 'id' | 'sedeId'>
-  ): Promise<{ success: boolean; id: string }> {
+  ): Promise<{ success: boolean; id: string; error?: string; code?: string }> {
     try {
       const res = await fetch(`${API_BASE_URL}/citas`, {
         method: 'POST',
         headers: this.getHeaders(sedeId),
         body: JSON.stringify(cita),
       });
+      if (res.status === 409) {
+        const conflict = (await res.json()) as { error?: string; code?: string };
+        return {
+          success: false,
+          id: '',
+          error: conflict?.error || 'Horario o sillón ocupado.',
+          code: conflict?.code || 'SLOT_CONFLICT',
+        };
+      }
       if (!res.ok) throw new Error('Error al crear cita');
       return await res.json();
     } catch {

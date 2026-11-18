@@ -28,6 +28,7 @@ interface ClinicalScheduleMatrixProps {
   onToggleConfirmacion?: (sol: SolicitudCita) => void;
   onVerHistoriaClinica?: (sol: SolicitudCita) => void;
   onAplicarCascadaHorarios?: (citasActualizadas: { id: string; horaTexto: string; duracionMinutos: number }[]) => void;
+  onRestablecerPosicionInicial?: () => void;
 }
 
 const DURACIONES_DISPONIBLES = [15, 30, 45, 60, 90];
@@ -71,6 +72,7 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
   onEnviarWhatsApp,
   onToggleConfirmacion,
   onVerHistoriaClinica,
+  onRestablecerPosicionInicial,
 }) => {
   const { sedesDisponibles } = useSede();
 
@@ -84,6 +86,12 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
 
   // Estado del dropdown activo para asignación de citas
   const [openAsignarSlot, setOpenAsignarSlot] = useState<{ boxNumero: number; hora: string } | null>(null);
+
+  // Estado lúdico de Objetos Flotantes (Drag & Drop + Agarrar & Soltar en móvil)
+  const [floatingCitaId, setFloatingCitaId] = useState<string | null>(null);
+  const [draggedCitaId, setDraggedCitaId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [showFloatingDock, setShowFloatingDock] = useState<boolean>(true);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -141,12 +149,27 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
     return allBoxes; // 'todos'
   }, [allBoxes, sedeSeleccionada, filtroBoxVictoria]);
 
-  // Lista de horas activas según turno
+  // Lista de horas activas según turno (incluye dinámicamente horarios exactos generados por cascada o ajustes)
   const horasActivas = useMemo(() => {
-    if (turnoSeleccionado === 'manana') return HORAS_MANANA;
-    if (turnoSeleccionado === 'tarde') return HORAS_TARDE;
-    return [...HORAS_MANANA, ...HORAS_TARDE];
-  }, [turnoSeleccionado]);
+    const baseHoras =
+      turnoSeleccionado === 'manana'
+        ? HORAS_MANANA
+        : turnoSeleccionado === 'tarde'
+        ? HORAS_TARDE
+        : [...HORAS_MANANA, ...HORAS_TARDE];
+
+    const horasSet = new Set<string>(baseHoras);
+
+    solicitudes.forEach((s) => {
+      if (!s.horaTexto || s.horaTexto === 'Por asignar') return;
+      const mins = parseHoraToMinutes(s.horaTexto);
+      if (turnoSeleccionado === 'manana' && mins >= 13 * 60) return;
+      if (turnoSeleccionado === 'tarde' && mins < 13 * 60) return;
+      horasSet.add(s.horaTexto);
+    });
+
+    return Array.from(horasSet).sort((a, b) => parseHoraToMinutes(a) - parseHoraToMinutes(b));
+  }, [turnoSeleccionado, solicitudes]);
 
   // Citas disponibles pendientes de asignación cargadas en orden estricto de solicitud en Reserva
   const citasDisponiblesParaAsignar = useMemo(() => {
@@ -179,6 +202,48 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
     [onCambiarDuracionCita]
   );
 
+  // Cita actualmente "en la mano" (objeto flotante activo)
+  const floatingCita = useMemo(() => {
+    if (!floatingCitaId) return null;
+    return (
+      (todasSolicitudes || solicitudes).find((s) => s.id === floatingCitaId) || null
+    );
+  }, [floatingCitaId, todasSolicitudes, solicitudes]);
+
+  // Soltar o asignar una cita flotante/arrastrada a un Box y Hora
+  const handleDropOnCell = useCallback(
+    (boxNumero: number, hora: string, explicitId?: string) => {
+      const targetId = explicitId || draggedCitaId || floatingCitaId;
+      setDragOverKey(null);
+      setDraggedCitaId(null);
+      if (!targetId || !onAsignarCitaAHora) return;
+      onAsignarCitaAHora(targetId, boxNumero, hora);
+      setFloatingCitaId(null);
+    },
+    [draggedCitaId, floatingCitaId, onAsignarCitaAHora]
+  );
+
+  // Mover un paso arriba o abajo en el horario del mismo Box (soporta horarios dinámicos fuera de grilla 30m)
+  const handleMoveStep = useCallback(
+    (sol: SolicitudCita, direction: -1 | 1) => {
+      if (!onAsignarCitaAHora) return;
+      const horasDisponibles = horasActivas.filter((h) => {
+        const mins = parseHoraToMinutes(h);
+        return !(mins >= almuerzoInicioMinutos && mins < almuerzoInicioMinutos + duracionAlmuerzoMinutos);
+      });
+      if (sol.horaTexto && sol.horaTexto !== 'Por asignar' && !horasDisponibles.includes(sol.horaTexto)) {
+        horasDisponibles.push(sol.horaTexto);
+        horasDisponibles.sort((a, b) => parseHoraToMinutes(a) - parseHoraToMinutes(b));
+      }
+      const currentIdx = horasDisponibles.indexOf(sol.horaTexto);
+      if (currentIdx === -1) return;
+      const nextIdx = currentIdx + direction;
+      if (nextIdx < 0 || nextIdx >= horasDisponibles.length) return;
+      onAsignarCitaAHora(sol.id, sol.boxSugerido || 1, horasDisponibles[nextIdx]);
+    },
+    [onAsignarCitaAHora, horasActivas, almuerzoInicioMinutos, duracionAlmuerzoMinutos]
+  );
+
   return (
     <section className="bg-surface-clean-white rounded-3xl p-3 sm:p-5 shadow-soft-elevated border border-border-subtle relative overflow-hidden flex flex-col gap-3">
       {/* =========================================================================
@@ -205,8 +270,21 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
           </div>
         </div>
 
-        {/* Conmutador de Sede con Capacidad Exacta */}
-        <div className="flex items-center gap-1 p-1 rounded-2xl bg-surface-subtle-ice border border-border-subtle self-start sm:self-auto shadow-2xs">
+        {/* Conmutador de Sede + Botón Posición Inicial */}
+        <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+          {onRestablecerPosicionInicial && (
+            <button
+              type="button"
+              onClick={onRestablecerPosicionInicial}
+              className="px-2.5 py-1.5 rounded-2xl text-[11px] font-black transition-all cursor-pointer flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs active:scale-95"
+              title="Enviar citas no confirmadas a la bandeja flotante para empezar desde una posición inicial limpia"
+            >
+              <span className="material-symbols-outlined text-[14px] text-amber-700">restart_alt</span>
+              <span>Posición Inicial</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-1 p-1 rounded-2xl bg-surface-subtle-ice border border-border-subtle shadow-2xs">
           <button
             type="button"
             onClick={() => onCambiarSede('victoria')}
@@ -232,6 +310,7 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
             <span className="material-symbols-outlined text-[14px] text-amber-500">terrain</span>
             <span>Colonia Tovar</span>
           </button>
+          </div>
         </div>
       </div>
 
@@ -407,6 +486,140 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
       </div>
 
       {/* =========================================================================
+          4B. BANDEJA FLOTANTE LÚDICA (ARRASTRAR O TOCAR PARA SOLTAR EN SILLÓN)
+         ========================================================================= */}
+      <div className="rounded-2xl bg-gradient-to-r from-surface-subtle-ice via-white to-surface-subtle-ice border border-primary/25 p-2.5 flex flex-col gap-2 shadow-2xs">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[15px]">pan_tool_alt</span>
+            </span>
+            <div className="min-w-0">
+              <span className="text-[11px] font-black text-dental-deep-navy block leading-tight truncate">
+                Objetos Flotantes • Cola por Ubicar ({citasDisponiblesParaAsignar.length})
+              </span>
+              <span className="text-[9.5px] text-secondary block truncate">
+                Arrastra o toca una tarjeta y luego pulsa un horario libre (o intercambia tarjetas)
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFloatingDock((prev) => !prev)}
+            className="px-2 py-1 rounded-lg bg-white border border-border-subtle text-[10px] font-bold text-dental-deep-navy shrink-0 cursor-pointer"
+          >
+            {showFloatingDock ? 'Ocultar' : 'Mostrar'}
+          </button>
+        </div>
+
+        {showFloatingDock && (
+          citasDisponiblesParaAsignar.length === 0 ? (
+            <div className="py-2 px-3 rounded-xl bg-white/80 border border-dashed border-border-subtle text-[11px] text-secondary text-center">
+              Todas las solicitudes han sido ubicadas en sillón. Arrastra o usa <strong className="text-dental-deep-navy">↑ ↓</strong> en las tarjetas para reordenarlas.
+            </div>
+          ) : (
+            <div className="flex items-stretch gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {citasDisponiblesParaAsignar.map((c) => {
+                const isFloating = floatingCitaId === c.id;
+                const isUrg = c.tipo === 'urgencia';
+                const tratamiento = obtenerTratamientoTexto(c.motivo);
+                return (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', c.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDraggedCitaId(c.id);
+                      setFloatingCitaId(c.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedCitaId(null);
+                      setDragOverKey(null);
+                    }}
+                    onClick={() => setFloatingCitaId((prev) => (prev === c.id ? null : c.id))}
+                    className={`shrink-0 w-48 sm:w-52 p-2.5 rounded-2xl border text-left transition-all duration-200 select-none cursor-grab active:cursor-grabbing flex flex-col justify-between gap-1 ${
+                      isFloating
+                        ? 'bg-electric-blue text-white border-electric-blue shadow-lg -translate-y-0.5 ring-2 ring-electric-blue/30'
+                        : isUrg
+                        ? 'bg-rose-50 border-rose-300 text-rose-950 shadow-sm hover:-translate-y-0.5 hover:shadow-md'
+                        : 'bg-white border-border-subtle text-dental-deep-navy shadow-sm hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="flex items-center gap-1 min-w-0">
+                        <span className="material-symbols-outlined text-[14px] opacity-75 shrink-0">
+                          drag_indicator
+                        </span>
+                        <span className="font-display font-extrabold text-xs truncate">
+                          {c.pacienteNombre}
+                        </span>
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-md text-[9px] font-black shrink-0 ${
+                          isFloating
+                            ? 'bg-white/20 text-white'
+                            : 'bg-primary/10 text-primary'
+                        }`}
+                      >
+                        {c.duracionMinutos || 45}m
+                      </span>
+                    </div>
+                    <p
+                      className={`text-[10px] truncate font-medium ${
+                        isFloating ? 'text-white/90' : 'text-secondary'
+                      }`}
+                    >
+                      {tratamiento}
+                    </p>
+                    <div className="flex items-center justify-between text-[9px] font-bold pt-0.5">
+                      <span className={isFloating ? 'text-white/90' : 'text-primary'}>
+                        {isFloating ? '👇 Toca un hueco libre' : '✋ Toca o arrastra'}
+                      </span>
+                      {isUrg && (
+                        <span
+                          className={`px-1.5 rounded ${
+                            isFloating ? 'bg-white/20 text-white' : 'bg-rose-200 text-rose-900'
+                          }`}
+                        >
+                          Urgencia
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* Pill flotante de estado cuando hay una tarjeta agarrada */}
+        {floatingCita && (
+          <div className="px-3 py-2 rounded-xl bg-dental-deep-navy text-white text-xs font-bold flex items-center justify-between gap-2 shadow-md">
+            <span className="truncate flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-vibrant-cyan animate-bounce">
+                open_with
+              </span>
+              <span>
+                Moviendo a <strong>{floatingCita.pacienteNombre}</strong> • Toca un horario{' '}
+                <strong className="text-emerald-300">Disponible</strong> o una tarjeta para intercambiar
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setFloatingCitaId(null);
+                setDraggedCitaId(null);
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white/15 hover:bg-white/25 text-[10px] font-extrabold shrink-0 cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
           5. TABLA HORARIA MATRICIAL CON INDICADOR DE HORARIO VERTICAL 90°
              (ULTRA-COMPACTA PARA MÁXIMA LEGIBILIDAD EN TELÉFONOS MÓVILES)
          ========================================================================= */}
@@ -489,6 +702,29 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                 return null;
               }
 
+              // Colapsar filas intermedias donde TODOS los boxes visibles están cubiertos por una cita activa en curso
+              // (evita filas fantasma de "En atención" y mantiene el tablero dinámico y legible).
+              const todosBoxesEnCurso =
+                boxesVisibles.length > 0 &&
+                boxesVisibles.every((box) => {
+                  const tieneCitaAqui = solicitudes.some(
+                    (s) => (s.boxSugerido || 1) === box.numero && s.horaTexto === hora
+                  );
+                  if (tieneCitaAqui) return false;
+                  return solicitudes.some((s) => {
+                    const bNum = s.boxSugerido || 1;
+                    if (bNum !== box.numero || s.horaTexto === 'Por asignar') return false;
+                    const start = parseHoraToMinutes(s.horaTexto);
+                    const duracion = s.duracionMinutos || 30;
+                    const endWithDelay = start + duracion + delayBioseguridad;
+                    return start < minutosHora && minutosHora < endWithDelay;
+                  });
+                });
+
+              if (todosBoxesEnCurso) {
+                return null;
+              }
+
               return (
                 <tr key={`row-${hora}`} className="hover:bg-slate-50/50 transition-colors">
                   {/* Celda de Horario Vertical a 90°: Ocupa apenas 28px de ancho */}
@@ -532,45 +768,131 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                             const isConfirmada =
                               sol.estado === 'confirmada' || sol.confirmacionPaciente === 'confirmado';
                             const isPendiente = sol.confirmacionPaciente === 'pendiente';
+                            const isFloatingSelected = floatingCitaId === sol.id;
+                            const cellKey = `${box.numero}-${hora}`;
+                            const isDropTarget = dragOverKey === cellKey || (Boolean(floatingCitaId) && floatingCitaId !== sol.id);
 
                             return (
                               <div
-                                className={`rounded-xl p-2 sm:p-2.5 border transition-all text-left flex flex-col gap-1.5 shadow-2xs ${
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('text/plain', sol.id);
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  setDraggedCitaId(sol.id);
+                                  setFloatingCitaId(sol.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedCitaId(null);
+                                  setDragOverKey(null);
+                                }}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  if (dragOverKey !== cellKey) setDragOverKey(cellKey);
+                                }}
+                                onDragLeave={() => {
+                                  if (dragOverKey === cellKey) setDragOverKey(null);
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  const dtId = e.dataTransfer.getData('text/plain');
+                                  handleDropOnCell(box.numero, hora, dtId || undefined);
+                                }}
+                                onClick={() => {
+                                  if (floatingCitaId && floatingCitaId !== sol.id) {
+                                    handleDropOnCell(box.numero, hora, floatingCitaId);
+                                  }
+                                }}
+                                className={`rounded-2xl p-2 sm:p-2.5 border transition-all duration-200 text-left flex flex-col gap-1.5 cursor-grab active:cursor-grabbing ${
+                                  isFloatingSelected
+                                    ? 'ring-2 ring-electric-blue shadow-xl -translate-y-0.5 scale-[1.01]'
+                                    : dragOverKey === cellKey
+                                    ? 'ring-2 ring-primary border-primary shadow-lg scale-[1.01]'
+                                    : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'
+                                } ${
                                   isUrgencia
-                                    ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                                    ? 'bg-rose-50/95 border-rose-300 text-rose-950'
                                     : isControl
-                                    ? 'bg-sky-50/90 border-sky-300 text-sky-950'
+                                    ? 'bg-sky-50/95 border-sky-300 text-sky-950'
                                     : isConfirmada
-                                    ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                                    : 'bg-amber-50/80 border-amber-300 text-amber-950'
+                                    ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950'
+                                    : 'bg-amber-50/90 border-amber-300 text-amber-950'
                                 }`}
                               >
-                                {/* Fila 1: Badges & Duración & Desasignar */}
+                                {/* Fila 1: Grip Flotante + Badges + Reordenar ↑↓ + Duración + Liberar */}
                                 <div className="flex items-center justify-between gap-1">
-                                  <span
-                                    className={`text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
-                                      isUrgencia
-                                        ? 'bg-rose-200 text-rose-900'
-                                        : isControl
-                                        ? 'bg-sky-200 text-sky-900'
-                                        : isConfirmada
-                                        ? 'bg-emerald-200 text-emerald-900'
-                                        : 'bg-amber-200 text-amber-900'
-                                    }`}
-                                  >
-                                    {isUrgencia ? '🚨 URGENCIA' : isControl ? 'CONTROL' : isConfirmada ? 'CONFIRMADA' : 'CITA'}
-                                  </span>
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFloatingCitaId((prev) => (prev === sol.id ? null : sol.id));
+                                      }}
+                                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+                                        isFloatingSelected
+                                          ? 'bg-electric-blue text-white'
+                                          : 'bg-white/70 hover:bg-white text-secondary'
+                                      }`}
+                                      title="Agarrar tarjeta para mover o intercambiar"
+                                    >
+                                      <span className="material-symbols-outlined text-[13px]">
+                                        {isFloatingSelected ? 'open_with' : 'drag_indicator'}
+                                      </span>
+                                    </button>
+                                    <span
+                                      className={`text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.2 rounded truncate ${
+                                        isUrgencia
+                                          ? 'bg-rose-200 text-rose-900'
+                                          : isControl
+                                          ? 'bg-sky-200 text-sky-900'
+                                          : isConfirmada
+                                          ? 'bg-emerald-200 text-emerald-900'
+                                          : 'bg-amber-200 text-amber-900'
+                                      }`}
+                                    >
+                                      {isUrgencia ? '🚨 URGENCIA' : isControl ? 'CONTROL' : isConfirmada ? 'CONFIRMADA' : 'CITA'}
+                                    </span>
+                                    {isDropTarget && floatingCitaId && floatingCitaId !== sol.id && (
+                                      <span className="text-[8px] font-black text-electric-blue bg-electric-blue/10 px-1 rounded hidden sm:inline">
+                                        ↔ Intercambiar
+                                      </span>
+                                    )}
+                                  </div>
 
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[9px] sm:text-[10px] font-black font-mono opacity-85">
+                                  <div className="flex items-center gap-0.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveStep(sol, -1);
+                                      }}
+                                      className="w-5 h-5 rounded-md bg-white/70 hover:bg-white text-dental-deep-navy flex items-center justify-center cursor-pointer"
+                                      title="Subir al bloque anterior"
+                                    >
+                                      <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveStep(sol, 1);
+                                      }}
+                                      className="w-5 h-5 rounded-md bg-white/70 hover:bg-white text-dental-deep-navy flex items-center justify-center cursor-pointer"
+                                      title="Bajar al bloque siguiente"
+                                    >
+                                      <span className="material-symbols-outlined text-[13px]">arrow_downward</span>
+                                    </button>
+                                    <span className="text-[9px] sm:text-[10px] font-black font-mono opacity-85 px-0.5">
                                       {sol.duracionMinutos || 30}m
                                     </span>
                                     {onLiberarSlotCita && (
                                       <button
                                         type="button"
-                                        onClick={() => onLiberarSlotCita(sol.id)}
-                                        className="w-4 h-4 rounded-full hover:bg-black/10 text-secondary hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                                        title="Liberar slot para reasignar"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onLiberarSlotCita(sol.id);
+                                        }}
+                                        className="w-5 h-5 rounded-full hover:bg-black/10 text-secondary hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Devolver a la bandeja flotante"
                                       >
                                         <span className="material-symbols-outlined text-[12px]">close</span>
                                       </button>
@@ -578,12 +900,21 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                                   </div>
                                 </div>
 
-                                {/* Fila 2: Nombre del Paciente & Motivo */}
+                                {/* Fila 2: Horario Dinámico + Nombre del Paciente & Motivo */}
                                 <div
                                   onClick={() => onSeleccionarCita(sol.id)}
                                   className="cursor-pointer"
                                   title="Toca para ver detalle del paciente"
                                 >
+                                  <div className="flex items-center gap-1.5 mb-0.5 text-[9px] sm:text-[10px] font-mono font-black text-dental-deep-navy/80">
+                                    <span className="material-symbols-outlined text-[12px] text-primary">schedule</span>
+                                    <span>
+                                      {sol.horaTexto} – {calcularHoraFin(sol.horaTexto, sol.duracionMinutos || 30)}
+                                    </span>
+                                    <span className="text-[8px] sm:text-[9px] font-bold opacity-70">
+                                      (+{delayBioseguridad}m bio)
+                                    </span>
+                                  </div>
                                   <p className="font-display font-black text-xs sm:text-sm leading-tight truncate hover:underline">
                                     {sol.pacienteNombre}
                                   </p>
@@ -679,36 +1010,77 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                             </span>
                           </div>
                         ) : (
-                          /* CASO C: Disponible con Selector de 2 Líneas en Orden de Reserva */
-                          <div className="p-1.5 sm:p-2 rounded-xl border border-dashed border-emerald-300/80 bg-emerald-50/20 hover:bg-emerald-50/50 transition-colors flex flex-col gap-1 text-left relative dropdown-asignar-cita-container">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] sm:text-xs font-black text-emerald-800 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[13px] text-emerald-600">add_circle</span>
-                                <span>Disponible</span>
-                              </span>
-                              <span className="text-[9px] font-mono text-emerald-700 font-bold">{hora}</span>
-                            </div>
+                          /* CASO C: Disponible con Drop Flotante (Drag & Tap) + Selector Clásico */
+                          (() => {
+                            const cellKey = `${box.numero}-${hora}`;
+                            const isDragHover = dragOverKey === cellKey;
+                            const isReadyToDrop = Boolean(floatingCitaId);
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenAsignarSlot((prev) =>
-                                  prev?.boxNumero === box.numero && prev?.hora === hora
-                                    ? null
-                                    : { boxNumero: box.numero, hora }
-                                );
-                              }}
-                              className="w-full text-[9px] sm:text-[10px] font-bold py-1 px-1.5 rounded-lg bg-white border border-emerald-300 hover:border-emerald-500 text-dental-deep-navy flex items-center justify-between gap-1 cursor-pointer transition-all shadow-2xs active:scale-98"
-                            >
-                              <span className="truncate flex items-center gap-1">
-                                <span className="text-emerald-700 font-bold">➕ Asignar Cita a las {hora}...</span>
-                              </span>
-                              <span className="material-symbols-outlined text-[14px] text-secondary shrink-0">
-                                {openAsignarSlot?.boxNumero === box.numero && openAsignarSlot?.hora === hora
-                                  ? 'expand_less'
-                                  : 'expand_more'}
-                              </span>
-                            </button>
+                            return (
+                              <div
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  if (dragOverKey !== cellKey) setDragOverKey(cellKey);
+                                }}
+                                onDragLeave={() => {
+                                  if (dragOverKey === cellKey) setDragOverKey(null);
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  const dtId = e.dataTransfer.getData('text/plain');
+                                  handleDropOnCell(box.numero, hora, dtId || undefined);
+                                }}
+                                className={`p-1.5 sm:p-2 rounded-2xl border border-dashed transition-all flex flex-col gap-1 text-left relative dropdown-asignar-cita-container ${
+                                  isDragHover
+                                    ? 'border-electric-blue bg-electric-blue/10 ring-2 ring-electric-blue/30 scale-[1.01]'
+                                    : isReadyToDrop
+                                    ? 'border-emerald-500 bg-emerald-50/70 hover:bg-emerald-100/70 shadow-xs'
+                                    : 'border-emerald-300/80 bg-emerald-50/20 hover:bg-emerald-50/50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] sm:text-xs font-black text-emerald-800 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[13px] text-emerald-600">
+                                      {isReadyToDrop ? 'place_item' : 'add_circle'}
+                                    </span>
+                                    <span>{isReadyToDrop ? 'Soltar aquí' : 'Disponible'}</span>
+                                  </span>
+                                  <span className="text-[9px] font-mono text-emerald-700 font-bold">{hora}</span>
+                                </div>
+
+                                {isReadyToDrop && floatingCita ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDropOnCell(box.numero, hora, floatingCita.id)}
+                                    className="w-full text-[10px] font-black py-1.5 px-2 rounded-xl bg-electric-blue text-white shadow-sm flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">download</span>
+                                    <span className="truncate">
+                                      Ubicar a {floatingCita.pacienteNombre.split(' ')[0]} ({hora})
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenAsignarSlot((prev) =>
+                                        prev?.boxNumero === box.numero && prev?.hora === hora
+                                          ? null
+                                          : { boxNumero: box.numero, hora }
+                                      );
+                                    }}
+                                    className="w-full text-[9px] sm:text-[10px] font-bold py-1 px-1.5 rounded-lg bg-white border border-emerald-300 hover:border-emerald-500 text-dental-deep-navy flex items-center justify-between gap-1 cursor-pointer transition-all shadow-2xs active:scale-98"
+                                  >
+                                    <span className="truncate flex items-center gap-1">
+                                      <span className="text-emerald-700 font-bold">➕ Asignar Cita a las {hora}...</span>
+                                    </span>
+                                    <span className="material-symbols-outlined text-[14px] text-secondary shrink-0">
+                                      {openAsignarSlot?.boxNumero === box.numero && openAsignarSlot?.hora === hora
+                                        ? 'expand_less'
+                                        : 'expand_more'}
+                                    </span>
+                                  </button>
+                                )}
 
                             {/* Dropdown Flotante con 2 Líneas Estructuradas: 
                                 Línea 1: Tratamiento y Duración en NEGRITAS 
@@ -777,7 +1149,9 @@ export const ClinicalScheduleMatrix: React.FC<ClinicalScheduleMatrixProps> = ({
                                 )}
                               </div>
                             )}
-                          </div>
+                              </div>
+                            );
+                          })()
                         )}
                       </td>
                     );

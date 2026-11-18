@@ -599,19 +599,70 @@ app.post('/api/citas', async (c) => {
     });
   }
 
-  // Validar disponibilidad de Box en la sede
-  let boxNumero = Number(body.boxNumero) || 1;
-  const boxOcupado: any = await db
+  const doctorNombre = body.doctorNombre || 'Dra. María Alejandra Domínguez';
+
+  // 3. Control anti-colisión de Doctor en el mismo bloque horario
+  const doctorOcupado: any = await db
     .prepare(
-      `SELECT id FROM citas 
-       WHERE sede_id = ? AND fecha_cita = ? AND hora_inicio = ? AND box_numero = ? AND estado != 'cancelada'`
+      `SELECT id FROM citas
+       WHERE sede_id = ? AND fecha_cita = ? AND hora_inicio = ?
+         AND LOWER(doctor_nombre) = LOWER(?)
+         AND estado IN ('pendiente', 'confirmada', 'en_sillon')`
     )
-    .bind(sedeId, fechaCita, horaInicio, boxNumero)
+    .bind(sedeId, fechaCita, horaInicio, doctorNombre)
     .first();
 
-  if (boxOcupado) {
-    // Si el Box 1 está ocupado, alternar al Box 2 (o viceversa) si la sede tiene disponibilidad
-    boxNumero = boxNumero === 1 ? 2 : 1;
+  if (doctorOcupado) {
+    return c.json(
+      {
+        success: false,
+        code: 'DOCTOR_CONFLICT',
+        error: `${doctorNombre} ya tiene una cita agendada el ${fechaCita} a las ${horaInicio}.`,
+      },
+      409
+    );
+  }
+
+  // 4. Validar disponibilidad de Box/Unidad en la sede sin permitir colisión de sillones
+  const sedeRow: any = await db
+    .prepare(`SELECT total_boxes FROM sedes WHERE id = ?`)
+    .bind(sedeId)
+    .first();
+  const totalBoxes = Math.max(1, Number(sedeRow?.total_boxes) || 2);
+
+  let boxNumero = Math.min(Math.max(1, Number(body.boxNumero) || 1), totalBoxes);
+  const ocupadosRows: any = await db
+    .prepare(
+      `SELECT box_numero FROM citas
+       WHERE sede_id = ? AND fecha_cita = ? AND hora_inicio = ?
+         AND estado IN ('pendiente', 'confirmada', 'en_sillon')`
+    )
+    .bind(sedeId, fechaCita, horaInicio)
+    .all();
+
+  const boxesOcupados = new Set<number>(
+    (ocupadosRows?.results || []).map((r: any) => Number(r.box_numero))
+  );
+
+  if (boxesOcupados.has(boxNumero)) {
+    let freeBox: number | null = null;
+    for (let b = 1; b <= totalBoxes; b++) {
+      if (!boxesOcupados.has(b)) {
+        freeBox = b;
+        break;
+      }
+    }
+    if (freeBox === null) {
+      return c.json(
+        {
+          success: false,
+          code: 'BOX_CONFLICT',
+          error: `Todos los sillones de la sede están ocupados el ${fechaCita} a las ${horaInicio}.`,
+        },
+        409
+      );
+    }
+    boxNumero = freeBox;
   }
 
   const id = `cita-${Date.now()}`;
@@ -626,7 +677,7 @@ app.post('/api/citas', async (c) => {
       id,
       sedeId,
       pacienteId,
-      body.doctorNombre || 'Dra. María Alejandra Domínguez',
+      doctorNombre,
       boxNumero,
       fechaCita,
       horaInicio,

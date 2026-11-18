@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { RolUsuarioSistema, UsuarioSistemaItem } from '../../types/clinical';
 import { TabId } from '../layout/BottomNavigation';
+import {
+  STORAGE_KEY_USUARIOS,
+  STORAGE_KEY_SESION_ACTIVA,
+  emitSessionUpdated,
+  sanitizeUserAvatar,
+} from '../../utils/userSession';
 
 interface LoginViewProps {
   onNavigateTab?: (tab: TabId) => void;
 }
-
-const STORAGE_KEY_USUARIOS = 'odontosalud_usuarios_auth_v1';
-const STORAGE_KEY_SESION_ACTIVA = 'odontosalud_sesion_activa_v1';
 
 const ROLES_BADGES: Record<RolUsuarioSistema, { label: string; badgeClass: string; icon: string }> = {
   superadmin: {
@@ -47,7 +50,7 @@ const USUARIOS_DEFAULT: UsuarioSistemaItem[] = [
     rol: 'directora_clinica',
     sedeAsignada: 'ambas',
     pinAcceso: '1911',
-    avatar: '/odontologos/dra-maria-alejandra.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-14.376.191'),
     activo: true,
     ultimoAcceso: 'Hoy • Sesión Activa',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'cobros', 'data', 'superadmin', 'reserva'],
@@ -61,7 +64,7 @@ const USUARIOS_DEFAULT: UsuarioSistemaItem[] = [
     rol: 'odontologo',
     sedeAsignada: 'ambas',
     pinAcceso: '2418',
-    avatar: '/odontologos/od-julianny-rebolledo.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-24.180.521'),
     activo: true,
     ultimoAcceso: 'Hoy • Sede La Victoria',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'reserva'],
@@ -75,7 +78,7 @@ const USUARIOS_DEFAULT: UsuarioSistemaItem[] = [
     rol: 'odontologo',
     sedeAsignada: 'tovar',
     pinAcceso: '4716',
-    avatar: '/odontologos/od-sandra-carreno.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-14.716.701'),
     activo: true,
     ultimoAcceso: 'Hoy • Sede Colonia Tovar',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'reserva'],
@@ -204,6 +207,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigateTab }) => {
       // Login exitoso
       setSesionActivaId(encontrado.id);
       localStorage.setItem(STORAGE_KEY_SESION_ACTIVA, encontrado.id);
+      emitSessionUpdated(encontrado.id);
       setIsLoading(false);
       setMensajeFeedback({
         tipo: 'success',
@@ -233,6 +237,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigateTab }) => {
   const handleCerrarSesion = () => {
     localStorage.removeItem(STORAGE_KEY_SESION_ACTIVA);
     setSesionActivaId(null);
+    emitSessionUpdated(null);
     setMensajeFeedback({
       tipo: 'success',
       texto: 'Sesión finalizada de forma segura.',

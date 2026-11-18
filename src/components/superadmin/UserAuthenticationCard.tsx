@@ -2,14 +2,53 @@ import React, { useState, useEffect } from 'react';
 import { RolUsuarioSistema, UsuarioSistemaItem } from '../../types/clinical';
 import { compressImage } from '../../utils/imageCompression';
 import { TabId } from '../layout/BottomNavigation';
+import {
+  STORAGE_KEY_USUARIOS,
+  STORAGE_KEY_SESION_ACTIVA,
+  emitSessionUpdated,
+  getInitials,
+  sanitizeUserAvatar,
+} from '../../utils/userSession';
 
 interface UserAuthenticationCardProps {
   onNavigateTab?: (tab: TabId) => void;
   onAuditEvent?: () => void;
 }
 
-const STORAGE_KEY_USUARIOS = 'odontosalud_usuarios_auth_v1';
-const STORAGE_KEY_SESION_ACTIVA = 'odontosalud_sesion_activa_v1';
+const UserAvatarThumb: React.FC<{
+  avatar?: string;
+  nombres: string;
+  cedula: string;
+  sizeClass: string;
+  fallbackClass: string;
+  imgBorderClass: string;
+}> = ({ avatar, nombres, cedula, sizeClass, fallbackClass, imgBorderClass }) => {
+  const [failed, setFailed] = useState(false);
+  const resolved = sanitizeUserAvatar(avatar, cedula);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [resolved]);
+
+  if (resolved && !failed) {
+    return (
+      <img
+        src={resolved}
+        alt={nombres}
+        onError={() => setFailed(true)}
+        className={`${sizeClass} rounded-2xl object-cover shrink-0 ${imgBorderClass}`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} rounded-2xl font-display font-black flex items-center justify-center shrink-0 ${fallbackClass}`}
+    >
+      {getInitials(nombres)}
+    </div>
+  );
+};
 
 const MODULOS_SISTEMA: { id: string; label: string; icon: string; tab?: TabId }[] = [
   { id: 'dashboard', label: 'Inicio / Pulso', icon: 'space_dashboard', tab: 'dashboard' },
@@ -63,7 +102,7 @@ const USUARIOS_INICIALES: UsuarioSistemaItem[] = [
     rol: 'directora_clinica',
     sedeAsignada: 'ambas',
     pinAcceso: '1911',
-    avatar: '/odontologos/dra-maria-alejandra.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-14.376.191'),
     activo: true,
     ultimoAcceso: 'Hoy • Sesión Activa',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'cobros', 'data', 'superadmin', 'reserva'],
@@ -77,7 +116,7 @@ const USUARIOS_INICIALES: UsuarioSistemaItem[] = [
     rol: 'odontologo',
     sedeAsignada: 'ambas',
     pinAcceso: '2418',
-    avatar: '/odontologos/od-julianny-rebolledo.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-24.180.521'),
     activo: true,
     ultimoAcceso: 'Hoy • Sede La Victoria',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'reserva'],
@@ -91,7 +130,7 @@ const USUARIOS_INICIALES: UsuarioSistemaItem[] = [
     rol: 'odontologo',
     sedeAsignada: 'tovar',
     pinAcceso: '4716',
-    avatar: '/odontologos/od-sandra-carreno.jpg',
+    avatar: sanitizeUserAvatar(undefined, 'V-14.716.701'),
     activo: true,
     ultimoAcceso: 'Hoy • Sede Colonia Tovar',
     permisosModulos: ['dashboard', 'agenda', 'coordinacion', 'odontograma', 'reserva'],
@@ -190,9 +229,9 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
             ? higs.find((h: any) => String(h.cedula || '').replace(/[^0-9]/g, '') === cleanU)
             : null;
           if (matchHig && matchHig.avatar) {
-            return { ...u, avatar: matchHig.avatar };
+            return { ...u, avatar: sanitizeUserAvatar(matchHig.avatar, u.cedula) };
           }
-          return u;
+          return { ...u, avatar: sanitizeUserAvatar(u.avatar, u.cedula) };
         })
       );
     } catch {
@@ -222,6 +261,7 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
   useEffect(() => {
     if (usuarioActivo) {
       localStorage.setItem(STORAGE_KEY_SESION_ACTIVA, usuarioActivo.id);
+      emitSessionUpdated(usuarioActivo.id);
       computeJwtEdgeSignature(usuarioActivo).then(setJwtSignature);
     }
   }, [usuarioActivo]);
@@ -727,39 +767,36 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Columna Izquierda (7 cols): Credencial de Sesión Activa y Módulos Habilitados */}
         {usuarioActivo && (
-          <div className="lg:col-span-7 p-4 rounded-2xl bg-gradient-to-br from-dental-deep-navy via-[#132338] to-dental-deep-navy text-white border border-primary/40 shadow-md flex flex-col justify-between gap-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3.5">
-                {usuarioActivo.avatar ? (
-                  <img
-                    src={usuarioActivo.avatar}
-                    alt={usuarioActivo.nombres}
-                    className="w-15 h-15 rounded-2xl object-cover border-2 border-emerald-400 shadow-md shrink-0"
-                  />
-                ) : (
-                  <div className="w-15 h-15 rounded-2xl bg-emerald-500/20 border-2 border-emerald-400 text-emerald-300 font-display font-black text-lg flex items-center justify-center shrink-0">
-                    {usuarioActivo.nombres.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+          <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-dental-deep-navy via-[#132338] to-dental-deep-navy text-white border border-primary/40 shadow-md flex flex-col justify-between gap-3.5 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 min-w-0">
+              <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                <UserAvatarThumb
+                  avatar={usuarioActivo.avatar}
+                  nombres={usuarioActivo.nombres}
+                  cedula={usuarioActivo.cedula}
+                  sizeClass="w-14 h-14 sm:w-16 sm:h-16"
+                  imgBorderClass="border-2 border-emerald-400 shadow-md"
+                  fallbackClass="bg-emerald-500/20 border-2 border-emerald-400 text-emerald-300 text-lg"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                       <span>Sesión Activa en Borde</span>
                     </span>
-                    <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[10px] font-bold whitespace-nowrap">
                       {ROLES_CONFIG[usuarioActivo.rol].label}
                     </span>
                   </div>
-                  <h3 className="font-display font-black text-base sm:text-lg text-white mt-1 truncate">
+                  <h3 className="font-display font-black text-base sm:text-lg text-white mt-1.5 leading-snug break-words">
                     {usuarioActivo.nombres}
                   </h3>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-300 font-mono flex-wrap">
-                    <span>{usuarioActivo.cedula}</span>
-                    <span>•</span>
-                    <span>{usuarioActivo.email}</span>
-                    <span>•</span>
-                    <span className="text-emerald-300 font-bold">
+                  <div className="flex items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-300 font-mono flex-wrap mt-1">
+                    <span className="whitespace-nowrap">{usuarioActivo.cedula}</span>
+                    <span className="hidden sm:inline text-slate-500">•</span>
+                    <span className="break-all">{usuarioActivo.email}</span>
+                    <span className="hidden sm:inline text-slate-500">•</span>
+                    <span className="text-emerald-300 font-bold whitespace-nowrap">
                       Sede:{' '}
                       {usuarioActivo.sedeAsignada === 'ambas'
                         ? 'La Victoria & Col. Tovar'
@@ -771,11 +808,11 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
                 </div>
               </div>
 
-              <div className="bg-black/30 px-3 py-2 rounded-xl border border-white/10 text-right shrink-0">
+              <div className="bg-black/30 px-3 py-2 rounded-xl border border-white/10 text-left sm:text-right shrink-0">
                 <span className="text-[9px] uppercase font-bold text-slate-400 block">
                   Token Web Crypto SHA-256
                 </span>
-                <span className="font-mono text-[11px] font-extrabold text-emerald-300">
+                <span className="font-mono text-[11px] font-extrabold text-emerald-300 break-all">
                   {jwtSignature.slice(0, 16)}…
                 </span>
                 <span className="text-[9px] text-slate-300 block">TTL KV: 12h Activo</span>
@@ -783,10 +820,10 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
             </div>
 
             {/* Módulos permitidos para el usuario activo con navegación directa */}
-            <div className="pt-2.5 border-t border-white/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between text-[10px] text-slate-300 font-bold uppercase tracking-wider">
+            <div className="pt-2.5 border-t border-white/10 flex flex-col gap-2 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] text-slate-300 font-bold uppercase tracking-wider">
                 <span>Vistas Autorizadas para esta Sesión ({usuarioActivo.permisosModulos.length})</span>
-                <span>Pulsa cualquier vista para abrirla</span>
+                <span className="text-slate-400">Pulsa cualquier vista para abrirla</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {MODULOS_SISTEMA.map((mod) => {
@@ -960,20 +997,14 @@ export const UserAuthenticationCard: React.FC<UserAuthenticationCardProps> = ({
                 {/* Cabecera de la Sub-Tarjeta del Usuario */}
                 <div className="flex items-start justify-between gap-2.5">
                   <div className="flex items-center gap-3 min-w-0">
-                    {u.avatar ? (
-                      <img
-                        src={u.avatar}
-                        alt={u.nombres}
-                        className="w-12 h-12 rounded-2xl object-cover border border-primary/30 shadow-2xs shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-2xl bg-dental-deep-navy text-white font-display font-black text-xs flex items-center justify-center shrink-0">
-                        {u.nombres
-                          .replace(/^(Dra\.|Dr\.|Od\.|Hig\.|Ing\.)\s*/i, '')
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </div>
-                    )}
+                    <UserAvatarThumb
+                      avatar={u.avatar}
+                      nombres={u.nombres}
+                      cedula={u.cedula}
+                      sizeClass="w-12 h-12"
+                      imgBorderClass="border border-primary/30 shadow-2xs"
+                      fallbackClass="bg-dental-deep-navy text-white text-xs"
+                    />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span

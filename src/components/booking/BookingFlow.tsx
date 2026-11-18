@@ -1107,7 +1107,41 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
   };
 
   const irMesSiguiente = () => {
-    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setCurrentMonthDate((prev) => new Date(prev.getMonth() === 11 ? prev.getFullYear() + 1 : prev.getFullYear(), (prev.getMonth() + 1) % 12, 1));
+  };
+
+  // Verificación anti-colisión real de horario, doctora y unidades (boxes) en la sede
+  const isSlotOccupied = (hora: string, fechaElegida: string): { occupied: boolean; reason?: string } => {
+    const horaNorm = (hora || '').trim().toUpperCase();
+    const fechaNorm = (fechaElegida || '').trim();
+    if (!fechaNorm) return { occupied: false };
+
+    const matchingDay = getSemana6Dias().find(
+      (d) => d.fullString === fechaNorm || d.isoDate === fechaNorm
+    );
+    const totalBoxesSede = SEDES_DISPONIBLES[sedeEfectiva]?.totalBoxes || 2;
+    const doctorName = (selectedDoctor?.nombre || '').trim().toLowerCase();
+
+    const activasEnBloque = dataCitas.filter((c) => {
+      if (c.estado === 'cancelada' || c.estado === 'completada') return false;
+      if (c.sedeId && c.sedeId !== sedeEfectiva) return false;
+      const cHora = (c.horaInicio || '').trim().toUpperCase();
+      if (cHora !== horaNorm) return false;
+      const cFecha = (c.fechaCita || '').trim();
+      return (
+        cFecha === fechaNorm ||
+        (matchingDay ? cFecha === matchingDay.isoDate || cFecha === matchingDay.fullString : false)
+      );
+    });
+
+    if (doctorName && activasEnBloque.some((c) => (c.doctorNombre || '').trim().toLowerCase() === doctorName)) {
+      return { occupied: true, reason: 'Doctora ocupada' };
+    }
+    const boxesOcupados = new Set(activasEnBloque.map((c) => Number(c.boxNumero || 1)));
+    if (boxesOcupados.size >= totalBoxesSede) {
+      return { occupied: true, reason: 'Sillones ocupados' };
+    }
+    return { occupied: false };
   };
 
   // Escala de afluencia proporcional a las citas y solicitudes reales registradas
@@ -1224,7 +1258,13 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
     };
 
     try {
-      await ApiClient.crearCita(targetSede, payloadCita);
+      const apiRes = await ApiClient.crearCita(targetSede, payloadCita);
+      if (apiRes && apiRes.success === false) {
+        alert(apiRes.error || 'El horario o sillón seleccionado ya fue ocupado. Por favor elige otro bloque.');
+        setSelectedSlot('');
+        setIsSubmitting(false);
+        return;
+      }
     } catch (err) {
       console.error('Error al solicitar cita en API:', err);
     }
@@ -2865,13 +2905,15 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 const isSelected = selectedSlot === slot.hora;
                 const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
                 const demanda = getDemandaTurno(slot.hora, selectedDate);
+                const slotStatus = isSlotOccupied(slot.hora, selectedDate);
+                const slotDisabled = !mananaHabilitado || slotStatus.occupied;
                 return (
                   <button
                     key={slot.hora}
                     type="button"
-                    disabled={!mananaHabilitado}
+                    disabled={slotDisabled}
                     onClick={() => {
-                      if (!mananaHabilitado) return;
+                      if (slotDisabled) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
                         const disp = semana6Dias.find((d) => !d.noDisponibleEnSede && !d.esPasado);
@@ -2891,8 +2933,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                       }
                     }}
                     className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between border-x border-b relative ${
-                      !mananaHabilitado
-                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400'
+                      slotDisabled
+                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400 opacity-75'
                         : `${demanda.grosorClase} ${demanda.bordeColor} cursor-pointer active:scale-95 ${
                             isSelected
                               ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
@@ -2901,18 +2943,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     }`}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
-                      <span className="text-sm font-black tabular-nums">{slot.hora}</span>
+                      <span className={`text-sm font-black tabular-nums ${slotStatus.occupied ? 'line-through' : ''}`}>
+                        {slot.hora}
+                      </span>
                       <span
                         className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                          !mananaHabilitado
+                          slotDisabled
                             ? 'bg-slate-200 text-slate-500 border-slate-300'
                             : isSelected
                             ? '!bg-white/20 !text-white !border-white/30'
                             : demanda.badgeBg
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${!mananaHabilitado ? 'bg-slate-400' : demanda.dotColor}`} />
-                        {!mananaHabilitado ? 'Cerrado' : demanda.etiqueta}
+                        <span className={`w-1.5 h-1.5 rounded-full ${slotDisabled ? 'bg-slate-400' : demanda.dotColor}`} />
+                        {!mananaHabilitado ? 'Cerrado' : slotStatus.occupied ? 'Ocupado' : demanda.etiqueta}
                       </span>
                     </div>
 
@@ -2946,13 +2990,15 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                 const isSelected = selectedSlot === slot.hora;
                 const horaFinEstimada = calcularHoraFin(slot.hora, duracionTratamientoMin);
                 const demanda = getDemandaTurno(slot.hora, selectedDate);
+                const slotStatus = isSlotOccupied(slot.hora, selectedDate);
+                const slotDisabled = !tardeHabilitado || slotStatus.occupied;
                 return (
                   <button
                     key={slot.hora}
                     type="button"
-                    disabled={!tardeHabilitado}
+                    disabled={slotDisabled}
                     onClick={() => {
-                      if (!tardeHabilitado) return;
+                      if (slotDisabled) return;
                       setSelectedSlot(slot.hora);
                       if (!selectedDate) {
                         const disp = semana6Dias.find((d) => !d.noDisponibleEnSede && !d.esPasado);
@@ -2972,8 +3018,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                       }
                     }}
                     className={`py-3 px-3 rounded-2xl text-xs font-bold transition-all flex flex-col justify-between border-x border-b relative ${
-                      !tardeHabilitado
-                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400'
+                      slotDisabled
+                        ? 'cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400 opacity-75'
                         : `${demanda.grosorClase} ${demanda.bordeColor} cursor-pointer active:scale-95 ${
                             isSelected
                               ? 'bg-dental-deep-navy text-white shadow-md ring-2 ring-primary/30 border-primary'
@@ -2982,18 +3028,20 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({ onBack, onNavigateTab 
                     }`}
                   >
                     <div className="flex items-center justify-between w-full mb-1">
-                      <span className="text-sm font-black tabular-nums">{slot.hora}</span>
+                      <span className={`text-sm font-black tabular-nums ${slotStatus.occupied ? 'line-through' : ''}`}>
+                        {slot.hora}
+                      </span>
                       <span
                         className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                          !tardeHabilitado
+                          slotDisabled
                             ? 'bg-slate-200 text-slate-500 border-slate-300'
                             : isSelected
                             ? '!bg-white/20 !text-white !border-white/30'
                             : demanda.badgeBg
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${!tardeHabilitado ? 'bg-slate-400' : demanda.dotColor}`} />
-                        {!tardeHabilitado ? 'Cerrado' : demanda.etiqueta}
+                        <span className={`w-1.5 h-1.5 rounded-full ${slotDisabled ? 'bg-slate-400' : demanda.dotColor}`} />
+                        {!tardeHabilitado ? 'Cerrado' : slotStatus.occupied ? 'Ocupado' : demanda.etiqueta}
                       </span>
                     </div>
 
